@@ -1,0 +1,25 @@
+Metadata-Version: 2.4
+Name: f110_gym
+Version: 0.2.1
+Home-page: https://f1tenth.org
+Author: Hongrui Zheng
+Author-email: billyzheng.bz@gmail.com
+Requires-Dist: gym==0.23.1
+Requires-Dist: numpy==1.26.4
+Requires-Dist: Pillow==11.1.0
+Requires-Dist: scipy==1.15.1
+Requires-Dist: numba==0.61.0
+Requires-Dist: pyyaml==6.0.2
+Requires-Dist: pyglet==1.4.11
+Requires-Dist: pyopengl==3.1.9
+Requires-Dist: tqdm==4.66.5
+Requires-Dist: pandas==2.2.3
+Requires-Dist: opencv-contrib-python==4.11.0.86
+Requires-Dist: imageio
+Requires-Dist: imageio-ffmpeg
+Requires-Dist: pyclothoids
+Requires-Dist: trajectory_planning_helpers==0.76
+Dynamic: author
+Dynamic: author-email
+Dynamic: home-page
+Dynamic: requires-dist
