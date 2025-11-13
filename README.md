@@ -186,7 +186,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 If you use End2Race in your research, please consider citing:
 
 ```bibtex
-@article{lightemma,
+@article{end2race,
       title={End2Race: Efficient End-to-End Imitation Learning for Real-Time F1Tenth Racing}, 
       author={Zhijie Qiao and Haowei Li and Zhong Cao and Henry X. Liu},
       year={2025},
