@@ -5,7 +5,7 @@
 
 End2Race is an end-to-end imitation learning framework for autonomous racing on the [F1Tenth platform](https://roboracer.ai/build). By learning from expert demonstrations generated through a Lattice Planner, the system captures temporal dependencies in racing dynamics to enable real-time control in competitive scenarios. End2Race addresses key challenges in autonomous racing—strategic planning, reactive control, and safe overtaking—through a unified neural network approach, demonstrating superior performance in both single-agent lap completion and multi-agent racing with high overtaking success rates and minimal collisions.
 
-[![video](figures/video.png)](https://drive.google.com/file/d/1rSBCZkh8bBjPuGC2n3AJdfq80t7xlCQV/view?usp=sharing)
+https://github.com/user-attachments/assets/5369f5ea-13fa-44c3-a6aa-5b3c2b59b10c
 
 ## Table of Contents
 - [Code Structure](#code-structure)
