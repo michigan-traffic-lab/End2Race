@@ -180,3 +180,17 @@ python generate_raceline.py \
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Citation
+
+If you use End2Race in your research, please consider citing:
+
+```bibtex
+@article{lightemma,
+      title={End2Race: Efficient End-to-End Imitation Learning for Real-Time F1Tenth Racing}, 
+      author={Zhijie Qiao and Haowei Li and Zhong Cao and Henry X. Liu},
+      year={2025},
+      eprint={2505.00284},
+      url={https://arxiv.org/abs/2509.16894}, 
+}
+```
