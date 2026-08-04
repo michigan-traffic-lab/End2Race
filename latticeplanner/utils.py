@@ -1,9 +1,13 @@
-import numpy as np
 import math
-from numba import njit
-import yaml
-from types import SimpleNamespace as Namespace
 import os
+from types import SimpleNamespace
+
+import numpy as np
+from numba import njit
+
+from config import load_config, load_project_config, merge_config_sections
+from utils import SIMULATION_TIMESTEP
+
 
 @njit(cache=True)
 def avgPoint(vertices):
@@ -520,12 +524,22 @@ def random_position(waypoints_xytheta, sampled_number=1, rng=None, xy_noise=0.0,
             res = np.vstack((res, np.array([[x, y, theta]])))
     return res, ego_idx
 
-def downsample_lidar(lidar_data, original_points=1440, target_points=360):
-    """Downsample lidar data from original resolution to target resolution"""
-    lidar_array = np.array(lidar_data)
-    step = original_points // target_points
-    downsampled = lidar_array[::step]
-    return downsampled[:target_points]
+def downsample_lidar(lidar_data, target_points):
+    """Uniformly downsample a flat LiDAR scan to the requested resolution."""
+    lidar_array = np.asarray(lidar_data).reshape(-1)
+    if target_points <= 0:
+        raise ValueError('target_points must be positive')
+    if lidar_array.size < target_points:
+        raise ValueError(
+            f'Cannot downsample {lidar_array.size} LiDAR points to {target_points}'
+        )
+    if lidar_array.size == target_points:
+        return lidar_array.copy()
+    if lidar_array.size % target_points == 0:
+        step = lidar_array.size // target_points
+        return lidar_array[::step][:target_points]
+    indices = np.linspace(0, lidar_array.size - 1, target_points, dtype=np.int64)
+    return lidar_array[indices]
 
 def find_corresponding_waypoint(ego_waypoint, opp_waypoints):
     """Find the waypoint on opponent raceline closest to ego waypoint spatially"""
@@ -533,14 +547,25 @@ def find_corresponding_waypoint(ego_waypoint, opp_waypoints):
     distances = np.linalg.norm(opp_waypoints[:, :2] - ego_position, axis=1)
     return np.argmin(distances)
 
-def load_config(config_path='lattice_config.yaml'):
-    """Load lattice planner configuration from YAML file"""
-    with open(config_path) as file:
-        config_dict = yaml.load(file, Loader=yaml.FullLoader)
-    return Namespace(**config_dict)
+PLANNER_CONFIG_KEYS = {
+    'lh_grid_lb', 'lh_grid_ub', 'traj_points', 'traj_v_scale',
+    'traj_v_span_min', 'traj_v_span_max', 'traj_v_span_num', 'weights_num',
+    'tracker_steps', 'vel_scale', 'minL', 'maxL', 'Lscale', 'minP', 'maxP',
+    'Pscale', 'D', 'interpScale', 'wpt_xind', 'wpt_yind', 'wpt_vind',
+    'ego_cost_weights', 'opponent_cost_weights',
+}
+
+
+def load_planner_config():
+    project = load_project_config()
+    return merge_config_sections(
+        load_config("latticeplanner/config.yaml", PLANNER_CONFIG_KEYS),
+        project.vehicle,
+        SimpleNamespace(timestep=SIMULATION_TIMESTEP),
+    )
+
 
 def get_map_paths(map_name):
-    """Generate map-related paths for a given map name"""
-    map_directory = os.path.join('f1tenth_racetracks', map_name)
-    map_path = os.path.join(map_directory, f'{map_name}_map')
+    map_directory = os.path.join("f1tenth_racetracks", map_name)
+    map_path = os.path.join(map_directory, f"{map_name}_map")
     return map_directory, map_path

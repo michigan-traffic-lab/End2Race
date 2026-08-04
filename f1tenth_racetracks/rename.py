@@ -1,55 +1,24 @@
-# importing os module
-import os
+from pathlib import Path
 
-directory = os.getcwd()
-
+from config import load_racetrack_config
 
 
+def main():
+    module = Path(__file__).resolve().parent
+    config = load_racetrack_config().rename
 
-for count, mapname in enumerate(os.listdir(directory)):
-    directory2 = directory+"/"+mapname
-    if mapname == '.DS_Store':
-        continue
-    if mapname == 'LICENSE':
-        continue
-    if mapname == 'README.md':
-        continue
-    if mapname == 'rename.py':
-        continue
-    if mapname == 'convert.py':
-        continue
-    if mapname == '.gitignore':
-        continue
-    for count2, filename2 in enumerate(os.listdir(directory2)):
-        file_name, file_ext = os.path.splitext(filename2)
-
-        if file_ext == '.txt':
-            old = directory2 + '/' + filename2
-            new = directory2 + '/' + mapname + '_DonkeySim_waypoints.txt'
-            os.renames(old,new)
-
-        elif file_ext == '.csv':
-
-            if file_name == mapname + '_map_waypoints':
-                old = directory2 + '/' + filename2
-                new = directory2 + '/' + mapname + '_centerline.csv'
-                os.renames(old, new)
+    for map_directory in (path for path in module.iterdir() if path.is_dir()):
+        map_name = map_directory.name
+        for path in map_directory.iterdir():
+            if path.suffix in config.remove_extensions:
+                path.unlink()
+            elif path.name == f'{map_name}{config.centerline_source_suffix}':
+                path.rename(map_directory / f'{map_name}{config.centerline_target_suffix}')
+            elif path.name == f'{map_name}{config.raceline_source_suffix}':
+                path.rename(map_directory / f'{map_name}{config.raceline_target_suffix}')
+            elif path.suffix == '.txt':
+                path.rename(map_directory / f'{map_name}{config.donkey_waypoint_suffix}')
 
 
-
-            elif file_name == mapname + '_raceline_newconv':
-                old = directory2 + '/' + filename2
-                new = directory2 + '/' + mapname + '_raceline.csv'
-                os.renames(old, new)
-
-        elif file_ext == '.pgm':
-            removefile = directory2 + '/' + filename2
-            os.remove(removefile)
-
-
-        # rename() function will
-        # rename all the files
-        #os.rename(src, dst)
-
-
-
+if __name__ == '__main__':
+    main()

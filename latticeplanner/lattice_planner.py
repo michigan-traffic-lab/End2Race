@@ -1,25 +1,39 @@
-import logging
 import os
-from PIL import Image
-import yaml
-from argparse import Namespace
-from scipy.ndimage import distance_transform_edt as edt
-from latticeplanner.utils import *
-from latticeplanner.pure_pursuit import PurePursuitPlanner
-from pyclothoids import Clothoid
+import logging
+
 import numpy as np
+import yaml
 from numba import njit
+from PIL import Image
+from pyclothoids import Clothoid
+from scipy.ndimage import distance_transform_edt as edt
+
+from latticeplanner.pure_pursuit import PurePursuitPlanner
+from latticeplanner.utils import (
+    collision,
+    get_map_paths,
+    get_rotation_matrix,
+    get_vertices,
+    intersect_point,
+    load_planner_config,
+    map_collision,
+    nearest_point,
+    sample_traj,
+    x2y_distances_argmin,
+    zero_2_2pi,
+)
 logger = logging.getLogger(__name__)
 
 class LatticePlanner:
-    def __init__(self, conf, map_path, wpt_path, wb=0.33):
+    def __init__(self, conf, map_path, wpt_path):
 
-        self.wheelbase = wb
+        self.wheelbase = conf.wheelbase
+        self.vehicle_width = conf.width
 
         ### load waypoints
         self.map_path = map_path
         self.map_ext = '.png'
-        waypoints = np.loadtxt(wpt_path, delimiter=';', skiprows=2)
+        waypoints = np.loadtxt(wpt_path, delimiter=';', skiprows=1)
         waypoints = np.vstack((waypoints[:, 1], waypoints[:, 2], waypoints[:, 5], waypoints[:, 3], waypoints[:, 0])).T
 
         self.waypoints = waypoints
@@ -41,17 +55,7 @@ class LatticePlanner:
         self.add_shape_cost_function(get_follow_optim_cost)
         self.add_constant_cost_function(get_map_collision)
 
-        self.params_num = conf.params_num
-        self.params_name = conf.params_name
-        self.params_idx = {}
-        count = 0
-        for name, num in zip(self.params_name, self.params_num):
-            self.params_idx[name] = count
-            count += num
-        try:
-            self.cost_weights_num = conf.weights_num
-        except:
-            self.cost_weights_num = 4
+        self.cost_weights_num = conf.weights_num
         self.set_cost_weights(self.cost_weights_num)
 
         self.v_lattice_span = np.linspace(conf.traj_v_span_min, conf.traj_v_span_max, conf.traj_v_span_num)
@@ -66,10 +70,10 @@ class LatticePlanner:
         self.state_t = None
         self.step_all_cost = {}
         self.all_costs = None
-        self.time_interval = conf.tracker_steps * 0.01
+        self.time_interval = conf.tracker_steps * conf.timestep
         self.last_s = 0.0
 
-        self.tracker = PurePursuitPlanner(conf, wpt_path, wb=wb)
+        self.tracker = PurePursuitPlanner(conf, wpt_path)
         self.conf = conf
         self.step = 0
 
@@ -95,10 +99,6 @@ class LatticePlanner:
         self.map_metainfo = (
             self.orig_x, self.orig_y, self.orig_c, self.orig_s, self.map_height, self.map_width, self.map_resolution)
 
-        # scan
-        self.scan_num = conf.scan_num
-        self.angle_span = np.linspace(-0.75 * np.pi, 0.75 * np.pi, self.scan_num)
-        self.ittc_thres = conf.ittc_thres
         self.collision_thres = 0.35
 
     def add_shape_cost_function(self, func):
@@ -112,21 +112,6 @@ class LatticePlanner:
 
     def add_constant_cost_function(self, func):
         self.constant_cost_funcs.append(func)
-
-    def set_parameters(self, parameters, v_scale=6.0):
-        if type(parameters) == np.ndarray:
-            for name, num in zip(self.params_name, self.params_num):
-                start = self.params_idx[name]
-                if name != 'cost_weights':
-                    self.__setattr__(name, parameters[start])
-                else:
-                    self.set_cost_weights(parameters[start:start + num])
-        else:
-            for key, value in parameters.items():
-                if key == 'cost_weights':
-                    self.set_cost_weights(value)
-                else:
-                    self.__setattr__(key, value)
 
     def set_cost_weights(self, cost_weights):
         if type(cost_weights) == int:
@@ -154,7 +139,9 @@ class LatticePlanner:
         n, k = self.traj_num, self.v_lattice_num
 
         # assume use the **first** weight to calculate curvature cost
-        mean_k, _ = get_curvature(all_traj, all_traj_clothoid)  # (n, )
+        mean_k, _ = get_curvature(
+            all_traj, all_traj_clothoid, self.wheelbase
+        )  # (n, )
         cost = np.zeros(self.traj_num)
 
         ## other shape cost, current include length, similarity, map collision,
@@ -183,7 +170,8 @@ class LatticePlanner:
         ## collision cost
         collision_cost = cost_weights[-1] * get_obstacle_collision_with_v(all_traj, all_traj_clothoid, traj_v_lattice,
                                                                           opp_poses, self.prev_opp_pose,
-                                                                          self.time_interval)
+                                                                          self.time_interval,
+                                                                          self.vehicle_width)
         self.step_all_cost['collision_cost'] = collision_cost
 
         cost = np.repeat(cost, k).reshape(n, k)
@@ -244,6 +232,20 @@ class LatticePlanner:
         self.prev_opp_pose = opp_poses[:, :2]
         return self.best_traj
 
+
+def create_lattice_planner(map_name, raceline_file, role):
+    config = load_planner_config()
+    map_directory, map_path = get_map_paths(map_name)
+    raceline_path = os.path.join(map_directory, f"{raceline_file}.csv")
+    planner = LatticePlanner(config, map_path, raceline_path)
+    if role == "ego":
+        planner.set_cost_weights(np.asarray(config.ego_cost_weights))
+    elif role == "opponent":
+        planner.set_cost_weights(np.asarray(config.opponent_cost_weights))
+    else:
+        raise ValueError(f"Unknown planner role: {role}")
+    return planner, map_directory
+
 @njit(cache=True)
 def sample_lookahead_square(pose_x,
                             pose_y,
@@ -300,7 +302,7 @@ def get_follow_optim_cost(traj, traj_clothoid, opp_poses=None, ego_pose=None, pr
     cost = idx_diff * idx_diff
     return cost
 
-def get_curvature(traj, traj_clothoid):
+def get_curvature(traj, traj_clothoid, wheelbase):
     k0 = traj_clothoid[:, 3].reshape(-1, 1)  # (n, 1)
     dk = traj_clothoid[:, 4].reshape(-1, 1)  # (n, 1)
     s = traj_clothoid[:, -1]  # (n, )
@@ -309,7 +311,6 @@ def get_curvature(traj, traj_clothoid):
     traj_k_abs = np.abs(traj_k)
     
     # Calculate steering angles from curvature (steering = arctan(L * kappa))
-    wheelbase = 0.33
     traj_steer = np.arctan(wheelbase * traj_k)
     max_steer = np.max(np.abs(traj_steer), axis=1)
     
@@ -343,10 +344,18 @@ def get_map_collision(traj, traj_clothoid, opp_poses=None, ego_pose=None, prev_t
 
 
 @njit(cache=True)
-def get_obstacle_collision_with_v(traj, traj_clothoid, v_lattice, opp_poses, prev_oppo_pose, dt=None):
+def get_obstacle_collision_with_v(
+    traj,
+    traj_clothoid,
+    v_lattice,
+    opp_poses,
+    prev_oppo_pose,
+    dt,
+    vehicle_width,
+):
     max_cost = 20.0
     min_cost = 10.0
-    width, length = 0.31, 0.58 
+    width, length = vehicle_width, 0.58
     safey_width_distance = 0.15
     safey_length_distance = 0.2
     n, m, _ = traj.shape

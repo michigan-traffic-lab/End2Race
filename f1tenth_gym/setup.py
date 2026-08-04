@@ -8,6 +8,7 @@ setup(
     author_email="billyzheng.bz@gmail.com",
     url="https://f1tenth.org",
     package_dir={"": "gym"},
+    python_requires="==3.11.*",
     install_requires=[
         "gym==0.23.1",
         "numpy==1.26.4",

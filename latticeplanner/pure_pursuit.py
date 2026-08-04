@@ -1,14 +1,15 @@
-from latticeplanner.utils import *
-
 import numpy as np
+from numba import njit
+
+from latticeplanner.utils import get_actuation_PD, intersect_point, nearest_point
 
 class PurePursuitPlanner:
-    def __init__(self, conf, wpt_path, wb=0.33):
+    def __init__(self, conf, wpt_path):
         """
         conf: NameSpace
         """
 
-        self.wheelbase = wb
+        self.wheelbase = conf.wheelbase
         self.conf = conf
         self.max_reacquire = 20.0
         self.wpt_path = wpt_path
@@ -48,7 +49,7 @@ class PurePursuitPlanner:
         """
         loads waypoints
         """
-        waypoints = np.loadtxt(self.wpt_path, delimiter=';', skiprows=2)
+        waypoints = np.loadtxt(self.wpt_path, delimiter=';', skiprows=1)
         waypoints = np.vstack((waypoints[:, 1], waypoints[:, 2], waypoints[:, 5], waypoints[:, 3], waypoints[:, 0])).T
         self.waypoints = waypoints
         self.waypoints_xyv = waypoints[:, :3]

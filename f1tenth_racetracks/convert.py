@@ -28,59 +28,51 @@ Use either on one csv file or all csv file in a directory
 Author: Hongrui Zheng
 """
 
-import argparse
 import numpy as np
 import pandas as pd
 import glob
 import csv
 import os
+from pathlib import Path
 
-"""
-Script that convert coordinate system conventions
+from config import load_racetrack_config
 
-Args:
-    --pattern (str): pattern for glob, converts all matching file
-"""
 
-parser = argparse.ArgumentParser()
-parser.add_argument('--pattern', default='*/*raceline.csv')
-args = parser.parse_args()
+def main():
+    module = Path(__file__).resolve().parent
+    config = load_racetrack_config().conversion
 
-all_files = glob.glob(args.pattern)
-print('Converting following files:')
-for name in all_files:
-    print(name)
-input('Press ENTER to proceed, CTRL+C to stop.')
+    all_files = glob.glob(str(module / config.pattern))
+    print('Converting following files:')
+    for name in all_files:
+        print(name)
+    if config.require_confirmation:
+        input('Press ENTER to proceed, CTRL+C to stop.')
 
-for file in all_files:
-    # get file name and extension
-    file_name, file_ext = os.path.splitext(file)
+    for file in all_files:
+        file_name, file_ext = os.path.splitext(file)
+        new_file = file_name + config.output_suffix + file_ext
+        print('Working on: ' + file)
 
-    # create new file name
-    new_file = file_name + '_newconv' + file_ext
+        with open(file) as stream:
+            headers = list(csv.reader(stream))[0:3]
+        df = pd.read_csv(file, sep=';', header=2)
+        heading_np = df[' psi_rad'].to_numpy()
+        heading_np += np.pi / 2
+        heading_np[heading_np > 2 * np.pi] -= 2 * np.pi
+        heading_np[heading_np < 0] += 2 * np.pi
+        df[' psi_rad'] = heading_np
 
-    print('Working on: ' + file)
-    
-    # keep original headers
-    headers = list(csv.reader(open(file)))[0:3]
-    
-    # csv to dataframe
-    df = pd.read_csv(file, sep=';', header=2)
-    
-    # converting the headings column
-    heading_np = df[' psi_rad'].to_numpy()
-    heading_np += np.pi/2
-    heading_np[heading_np > 2*np.pi] -= 2*np.pi
-    heading_np[heading_np < 0] += 2*np.pi
-    df[' psi_rad'].replace(heading_np)
+        with open(new_file, 'w', newline='') as stream:
+            csv.writer(stream).writerows(headers)
+        df.to_csv(
+            new_file, sep=';', header=False, index=False,
+            float_format='%.7f', mode='a'
+        )
+        print('New convention saved to: ' + new_file)
 
-    # save to new file
-    f = open(new_file, 'w')
-    csv_writer = csv.writer(f)
-    csv_writer.writerows(headers)
-    f.close()
-    df.to_csv(new_file, sep=';', header=False, index=False, float_format='%.7f', mode='a')
+    print('All files done.')
 
-    print('New convention saved to: ' + new_file)
 
-print('All files done.')
+if __name__ == '__main__':
+    main()

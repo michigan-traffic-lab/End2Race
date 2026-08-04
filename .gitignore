@@ -1,4 +1,10 @@
 __pycache__
+*.egg-info/
+checkpoint_*.pt
+Dataset_*/
+eval_results/
+f1tenth_gym/docs/html/
+f1tenth_gym/docs/xml/
 
 build/
 install/

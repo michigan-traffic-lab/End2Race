@@ -1,0 +1,300 @@
+import sys
+from dataclasses import dataclass
+from pathlib import Path
+
+import gym
+import imageio
+import numpy as np
+import torch
+from f110_gym.envs.base_classes import Integrator
+
+from config import load_project_config
+from latticeplanner.utils import downsample_lidar, project_point_to_centerline
+from model import End2Race
+from utils import (
+    SIMULATION_TIMESTEP,
+    VIDEO_FPS,
+    calculate_metrics,
+    create_single_agent_render_callback,
+    load_raceline_with_speed,
+    mask_lidar_points,
+    require_end2race_runtime,
+)
+
+
+@dataclass(frozen=True)
+class EvaluationSettings:
+    map_name: str
+    checkpoint_path: str
+    noise: float
+    seed: int
+    render: bool
+    lap_num: int
+    start_idx: int
+    minimum_lap_time: float
+
+
+def evaluate_laps(model, device, vehicle, settings):
+    rng = np.random.default_rng(settings.seed)
+    raceline = f"{settings.map_name}_raceline.csv"
+    env = gym.make(
+        "f110-v0",
+        map=(
+            f"f1tenth_racetracks/{settings.map_name}/"
+            f"{settings.map_name}_map"
+        ),
+        map_ext=".png",
+        num_agents=1,
+        timestep=SIMULATION_TIMESTEP,
+        integrator=Integrator.RK4,
+    )
+
+    video_path = None
+    if settings.render:
+        model_name = Path(settings.checkpoint_path).stem
+        noise_str = (
+            f"_noise{int(settings.noise * 100)}" if settings.noise > 0 else ""
+        )
+        lap_str = f"_lap{settings.lap_num}"
+        video_dir = Path("eval_results") / f"{model_name}{noise_str}{lap_str}"
+        video_dir.mkdir(parents=True, exist_ok=True)
+        video_path = video_dir / (
+            f"{model_name}_{settings.map_name}{noise_str}{lap_str}.mp4"
+        )
+
+    render_info = {"speed": 0.0, "steer": 0.0, "lap_time": 0.0, "laps": 0}
+    visited_points = []
+    drawn_points = []
+    batch_objects = []
+    if settings.render:
+        render_callback = create_single_agent_render_callback(
+            render_info,
+            visited_points,
+            drawn_points,
+            batch_objects,
+            settings.lap_num,
+        )
+        env.add_render_callback(render_callback)
+
+    start_pose, initial_speed, waypoints = load_raceline_with_speed(
+        settings.map_name, raceline, settings.start_idx
+    )
+    start_position = start_pose[0, :2]
+
+    centerline = waypoints[:, :2]
+    centerline_total_length = np.linalg.norm(
+        np.diff(centerline, axis=0), axis=1
+    ).sum()
+
+    obs, _, done, _ = env.reset(poses=start_pose)
+
+    hidden_size = model.gru.hidden_size
+    hidden_state = torch.zeros((1, 1, hidden_size), device=device)
+    previous_speed = initial_speed
+
+    initial_progress, _ = project_point_to_centerline(
+        np.array([obs["poses_x"][0], obs["poses_y"][0]]), centerline
+    )
+
+    lap_time = 0.0
+    collision_occurred = False
+    trajectory = []
+    speeds = []
+    lap_count = 0
+    lap_times = []
+    video_frames = []
+    near_start_flag = True
+    lap_start_time = 0.0
+
+    if settings.render:
+        env.render("human")
+
+    while not done and lap_count < settings.lap_num:
+        lidar = mask_lidar_points(
+            downsample_lidar(
+                obs["scans"][0], target_points=End2Race.NUM_LIDAR_FEATURES
+            ),
+            settings.noise,
+            rng,
+        )
+
+        with torch.no_grad():
+            lidar_tensor = torch.as_tensor(
+                lidar, dtype=torch.float32, device=device
+            )[None, None]
+            speed_tensor = torch.tensor(
+                [[[previous_speed]]], dtype=torch.float32, device=device
+            )
+            actions, hidden_state = model(
+                lidar_tensor, speed_tensor, hidden_state
+            )
+            ego_steer = actions[0, -1, 0].item()
+            ego_speed = actions[0, -1, 1].item()
+
+        ego_steer = np.clip(
+            ego_steer, -vehicle.steering_limit, vehicle.steering_limit
+        )
+
+        action = np.array([[ego_steer, ego_speed]])
+        obs, timestep, done, _ = env.step(action)
+        lap_time += timestep
+        previous_speed = obs["linear_vels_x"][0]
+        current_position = np.array(
+            [obs["poses_x"][0], obs["poses_y"][0]]
+        )
+        trajectory.append(current_position)
+        speeds.append(previous_speed)
+
+        if settings.render:
+            render_info.update(
+                {
+                    "speed": ego_speed,
+                    "steer": ego_steer,
+                    "lap_time": lap_time,
+                    "laps": lap_count,
+                }
+            )
+            visited_points.append(current_position)
+
+        distance_to_start = np.linalg.norm(current_position - start_position)
+
+        if distance_to_start < 0.5:
+            if (
+                not near_start_flag
+                and lap_time - lap_start_time > settings.minimum_lap_time
+            ):
+                lap_count += 1
+                lap_duration = lap_time - lap_start_time
+                lap_times.append(lap_duration)
+                lap_start_time = lap_time
+                print(
+                    f"Lap {lap_count}/{settings.lap_num} completed in "
+                    f"{lap_duration:.2f}s"
+                )
+                if lap_count >= settings.lap_num:
+                    print(f"Successfully completed all {settings.lap_num} laps!")
+            near_start_flag = True
+        else:
+            near_start_flag = False
+
+        if settings.render:
+            render_info["laps"] = lap_count
+
+        if obs["collisions"][0]:
+            collision_occurred = True
+            done = True
+            print(f"Wall collision at {lap_time:.2f}s")
+
+        if settings.render:
+            frame = env.render(mode="rgb_array")
+            if frame is not None:
+                video_frames.append(frame)
+
+    if trajectory and lap_count < settings.lap_num:
+        final_progress, _ = project_point_to_centerline(
+            trajectory[-1], centerline
+        )
+        if final_progress < initial_progress - centerline_total_length / 2:
+            final_progress += centerline_total_length
+
+        lap_fraction = (
+            final_progress - initial_progress
+        ) / centerline_total_length
+        if lap_fraction < 0:
+            lap_fraction += 1
+        total_lap_progress = lap_count + lap_fraction
+    else:
+        total_lap_progress = lap_count
+
+    if settings.render:
+        for batch_object in batch_objects:
+            batch_object.delete()
+        type(env).render_callbacks.clear()
+
+        if video_frames:
+            imageio.mimwrite(
+                video_path, video_frames, fps=VIDEO_FPS, macro_block_size=1
+            )
+            print(f"Video saved to {video_path}")
+
+    env.close()
+    avg_speed, speed_variance, total_distance = calculate_metrics(
+        trajectory, speeds
+    )
+
+    print("\n" + "=" * 50)
+    print("LAP EVALUATION RESULTS")
+    print("=" * 50)
+    print(f"Map: {settings.map_name}")
+    print(f"Target Laps: {settings.lap_num}")
+    print(f"Laps Completed: {lap_count}")
+    print(f"Lap Progress: {total_lap_progress:.2f} laps")
+    print(f"Time Elapsed: {lap_time:.1f}s")
+    print(f"Average Speed: {avg_speed:.3f} m/s")
+    print(f"Speed Variance: {speed_variance:.3f} m²/s²")
+    print(f"Total Distance: {total_distance:.1f} m")
+
+    if lap_times:
+        mean_lap_time = np.mean(lap_times)
+        lap_time_variance = np.var(lap_times) if len(lap_times) > 1 else 0
+        print(f"\nLap Times: {[f'{t:.2f}s' for t in lap_times]}")
+        print(f"Mean Lap Time: {mean_lap_time:.2f}s")
+        print(f"Lap Time Variance: {lap_time_variance:.3f}s²")
+
+    if collision_occurred:
+        print("\nStatus: Collision occurred")
+    elif lap_count >= settings.lap_num:
+        print("\nStatus: Successfully completed all laps")
+    else:
+        print("\nStatus: Incomplete - stopped before completing all laps")
+
+
+def main():
+    require_end2race_runtime()
+    if len(sys.argv) != 9:
+        raise SystemExit(
+            "Usage: python eval_single.py "
+            "<map_name> <checkpoint_path> <noise> <seed> <render:true|false> "
+            "<lap_num> <start_idx> <minimum_lap_time>"
+        )
+
+    render_value = sys.argv[5]
+    if render_value not in {"true", "false"}:
+        raise ValueError("render must be true or false")
+    settings = EvaluationSettings(
+        map_name=sys.argv[1],
+        checkpoint_path=sys.argv[2],
+        noise=float(sys.argv[3]),
+        seed=int(sys.argv[4]),
+        render=render_value == "true",
+        lap_num=int(sys.argv[6]),
+        start_idx=int(sys.argv[7]),
+        minimum_lap_time=float(sys.argv[8]),
+    )
+    if (
+        not settings.map_name
+        or not settings.checkpoint_path
+        or not 0 <= settings.noise <= 1
+        or settings.lap_num <= 0
+        or settings.start_idx < 0
+        or settings.minimum_lap_time <= 0
+    ):
+        raise ValueError(
+            "map_name and checkpoint_path must be nonempty, noise must be between "
+            "0 and 1, lap_num and minimum_lap_time must be positive, and "
+            "start_idx must be nonnegative"
+        )
+
+    vehicle = load_project_config().vehicle
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = End2Race().to(device)
+    model.load_state_dict(
+        torch.load(settings.checkpoint_path, map_location=device, weights_only=True)
+    )
+    model.eval()
+
+    evaluate_laps(model, device, vehicle, settings)
+
+
+if __name__ == "__main__":
+    main()

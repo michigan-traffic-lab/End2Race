@@ -1,0 +1,33 @@
+raceline_generation:
+  map_name: Austin
+  map_image_extension: .png
+  num_lanes: 3
+  clockwise: true
+  inner_safe_distance: 0.3
+  outer_safe_distance: 0.3
+  num_laps: 2
+  preparation_step_size: 0.5
+  regularization_step_size: 2.0
+  interpolation_step_size: 0.2
+  smoothing_regularization: 3
+  smoothing_length: 0.0
+  dynamic_model_exponent: 1.0
+  velocity_filter_window: 31
+
+conversion:
+  pattern: "*/*raceline.csv"
+  output_suffix: _newconv
+  require_confirmation: true
+
+greyscale:
+  input_path: Austin/Untitled Diagram.drawio.png
+  output_path: Austin/Austin_map_block.png
+
+rename:
+  donkey_waypoint_suffix: _DonkeySim_waypoints.txt
+  centerline_source_suffix: _map_waypoints.csv
+  centerline_target_suffix: _centerline.csv
+  raceline_source_suffix: _raceline_newconv.csv
+  raceline_target_suffix: _raceline.csv
+  remove_extensions:
+    - .pgm

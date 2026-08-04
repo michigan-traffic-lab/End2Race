@@ -9,41 +9,56 @@ https://github.com/user-attachments/assets/5369f5ea-13fa-44c3-a6aa-5b3c2b59b10c
 
 ## Table of Contents
 - [Code Structure](#code-structure)
+- [Configuration](#configuration)
 - [Environment Setup](#environment-setup)
 - [Evaluation](#evaluation)
 - [Data Collection](#data-collection)
 - [Training](#training)
+- [Model Architecture](#model-architecture)
 - [Raceline Generation (Optional)](#raceline-generation-optional)
 
 ## Code Structure
 ```
 end2race/
-├── pretrained/
-│   └── end2race.pth           # Pretrained model weights
+├── config.yaml                # Shared project configuration
 ├── f1tenth_gym/               # F1Tenth simulator environment
 ├── f1tenth_racetracks/        # Track data with pre-generated lanes and racelines
+│   ├── config.yaml            # Racetrack tool configuration
 │   └── generate_raceline.py   # Raceline generation tool
 ├── latticeplanner/            # Expert planner module
 │   ├── lattice_planner.py     # Main planner implementation
-│   ├── lattice_config.yaml    # Planner configuration
+│   ├── config.yaml            # Planner configuration
 │   ├── pure_pursuit.py        # Low-level trajectory tracker
 │   └── utils.py               # Planner utility functions
 ├── model.py                   # GRU network architecture
 ├── train.py                   # Training script
-├── demonstration.py           # Lattice planner expert demonstration
-├── collect.sh                 # Batch data collection
-├── evaluate_singleagent.py    # Single-agent lap completion evaluation
-├── evaluate_multiagent.py     # Multi-agent competitive racing evaluation
-├── evaluate.sh                # Parallel batch evaluation
+├── collect.py                 # One expert-data collection scenario
+├── collect.sh                 # Parallel collection orchestrator
+├── eval_single.py             # One single-agent lap evaluation
+├── eval_single.sh             # Single-agent evaluation orchestrator
+├── eval_multi.py              # One multi-agent racing evaluation
+├── eval_multi.sh              # Parallel multi-agent orchestrator
 └── utils.py                   # Shared utility functions
 ```
+
+## Configuration
+
+Four YAML files hold shared model, planner, localization, and track-tool settings. Workflow settings stay with the scripts that own their execution:
+
+- `config.yaml`: model, training, and shared vehicle settings
+- `latticeplanner/config.yaml`: planner-specific sampling, costs, and tracker gains
+- `localization/config.yaml`: particle-filter localization
+- `f1tenth_racetracks/config.yaml`: raceline generation and track maintenance tools
+
+Unknown, removed, or missing configuration keys are rejected.
+The simulator timestep and video frame rate are internal code constants shared by all workflows.
 
 ## Environment Setup
 
 ### Base Requirements
 * **Hardware**: 4-core CPU, 8GB RAM (GPU recommended for training and inference)
 * **System**: Windows or Linux
-* **Python**: 3.10 (Conda or native installation)
+* **Python**: 3.11 in the `end2race` Conda environment
 
 ### Clone Repository
 ```bash
@@ -53,7 +68,14 @@ cd end2race
 
 ### Setup Virtual Environment
 ```bash
-conda create --name end2race python=3.10 -y
+conda env create --file environment.yml
+conda activate end2race
+```
+
+If the environment already exists, synchronize it with:
+
+```bash
+conda env update --name end2race --file environment.yml
 conda activate end2race
 ```
 
@@ -70,16 +92,10 @@ The evaluation is conducted using the [F1Tenth Gym simulator](https://github.com
 Evaluates the model's lap completion ability across different track configurations, testing its robustness to varying track layouts and racing line complexities without opponent interaction.
 
 ```bash
-python eval_singleagent.py \
-    --model_path pretrained/end2race.pth \
-    --map_name Austin \
-    --noise 0.0 \
-    --render
+bash eval_single.sh
 ```
-- `--model_path`: Path to trained model weights
-- `--map_name`: Track name from f1tenth_racetracks
-- `--noise`: Sensor noise level (0.0~1.0), fraction of LiDAR points masked
-- `--render`: Enable visualization and video recording
+
+`eval_single.sh` owns the checkpoint, track, noise, rendering, seed, lap count, start index, and minimum lap time and passes them to `eval_single.py`.
 
 ### Multi-Agent Evaluation
 
@@ -87,95 +103,58 @@ Evaluates the model in competitive racing scenarios against an expert opponent. 
 
 
 ```bash
-python eval_multiagent.py \
-    --model_path pretrained/end2race.pth \
-    --map_name Austin \
-    --ego_idx 150 \
-    --interval_idx 15 \
-    --opp_raceline raceline0 \
-    --opp_speedscale 0.5 \
-    --sim_duration 8.0 \
-    --noise 0.0 \
-    --render
+python eval_multi.py Austin checkpoint_00100.pt 0 raceline1 0.5 8.0 0.0 42 false
 ```
-- `--ego_idx`: Starting waypoint index for ego vehicle
-- `--interval_idx`: Waypoint offset between ego and opponent at start 
-- `--opp_raceline`: Opponent's raceline choice
-- `--opp_speedscale`: Opponent speed multiplier
-- `--sim_duration`: Maximum simulation time in seconds 
+
+The required inputs are track, checkpoint, ego waypoint index, opponent raceline, opponent speed scale, evaluation duration, LiDAR noise ratio, seed, and rendering flag. `eval_multi.sh` owns these evaluation settings for batch runs.
 
 ### Multi-Agent Parallel Evaluation (Optional)
 
 The batch evaluation runs hundreds of scenarios in parallel to comprehensively assess the model's performance across different starting positions, opponent strategies, and difficulty levels:
 
 ```bash
-bash evaluate.sh
+bash eval_multi.sh
 ```
 
 
 ## Data Collection
 
-Collects competitive racing demonstrations in multi-agent scenarios where the ego Lattice Planner interacts with an opponent, learning both overtaking and following behaviors:
+Collect one explicit competitive-racing scenario with:
 
 ```bash
-python demonstration.py \
-    --map_name Austin \
-    --ego_idx 0 \
-    --interval_idx 15 \
-    --opp_raceline raceline0 \
-    --opp_speed_scale 0.6 \
-    --sim_duration 8.0 \
-    --render
+python collect.py Austin Dataset_Austin 0 raceline1 0.8 8.0 0.1 6300 true
 ```
-- `--ego_idx`: Starting waypoint index for ego vehicle 
-- `--interval_idx`: Initial distance between vehicles in waypoints
-- `--opp_raceline`: Opponent's raceline file 
-- `--opp_speed_scale`: Opponent speed multiplier 
-- `--sim_duration`: Simulation time limit in seconds
 
-### Parallel Collection
-
-The batch collection script automates the process by running multiple Lattice Planner simulations in parallel, systematically varying starting positions, opponent strategies, and speed settings to create a diverse training dataset:
+The required inputs are track, output dataset directory, ego waypoint index, opponent raceline, opponent speed scale, collection duration, sample interval, seed, and rendering flag. To run the complete parallel collection matrix and wait for every scenario:
 
 ```bash
 bash collect.sh
 ```
 
+`collect.sh` owns the output dataset directory and all batch collection settings.
+
 ## Training
 Trains the End2Race model using imitation learning on collected demonstrations.
 
 ```bash
-python train.py \
-    --data_path Dataset_Austin \
-    --model_path end2race.pth \
-    --hidden_scale 4 \
-    --mask_prob 0.1 \
-    --batch_size 16
+python train.py Dataset_Austin
 ```
-- `--data_path`: Path to training data directory 
-- `--model_path`: Path to save/load model weights
-- `--hidden_scale`: GRU hidden size multiplier
-- `--mask_prob`: Probability of masking speed input during training 
-- `--batch_size`: Training batch size 
+
+The command selects the input dataset, while the training section contains only optimization settings. Adam uses the configured learning rate for every epoch. Every epoch is saved as `checkpoint_00001.pt`, `checkpoint_00002.pt`, and so on; the evaluation orchestrators explicitly select which checkpoint to load.
+
+## Model Architecture
+
+The policy downsamples each full-circle simulator scan to 180 LiDAR values and applies one shared, fixed sigmoid normalization coefficient. The normalized LiDAR vector is concatenated with a 30-dimensional speed embedding, producing a 210-dimensional recurrent input. A single-layer GRU with 420 hidden units feeds an action head with dimensions `420 -> 128 -> 2`, which predicts steering and desired speed. During training, the speed embedding is replaced by a learned dummy embedding at 20% of timesteps.
 
 ## Raceline Generation (Optional)
 
 Generate optimized racing lines for new tracks. First, upload the track map files to `f1tenth_racetracks/{map_name}/` including `{map_name}_map.png` (binary image: white=drivable, black=walls) and `{map_name}_map.yaml` (map metadata). Then run:
 
 ```bash
-cd f1tenth_racetracks
-python generate_raceline.py \
-    --map_name Austin \
-    --num_lanes 3 \
-    --v_max 7.5 \
-    --inner_safe_dist 0.3 \
-    --outer_safe_dist 0.3
+python -m f1tenth_racetracks.generate_raceline
 ```
-- `--map_name`: Track name from f1tenth_racetracks
-- `--num_lanes`: Number of lanes and racelines to generate 
-- `--v_max`: Maximum velocity in m/s for optimization
-- `--inner_safe_dist`: Safety margin from inner boundary 
-- `--outer_safe_dist`: Safety margin from outer boundary 
+
+Edit `f1tenth_racetracks/config.yaml` for track-specific generation settings. Shared vehicle parameters remain in the root `config.yaml` and are also reused by the planner.
 
 ## License
 

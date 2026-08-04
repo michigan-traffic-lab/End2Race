@@ -1,4 +1,8 @@
+from pathlib import Path
+
 from PIL import Image
+
+from config import load_racetrack_config
 
 def convert_to_greyscale(input_path, output_path):
     """
@@ -17,8 +21,13 @@ def convert_to_greyscale(input_path, output_path):
     greyscale_image.save(output_path)
     print(f"Greyscale image saved to {output_path}")
 
-# Example usage
-input_image_path = "Austin/Untitled Diagram.drawio.png"
-output_image_path = "Austin/Austin_map_block.png"
-convert_to_greyscale(input_image_path, output_image_path)
+def main():
+    module = Path(__file__).resolve().parent
+    config = load_racetrack_config().greyscale
+    convert_to_greyscale(
+        module / config.input_path, module / config.output_path
+    )
 
+
+if __name__ == '__main__':
+    main()

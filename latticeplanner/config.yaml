@@ -1,0 +1,31 @@
+lh_grid_lb: 0.0
+lh_grid_ub: 1.0
+traj_points: 15
+traj_v_scale: 1.0
+traj_v_span_min: 0.1
+traj_v_span_max: 1.0
+traj_v_span_num: 19
+weights_num: 4
+tracker_steps: 10
+vel_scale: 1.0
+minL: 0.5
+maxL: 1.8
+Lscale: 8.0
+minP: 0.5
+maxP: 0.8
+Pscale: 8.0
+D: 0.2
+interpScale: 10
+wpt_xind: 1
+wpt_yind: 2
+wpt_vind: 5
+ego_cost_weights:
+  - 0.12
+  - 2.0
+  - 0.3
+  - 0.5
+opponent_cost_weights:
+  - 1.0
+  - 2.0
+  - 0.5
+  - 0.0

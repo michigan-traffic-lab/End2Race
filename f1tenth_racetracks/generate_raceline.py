@@ -1,49 +1,14 @@
 import cv2
 import numpy as np
 import os
-import argparse
 import yaml
-import numpy as np
 import sys
 import matplotlib.pyplot as plt
 import trajectory_planning_helpers as tph
+from pathlib import Path
 
+from config import load_project_config, load_racetrack_config, merge_config_sections
 
-def parse_arguments():
-    """Parse command line arguments."""
-    parser = argparse.ArgumentParser(description='Generate lanes and raceline trajectories')
-    
-    # Map parameters
-    parser.add_argument('--map_name', type=str, default='Shanghai',
-                       help='Name of the map to process')
-    parser.add_argument('--map_img_ext', type=str, default='.png',
-                       help='Image file extension')
-    parser.add_argument('--num_lanes', type=int, default=1,
-                       help='Number of lanes to generate')
-    parser.add_argument('--clockwise', action='store_true', default=True,
-                       help='Track direction is clockwise')
-    parser.add_argument('--inner_safe_dist', type=float, default=0.4,
-                       help='Safety distance from inner boundary (meters)')
-    parser.add_argument('--outer_safe_dist', type=float, default=0.4,
-                       help='Safety distance from outer boundary (meters)')
-    parser.add_argument('--opp_safe_dist', type=float, default=0.25,
-                       help='Safety distance for opponent detection (meters)')
-    
-    # Vehicle parameters
-    parser.add_argument('--v_max', type=float, default=7.5,
-                       help='Maximum velocity in m/s')
-    parser.add_argument('--vehicle_length', type=float, default=0.51,
-                       help='Vehicle length in meters')
-    parser.add_argument('--vehicle_width', type=float, default=0.31,
-                       help='Vehicle width in meters')
-    parser.add_argument('--vehicle_mass', type=float, default=3.362,
-                       help='Vehicle mass in kg')
-    parser.add_argument('--drag_coeff', type=float, default=0.0075,
-                       help='Drag coefficient')
-    parser.add_argument('--num_laps', type=int, default=2,
-                       help='Number of laps for trajectory')
-    
-    return parser.parse_args()
 
 def prep_track(reftrack_imp: np.ndarray,
                reg_smooth_opts: dict,
@@ -176,10 +141,10 @@ def save_csv(data, csv_name, header=None):
         for line in data:
             csv_writer.writerow(line.tolist())
 
-def generate_lanes(args, map_dir):
+def generate_lanes(config, map_dir):
     """Generate lanes from map image."""
     # Read map parameters
-    yaml_file = os.path.join(map_dir, args.map_name + "_map.yaml")
+    yaml_file = os.path.join(map_dir, config.map_name + "_map.yaml")
     with open(yaml_file, 'r') as stream:
         parsed_yaml = yaml.safe_load(stream)
     scale = parsed_yaml["resolution"]
@@ -187,12 +152,12 @@ def generate_lanes(args, map_dir):
     offset_y = parsed_yaml["origin"][1]
 
     # Define lane ratios
-    lane_ratios = np.arange(1, args.num_lanes + 1) / np.arange(args.num_lanes, 0, -1)
+    lane_ratios = np.arange(1, config.num_lanes + 1) / np.arange(config.num_lanes, 0, -1)
     if not np.any(lane_ratios == 1.0):
         lane_ratios = np.append(lane_ratios, 1.0)
 
     # Read image
-    img_path = os.path.join(map_dir, args.map_name + "_map" + args.map_img_ext)
+    img_path = os.path.join(map_dir, config.map_name + "_map" + config.map_image_extension)
     input_img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
     h, w = input_img.shape[:2]
 
@@ -234,7 +199,10 @@ def generate_lanes(args, map_dir):
     for (x, y) in zip(X, Y):
         outer_dist = cv2.pointPolygonTest(outer_bound, (x, y), True)
         inner_dist = cv2.pointPolygonTest(inner_bound, (x, y), True)
-        if outer_dist > args.outer_safe_dist / scale and inner_dist < -args.inner_safe_dist / scale:
+        if (
+            outer_dist > config.outer_safe_distance / scale
+            and inner_dist < -config.inner_safe_distance / scale
+        ):
             ratio = np.abs(inner_dist) / (np.abs(outer_dist) + 1e-8)
             valid_pts.append([x, y, inner_dist, outer_dist, ratio])
     
@@ -247,16 +215,16 @@ def generate_lanes(args, map_dir):
         valid_ratio = (np.abs(valid_pts[:, -1] - lane_ratios[idx]) < lane_ratios[idx] / 10)
         lane = valid_pts[valid_ratio, 0:2].astype(int)
         lane = reorder_vertex(output_img, lane)
-        if args.clockwise:
+        if config.clockwise:
             lane = np.flipud(lane)
         
         left_dists, right_dists = [], []
         for (x, y) in lane:
             outer_dist = cv2.pointPolygonTest(outer_bound, (int(x), int(y)), True)
             inner_dist = cv2.pointPolygonTest(inner_bound, (int(x), int(y)), True)
-            outer_dist = outer_dist - args.outer_safe_dist / scale
-            inner_dist = abs(inner_dist) - args.inner_safe_dist / scale
-            if args.clockwise:
+            outer_dist = outer_dist - config.outer_safe_distance / scale
+            inner_dist = abs(inner_dist) - config.inner_safe_distance / scale
+            if config.clockwise:
                 left_dists.append(outer_dist)
                 right_dists.append(inner_dist)
             else:
@@ -280,42 +248,42 @@ def generate_lanes(args, map_dir):
     return lanes, lane_names
 
 
-def generate_raceline(lane_data, lane_name, args, module, map_dir):
+def generate_raceline(lane_data, lane_name, config, module, map_dir):
     """Generate raceline trajectory for a given lane."""
     
     # Vehicle parameters
     veh_params = {
-        "v_max": args.v_max,
-        "length": args.vehicle_length,
-        "width": args.vehicle_width,
-        "mass": args.vehicle_mass,
-        "dragcoeff": args.drag_coeff,
-        "g": 9.81
+        "v_max": config.maximum_speed,
+        "length": config.length,
+        "width": config.width,
+        "mass": config.mass,
+        "dragcoeff": config.drag_coefficient,
+        "g": config.gravity,
     }
 
     # Calculation parameters
     stepsize_opts = {
-        "stepsize_prep": 0.5,
-        "stepsize_reg": 2.0,
-        "stepsize_interp_after_opt": 0.2
+        "stepsize_prep": config.preparation_step_size,
+        "stepsize_reg": config.regularization_step_size,
+        "stepsize_interp_after_opt": config.interpolation_step_size,
     }
 
     # Smoothing parameters
     reg_smooth_opts = {
-        "k_reg": 3,
-        "s_reg": 0.0
+        "k_reg": config.smoothing_regularization,
+        "s_reg": config.smoothing_length,
     }
 
     # Velocity calculation options
     vel_calc_opts = {
-        "dyn_model_exp": 1.0,
-        "vel_profile_conv_filt_window": 31
+        "dyn_model_exp": config.dynamic_model_exponent,
+        "vel_profile_conv_filt_window": config.velocity_filter_window,
     }
 
     # File paths
     file_paths = {
-        "ggv_file": os.path.join("vehicle_dynamic_info", "ggv.csv"),
-        "ax_max_machines_file": os.path.join("vehicle_dynamic_info", "ax_max_machines.csv")
+        "ggv_file": os.path.join(module, "vehicle_dynamic_info", "ggv.csv"),
+        "ax_max_machines_file": os.path.join(module, "vehicle_dynamic_info", "ax_max_machines.csv"),
     }
 
     # Import options
@@ -324,7 +292,7 @@ def generate_raceline(lane_data, lane_name, args, module, map_dir):
         "set_new_start": False, 
         "new_start": np.array([0.0, 0.0]),
         "min_track_width": veh_params["width"] * 2.0,
-        "num_laps": args.num_laps
+        "num_laps": config.num_laps,
     }
 
     # Use lane data directly as reftrack
@@ -417,25 +385,27 @@ def generate_raceline(lane_data, lane_name, args, module, map_dir):
     return traj_cl, t_profile_cl[-1]
 
 def main():
-    args = parse_arguments()
-    module = os.path.dirname(os.path.abspath(__file__))
-    
-    # Define base directory and map paths
-    map_dir = os.path.join(args.map_name)
+    module = Path(__file__).resolve().parent
+    project = load_project_config()
+    racetracks = load_racetrack_config()
+    config = merge_config_sections(racetracks.raceline_generation, project.vehicle)
+    module = str(module)
+    map_dir = os.path.join(module, config.map_name)
     
     # Create output directory
     os.makedirs(map_dir, exist_ok=True)
     
-    print(f"Generating lanes for {args.map_name}...")
-    # Generate lanes
-    lanes, lane_names = generate_lanes(args, map_dir)
+    print(f"Generating lanes for {config.map_name}...")
+    lanes, lane_names = generate_lanes(config, map_dir)
     
     # Generate raceline for each lane
     for idx, (lane, lane_name) in enumerate(zip(lanes, lane_names)):
         print(f"\nProcessing {lane_name}...")
         
         # Generate raceline trajectory
-        trajectory, laptime = generate_raceline(lane, lane_name, args, module, map_dir)
+        trajectory, laptime = generate_raceline(
+            lane, lane_name, config, module, map_dir
+        )
         # Use unified naming: raceline0, raceline1, raceline2, etc.
         export_path = os.path.join(map_dir, f"raceline{idx}.csv")
         
