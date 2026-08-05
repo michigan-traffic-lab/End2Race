@@ -31,8 +31,8 @@ expert:
   time_step: 0.2
   road_width: 1.2
   road_step: 0.3
-  target_speed_step: 0.75
-  target_speed_samples: 2
+  terminal_course_speed_step: 0.75
+  terminal_course_speed_samples: 2
   max_acceleration: 20.0
   max_curvature: 1.7
   clearance_radius: 0.45

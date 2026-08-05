@@ -418,20 +418,25 @@ class FrenetOptimalTrajectoryPlanner:
         self.fallback_count = 0
         self.tracker = TrajectoryTracker(configuration)
 
-    def _terminal_speeds(self, target_speed):
+    def _terminal_course_speeds(self, target_speed):
         speeds = np.arange(
             target_speed
-            - self.conf.target_speed_step * self.conf.target_speed_samples,
+            - self.conf.terminal_course_speed_step
+            * self.conf.terminal_course_speed_samples,
             target_speed
-            + self.conf.target_speed_step * self.conf.target_speed_samples,
-            self.conf.target_speed_step,
+            + self.conf.terminal_course_speed_step
+            * (self.conf.terminal_course_speed_samples + 1),
+            self.conf.terminal_course_speed_step,
         )
-        bounded = []
+        course_speeds = []
         for speed in speeds:
-            speed = float(np.clip(speed, 0.0, self.maximum_speed))
-            if all(abs(speed - existing) > 1e-6 for existing in bounded):
-                bounded.append(speed)
-        return bounded
+            speed = float(max(speed, 0.0))
+            if all(
+                abs(speed - existing) > 1e-6
+                for existing in course_speeds
+            ):
+                course_speeds.append(speed)
+        return course_speeds
 
     def _target_speed(self, waypoint_index, current_speed):
         horizon_distance = self.conf.speed_lookahead_base
@@ -473,12 +478,14 @@ class FrenetOptimalTrajectoryPlanner:
         )
         for horizon in horizons:
             times = list(np.arange(0.0, horizon, self.conf.time_step))
-            for terminal_speed in self._terminal_speeds(target_speed):
+            for terminal_course_speed in self._terminal_course_speeds(
+                target_speed
+            ):
                 longitudinal = QuarticPolynomial(
                     course_distance,
                     course_speed,
                     course_acceleration,
-                    terminal_speed,
+                    terminal_course_speed,
                     0.0,
                     horizon,
                 )
@@ -532,7 +539,11 @@ class FrenetOptimalTrajectoryPlanner:
                         + self.conf.time_cost * horizon
                         + self.conf.lateral_offset_cost * path.d[-1] ** 2
                     )
-                    speed_error = (target_speed - path.s_d[-1]) ** 2
+                    _frenet_to_cartesian(self.reference, path)
+                    future_velocity = np.asarray(path.velocity[1:])
+                    speed_error = np.mean(
+                        np.square(target_speed - future_velocity)
+                    )
                     longitudinal_cost = (
                         self.conf.jerk_cost * longitudinal_jerk
                         + self.conf.time_cost * horizon
@@ -542,7 +553,6 @@ class FrenetOptimalTrajectoryPlanner:
                         self.conf.lateral_cost * lateral_cost
                         + self.conf.longitudinal_cost * longitudinal_cost
                     )
-                    _frenet_to_cartesian(self.reference, path)
                     paths.append(path)
         return paths
 
@@ -647,9 +657,7 @@ class FrenetOptimalTrajectoryPlanner:
         trajectory = np.zeros((len(path.x), 5))
         trajectory[:, 0] = path.x
         trajectory[:, 1] = path.y
-        trajectory[:, 2] = np.clip(
-            path.velocity, 0.0, self.maximum_speed
-        )
+        trajectory[:, 2] = target_speed
         trajectory[:, 3] = path.yaw
         trajectory[:, 4] = path.curvature
         self.best_trajectory = trajectory
