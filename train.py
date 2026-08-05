@@ -19,6 +19,7 @@ class SequenceDataset(Dataset):
         self.lidar_columns = [
             f"lidar_{index}" for index in range(End2Race.NUM_LIDAR_FEATURES)
         ]
+        self.speed_column = "current_speed"
         self.action_columns = ["steer", "desired_speed"]
         self.sequence_length = self._determine_sequence_length(data_path)
         self.sequences = []
@@ -36,7 +37,8 @@ class SequenceDataset(Dataset):
             ]
             if available_lidar_columns != self.lidar_columns:
                 raise ValueError(
-                    f"{csv_file} must contain exactly {End2Race.NUM_LIDAR_FEATURES} ordered LiDAR columns"
+                    f"{csv_file} must contain exactly "
+                    f"{End2Race.NUM_LIDAR_FEATURES} ordered LiDAR columns"
                 )
 
             missing_actions = set(self.action_columns) - set(df.columns)
@@ -45,39 +47,47 @@ class SequenceDataset(Dataset):
                     f"{csv_file} is missing action columns: "
                     f"{sorted(missing_actions)}"
                 )
+            if self.speed_column not in df.columns:
+                raise ValueError(
+                    f"{csv_file} is missing speed column: {self.speed_column}"
+                )
 
-            if len(df) <= self.sequence_length:
+            if len(df) < self.sequence_length:
                 continue
 
             lidar_data = df[self.lidar_columns].values.astype(np.float32)
+            speed_data = df[[self.speed_column]].values.astype(np.float32)
             action_data = df[self.action_columns].values.astype(np.float32)
 
-            self._create_sequences(lidar_data, action_data)
+            self._create_sequences(lidar_data, speed_data, action_data)
 
     def _determine_sequence_length(self, data_path: str | Path) -> int:
         csv_files = sorted(Path(data_path).glob("*.csv"))
         if not csv_files:
             raise FileNotFoundError(f"No training CSV files found in {data_path}")
         df = pd.read_csv(csv_files[0])
-        sequence_length = len(df) - 1
+        sequence_length = len(df)
         if sequence_length < 1:
             raise ValueError(
-                f"Training episodes in {data_path} must contain at least two rows"
+                f"Training episodes in {data_path} must contain at least one row"
             )
         print(f"Sequence length: {sequence_length}")
         return sequence_length
 
-    def _create_sequences(self, lidar_data: np.ndarray, action_data: np.ndarray):
-        lidar_valid = lidar_data[1:]
-        action_valid = action_data[1:]
-        speed_prev = action_data[:-1, 1:2]
-        for end_idx in range(self.sequence_length - 1, len(lidar_valid)):
+    def _create_sequences(
+        self,
+        lidar_data: np.ndarray,
+        speed_data: np.ndarray,
+        action_data: np.ndarray,
+    ):
+        previous_speed = np.concatenate((speed_data[:1], speed_data[:-1]))
+        for end_idx in range(self.sequence_length - 1, len(lidar_data)):
             start_idx = end_idx - self.sequence_length + 1
             self.sequences.append(
                 {
-                    "lidar": lidar_valid[start_idx : end_idx + 1],
-                    "speed": speed_prev[start_idx : end_idx + 1],
-                    "action": action_valid[start_idx : end_idx + 1],
+                    "lidar": lidar_data[start_idx : end_idx + 1],
+                    "speed": previous_speed[start_idx : end_idx + 1],
+                    "action": action_data[start_idx : end_idx + 1],
                 }
             )
 

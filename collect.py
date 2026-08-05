@@ -10,24 +10,20 @@ import imageio
 import numpy as np
 
 from config import load_project_config
-from latticeplanner.lattice_planner import create_lattice_planner
-from latticeplanner.utils import (
-    downsample_lidar,
-    find_corresponding_waypoint,
-    obsDict2oppoArray,
-    project_point_to_centerline,
-    random_position,
-)
-from model import End2Race
+from expert import create_expert_planner, create_opponent
 from utils import (
     SIMULATION_TIMESTEP,
     VIDEO_FPS,
     create_planner_render_callback,
+    downsample_lidar,
+    find_corresponding_waypoint,
+    project_point_to_centerline,
+    random_position,
     require_end2race_runtime,
 )
+from model import End2Race
 
 EGO_RACELINE = "raceline1"
-INTERVAL_INDEX = 15
 
 
 @dataclass(frozen=True)
@@ -35,6 +31,7 @@ class CollectionScenario:
     map_name: str
     dataset_dir: str
     ego_idx: int
+    interval_idx: int
     opponent_raceline: str
     opponent_speed_scale: float
     sim_duration: float
@@ -64,7 +61,7 @@ def save_data(
             "opp_raceline": scenario.opponent_raceline,
             "opp_idx": int(opponent_idx),
             "speed_scale": scenario.opponent_speed_scale,
-            "interval_idx": INTERVAL_INDEX,
+            "interval_idx": scenario.interval_idx,
             "simulation_time": float(elapsed_time),
             "final_state": final_state,
         }
@@ -90,7 +87,7 @@ def save_data(
     success_dir = dataset_dir / "success"
     success_dir.mkdir(parents=True, exist_ok=True)
     csv_path = success_dir / f"{base_filename}.csv"
-    header = ["time", "steer", "desired_speed"] + [
+    header = ["time", "current_speed", "steer", "desired_speed"] + [
         f"lidar_{index}" for index in range(End2Race.NUM_LIDAR_FEATURES)
     ]
 
@@ -111,11 +108,11 @@ def save_data(
 def collect_scenario(vehicle, scenario):
     rng = np.random.default_rng(scenario.seed)
 
-    ego_planner, config_directory = create_lattice_planner(
-        scenario.map_name, EGO_RACELINE, "ego"
+    ego_planner, config_directory = create_expert_planner(
+        scenario.map_name, EGO_RACELINE
     )
-    opponent_planner, _ = create_lattice_planner(
-        scenario.map_name, scenario.opponent_raceline, "opponent"
+    opponent_planner, _ = create_opponent(
+        scenario.map_name, scenario.opponent_raceline
     )
 
     env = gym.make(
@@ -132,11 +129,10 @@ def collect_scenario(vehicle, scenario):
         "opp_steer": 0.0,
         "opp_speed": 0.0,
     }
-    draw_grid_pts = []
     draw_traj_pts = []
     if scenario.render:
         render_callback = create_planner_render_callback(
-            render_info, ego_planner, draw_grid_pts, draw_traj_pts
+            render_info, ego_planner, draw_traj_pts
         )
         env.add_render_callback(render_callback)
 
@@ -156,7 +152,9 @@ def collect_scenario(vehicle, scenario):
     ego_map_idx = find_corresponding_waypoint(
         ego_waypoint, opponent_waypoints_xytheta
     )
-    opponent_idx = (ego_map_idx + INTERVAL_INDEX) % len(opponent_waypoints_xytheta)
+    opponent_idx = (ego_map_idx + scenario.interval_idx) % len(
+        opponent_waypoints_xytheta
+    )
     opponent_pos, _ = random_position(
         opponent_waypoints_xytheta, 1, rng, 0.0, 0.0, opponent_idx, 0
     )
@@ -201,14 +199,14 @@ def collect_scenario(vehicle, scenario):
             obs["poses_x"][0],
             obs["poses_y"][0],
             obs["poses_theta"][0],
-            obsDict2oppoArray(obs, 0),
+            obs["scans"][0],
             obs["linear_vels_x"][0],
         )
         opponent_trajectory = opponent_planner.plan(
             obs["poses_x"][1],
             obs["poses_y"][1],
             obs["poses_theta"][1],
-            obsDict2oppoArray(obs, 1),
+            obs["scans"][1],
             obs["linear_vels_x"][1],
         )
 
@@ -293,7 +291,12 @@ def collect_scenario(vehicle, scenario):
                     target_points=End2Race.NUM_LIDAR_FEATURES,
                 )
                 collected_data.append(
-                    [round(next_record_time, 4), ego_steer, ego_speed]
+                    [
+                        round(next_record_time, 4),
+                        obs["linear_vels_x"][0],
+                        ego_steer,
+                        ego_speed,
+                    ]
                     + lidar.tolist()
                 )
                 next_record_time += scenario.sample_interval
@@ -311,7 +314,7 @@ def collect_scenario(vehicle, scenario):
     ).replace(".csv", "")
     base_filename = (
         f"{state_prefix}_ol{opponent_raceline_number}_e{scenario.ego_idx}"
-        f"_o{opponent_idx}"
+        f"_i{scenario.interval_idx}_o{opponent_idx}"
         f"_s{scenario.opponent_speed_scale}"
     )
 
@@ -327,56 +330,51 @@ def collect_scenario(vehicle, scenario):
     )
 
     if scenario.render:
-        render_objects = (
-            draw_grid_pts
-            + draw_traj_pts
-            + ego_planner.tracker.drawn_waypoints
-        )
-        for item in render_objects:
+        for item in draw_traj_pts:
             item.delete()
-        draw_grid_pts.clear()
         draw_traj_pts.clear()
-        ego_planner.tracker.drawn_waypoints.clear()
         type(env).render_callbacks.clear()
     env.close()
 
 
 def main():
     require_end2race_runtime()
-    if len(sys.argv) != 10:
+    if len(sys.argv) != 11:
         raise SystemExit(
             "Usage: python collect.py "
-            "<map_name> <dataset_dir> <ego_idx> <opponent_raceline> "
-            "<opponent_speed_scale> <sim_duration> <sample_interval> <seed> "
-            "<render:true|false>"
+            "<map_name> <dataset_dir> <ego_idx> <interval_idx> "
+            "<opponent_raceline> <opponent_speed_scale> <sim_duration> "
+            "<sample_interval> <seed> <render:true|false>"
         )
 
-    render_value = sys.argv[9]
+    render_value = sys.argv[10]
     if render_value not in {"true", "false"}:
         raise ValueError("render must be true or false")
     scenario = CollectionScenario(
         map_name=sys.argv[1],
         dataset_dir=sys.argv[2],
         ego_idx=int(sys.argv[3]),
-        opponent_raceline=sys.argv[4],
-        opponent_speed_scale=float(sys.argv[5]),
-        sim_duration=float(sys.argv[6]),
-        sample_interval=float(sys.argv[7]),
-        seed=int(sys.argv[8]),
+        interval_idx=int(sys.argv[4]),
+        opponent_raceline=sys.argv[5],
+        opponent_speed_scale=float(sys.argv[6]),
+        sim_duration=float(sys.argv[7]),
+        sample_interval=float(sys.argv[8]),
+        seed=int(sys.argv[9]),
         render=render_value == "true",
     )
     if (
         not scenario.map_name
         or not scenario.dataset_dir
         or scenario.ego_idx < 0
+        or scenario.interval_idx <= 0
         or scenario.opponent_speed_scale <= 0
         or scenario.sim_duration <= 0
         or scenario.sample_interval <= 0
     ):
         raise ValueError(
             "map_name and dataset_dir must be nonempty, ego_idx must be "
-            "nonnegative, and opponent_speed_scale, sim_duration, and "
-            "sample_interval must be positive"
+            "nonnegative, and interval_idx, opponent_speed_scale, "
+            "sim_duration, and sample_interval must be positive"
         )
 
     vehicle = load_project_config().vehicle

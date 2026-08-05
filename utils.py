@@ -2,9 +2,99 @@ import os
 import sys
 
 import numpy as np
+from numba import njit
 
 SIMULATION_TIMESTEP = 0.01
 VIDEO_FPS = 100
+
+
+@njit(cache=True)
+def nearest_point(point, trajectory):
+    """Project a point onto an open piecewise-linear trajectory."""
+    differences = trajectory[1:] - trajectory[:-1]
+    squared_lengths = differences[:, 0] ** 2 + differences[:, 1] ** 2
+    projections = np.empty_like(differences)
+    fractions = np.empty(len(differences))
+    distances = np.empty(len(differences))
+    for index in range(len(differences)):
+        fraction = np.dot(point - trajectory[index], differences[index])
+        fraction /= squared_lengths[index]
+        fraction = min(max(fraction, 0.0), 1.0)
+        fractions[index] = fraction
+        projections[index] = trajectory[index] + fraction * differences[index]
+        offset = point - projections[index]
+        distances[index] = np.sqrt(np.dot(offset, offset))
+    segment_index = np.argmin(distances)
+    return (
+        projections[segment_index],
+        distances[segment_index],
+        fractions[segment_index],
+        segment_index,
+    )
+
+
+@njit(cache=True)
+def project_point_to_centerline(point, centerline):
+    """Return distance travelled along a centerline and its nearest segment."""
+    _, _, fraction, segment_index = nearest_point(point, centerline)
+    progress = 0.0
+    for index in range(segment_index):
+        progress += np.linalg.norm(centerline[index + 1] - centerline[index])
+    progress += fraction * np.linalg.norm(
+        centerline[segment_index + 1] - centerline[segment_index]
+    )
+    return progress, segment_index
+
+
+def downsample_lidar(lidar_data, target_points):
+    """Uniformly downsample a flat LiDAR scan."""
+    scan = np.asarray(lidar_data).reshape(-1)
+    if target_points <= 0:
+        raise ValueError("target_points must be positive")
+    if scan.size < target_points:
+        raise ValueError(
+            f"Cannot downsample {scan.size} LiDAR points to {target_points}"
+        )
+    if scan.size == target_points:
+        return scan.copy()
+    if scan.size % target_points == 0:
+        step = scan.size // target_points
+        return scan[::step][:target_points]
+    indices = np.linspace(0, scan.size - 1, target_points, dtype=np.int64)
+    return scan[indices]
+
+
+def find_corresponding_waypoint(ego_waypoint, opponent_waypoints):
+    """Find the opponent-raceline waypoint nearest to an ego waypoint."""
+    distances = np.linalg.norm(
+        opponent_waypoints[:, :2] - ego_waypoint[:2], axis=1
+    )
+    return int(np.argmin(distances))
+
+
+def random_position(
+    waypoints_xytheta,
+    sampled_number=1,
+    rng=None,
+    xy_noise=0.0,
+    theta_noise=0.0,
+    ego_idx=100,
+    interval_idx=20,
+):
+    """Return deterministic or noise-perturbed starting poses on a raceline."""
+    if rng is None:
+        rng = np.random.default_rng()
+    poses = []
+    for sample_index in range(sampled_number):
+        waypoint_index = (
+            ego_idx + sample_index * interval_idx
+        ) % len(waypoints_xytheta)
+        x, y, theta = waypoints_xytheta[waypoint_index, :3]
+        x += rng.random() * xy_noise
+        y += rng.random() * xy_noise
+        theta = (theta % (2.0 * np.pi)) + rng.random() * theta_noise
+        poses.append((x, y, theta))
+    return np.asarray(poses), ego_idx
 
 
 def require_end2race_runtime():
@@ -127,9 +217,7 @@ def create_multiagent_render_callback(
     return render_callback
 
 
-def create_planner_render_callback(
-    render_info, planner, draw_grid_pts, draw_traj_pts
-):
+def create_planner_render_callback(render_info, planner, draw_traj_pts):
 
     def render_callback(event):
         follow_vehicle_camera(event)
@@ -143,31 +231,15 @@ def create_planner_render_callback(
             f"{render_info['opp_steer']:+.2f}rad"
         )
 
-        if planner.goal_grid is not None:
-            goal_grid_pts = np.column_stack(
-                (planner.goal_grid[:, 0], planner.goal_grid[:, 1])
-            )
+        if planner.best_trajectory is not None:
+            trajectory_points = planner.best_trajectory[:, :2]
             update_point_batches(
                 event,
-                draw_grid_pts,
-                goal_grid_pts,
+                draw_traj_pts,
+                trajectory_points,
                 color=(183, 193, 222),
                 scale=50.0,
             )
-
-            if planner.best_traj is not None:
-                best_traj_pts = np.column_stack(
-                    (planner.best_traj[:, 0], planner.best_traj[:, 1])
-                )
-                update_point_batches(
-                    event,
-                    draw_traj_pts,
-                    best_traj_pts,
-                    color=(183, 193, 222),
-                    scale=50.0,
-                )
-
-        planner.tracker.render_waypoints(event)
 
     return render_callback
 

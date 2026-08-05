@@ -9,23 +9,20 @@ import torch
 from f110_gym.envs.base_classes import Integrator
 
 from config import load_project_config
-from latticeplanner.lattice_planner import create_lattice_planner
-from latticeplanner.utils import (
-    downsample_lidar,
-    find_corresponding_waypoint,
-    obsDict2oppoArray,
-    project_point_to_centerline,
-)
-from model import End2Race
+from expert import create_opponent
 from utils import (
     SIMULATION_TIMESTEP,
     VIDEO_FPS,
     calculate_metrics,
     create_multiagent_render_callback,
+    downsample_lidar,
+    find_corresponding_waypoint,
     load_raceline,
     mask_lidar_points,
+    project_point_to_centerline,
     require_end2race_runtime,
 )
+from model import End2Race
 
 INTERVAL_INDEX = 15
 EGO_RACELINE = "raceline1"
@@ -94,8 +91,8 @@ def evaluate_segment(model, device, vehicle, scenario):
         env.add_render_callback(render_callback)
 
     video_frames = []
-    opponent, _ = create_lattice_planner(
-        scenario.map_name, scenario.opponent_raceline, "opponent"
+    opponent, _ = create_opponent(
+        scenario.map_name, scenario.opponent_raceline
     )
     tracker_steps = opponent.conf.tracker_steps
     hidden_size = model.gru.hidden_size
@@ -163,7 +160,7 @@ def evaluate_segment(model, device, vehicle, scenario):
                 obs["poses_x"][1],
                 obs["poses_y"][1],
                 obs["poses_theta"][1],
-                obsDict2oppoArray(obs, 1),
+                obs["scans"][1],
                 obs["linear_vels_x"][1],
             )
 

@@ -2,6 +2,7 @@ raceline_generation:
   map_name: Austin
   map_image_extension: .png
   num_lanes: 3
+  side_lane_center_shift_fraction: 0.1
   clockwise: true
   inner_safe_distance: 0.3
   outer_safe_distance: 0.3

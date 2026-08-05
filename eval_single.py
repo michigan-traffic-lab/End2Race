@@ -9,15 +9,16 @@ import torch
 from f110_gym.envs.base_classes import Integrator
 
 from config import load_project_config
-from latticeplanner.utils import downsample_lidar, project_point_to_centerline
 from model import End2Race
 from utils import (
     SIMULATION_TIMESTEP,
     VIDEO_FPS,
     calculate_metrics,
     create_single_agent_render_callback,
+    downsample_lidar,
     load_raceline_with_speed,
     mask_lidar_points,
+    project_point_to_centerline,
     require_end2race_runtime,
 )
 

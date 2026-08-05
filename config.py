@@ -33,6 +33,38 @@ PROJECT_CONFIG_SCHEMA = {
         "drag_coefficient",
         "gravity",
     },
+    "expert": {
+        "tracker_steps",
+        "trajectory_points",
+        "min_time",
+        "max_time",
+        "time_step",
+        "road_width",
+        "road_step",
+        "target_speed_step",
+        "target_speed_samples",
+        "max_acceleration",
+        "max_curvature",
+        "clearance_radius",
+        "jerk_cost",
+        "time_cost",
+        "speed_cost",
+        "lateral_offset_cost",
+        "lateral_cost",
+        "longitudinal_cost",
+        "speed_lookahead_base",
+        "min_lookahead",
+        "max_lookahead",
+        "lookahead_speed_scale",
+        "min_steering_gain",
+        "max_steering_gain",
+        "steering_speed_scale",
+        "steering_derivative_gain",
+        "interpolation_points",
+        "fallback_min_distance",
+        "fallback_time",
+        "fallback_speed_reduction",
+    },
 }
 
 RACETRACK_CONFIG_SCHEMA = {
@@ -40,6 +72,7 @@ RACETRACK_CONFIG_SCHEMA = {
         "map_name",
         "map_image_extension",
         "num_lanes",
+        "side_lane_center_shift_fraction",
         "clockwise",
         "inner_safe_distance",
         "outer_safe_distance",
@@ -84,7 +117,12 @@ def _validate_mapping(values, schema, location):
 
 def _to_namespace(value):
     if isinstance(value, dict):
-        return SimpleNamespace(**{key: _to_namespace(item) for key, item in value.items()})
+        return SimpleNamespace(
+            **{
+                key: _to_namespace(item)
+                for key, item in value.items()
+            }
+        )
     return value
 
 

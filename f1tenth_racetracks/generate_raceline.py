@@ -6,8 +6,16 @@ import sys
 import matplotlib.pyplot as plt
 import trajectory_planning_helpers as tph
 from pathlib import Path
+from scipy import interpolate
 
 from config import load_project_config, load_racetrack_config, merge_config_sections
+
+
+def spline_distance(t_glob, path, point):
+    """Return a scalar spline distance for SciPy optimizer callbacks."""
+    parameter = float(np.asarray(t_glob).reshape(-1)[0])
+    spline_point = np.asarray(interpolate.splev(parameter, path))
+    return float(np.linalg.norm(point - spline_point))
 
 
 def prep_track(reftrack_imp: np.ndarray,
@@ -36,6 +44,8 @@ def prep_track(reftrack_imp: np.ndarray,
     coeffs_x_interp:            spline coefficients of the x-component
     coeffs_y_interp:            spline coefficients of the y-component
     """
+
+    tph.spline_approximation.dist_to_p = spline_distance
 
     # smoothing and interpolating reference track
     reftrack_interp = tph.spline_approximation. \
@@ -134,8 +144,14 @@ def transform_coords(path, height, s, tx, ty):
 def save_csv(data, csv_name, header=None):
     """Save data to CSV file."""
     import csv
-    with open(csv_name, mode='w') as csv_file:
-        csv_writer = csv.writer(csv_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+    with open(csv_name, mode='w', newline='', encoding='utf-8') as csv_file:
+        csv_writer = csv.writer(
+            csv_file,
+            delimiter=',',
+            quotechar='"',
+            quoting=csv.QUOTE_MINIMAL,
+            lineterminator='\n',
+        )
         if header:
             csv_writer.writerow(header)
         for line in data:
@@ -151,10 +167,17 @@ def generate_lanes(config, map_dir):
     offset_x = parsed_yaml["origin"][0]
     offset_y = parsed_yaml["origin"][1]
 
-    # Define lane ratios
-    lane_ratios = np.arange(1, config.num_lanes + 1) / np.arange(config.num_lanes, 0, -1)
-    if not np.any(lane_ratios == 1.0):
-        lane_ratios = np.append(lane_ratios, 1.0)
+    shift_fraction = config.side_lane_center_shift_fraction
+    if not 0.0 <= shift_fraction < 1.0:
+        raise ValueError(
+            "side_lane_center_shift_fraction must be in [0, 1)"
+        )
+
+    lane_fractions = (
+        np.arange(1, config.num_lanes + 1) / (config.num_lanes + 1)
+    )
+    lane_fractions += (0.5 - lane_fractions) * shift_fraction
+    lane_ratios = lane_fractions / (1.0 - lane_fractions)
 
     # Read image
     img_path = os.path.join(map_dir, config.map_name + "_map" + config.map_image_extension)

@@ -3,7 +3,7 @@
 
 ## Introduction
 
-End2Race is an end-to-end imitation learning framework for autonomous racing on the [F1Tenth platform](https://roboracer.ai/build). By learning from expert demonstrations generated through a Lattice Planner, the system captures temporal dependencies in racing dynamics to enable real-time control in competitive scenarios. End2Race addresses key challenges in autonomous racing—strategic planning, reactive control, and safe overtaking—through a unified neural network approach, demonstrating superior performance in both single-agent lap completion and multi-agent racing with high overtaking success rates and minimal collisions.
+End2Race is an end-to-end imitation learning framework for autonomous racing on the [F1Tenth platform](https://roboracer.ai/build). By learning from expert demonstrations generated with the established PythonRobotics Frenet Optimal Trajectory (FOT) algorithm, the system captures temporal dependencies in racing dynamics to enable real-time control in competitive scenarios. End2Race addresses key challenges in autonomous racing—strategic planning, reactive control, and safe overtaking—through a unified neural network approach.
 
 https://github.com/user-attachments/assets/5369f5ea-13fa-44c3-a6aa-5b3c2b59b10c
 
@@ -25,11 +25,7 @@ end2race/
 ├── f1tenth_racetracks/        # Track data with pre-generated lanes and racelines
 │   ├── config.yaml            # Racetrack tool configuration
 │   └── generate_raceline.py   # Raceline generation tool
-├── latticeplanner/            # Expert planner module
-│   ├── lattice_planner.py     # Main planner implementation
-│   ├── config.yaml            # Planner configuration
-│   ├── pure_pursuit.py        # Low-level trajectory tracker
-│   └── utils.py               # Planner utility functions
+├── expert.py                  # PythonRobotics FOT expert and trajectory tracker
 ├── model.py                   # GRU network architecture
 ├── train.py                   # Training script
 ├── collect.py                 # One expert-data collection scenario
@@ -43,10 +39,9 @@ end2race/
 
 ## Configuration
 
-Four YAML files hold shared model, planner, localization, and track-tool settings. Workflow settings stay with the scripts that own their execution:
+Three YAML files hold shared project, localization, and track-tool settings. Workflow settings stay with the scripts that own their execution:
 
-- `config.yaml`: model, training, and shared vehicle settings
-- `latticeplanner/config.yaml`: planner-specific sampling, costs, and tracker gains
+- `config.yaml`: model, training, vehicle, and expert-planner settings
 - `localization/config.yaml`: particle-filter localization
 - `f1tenth_racetracks/config.yaml`: raceline generation and track maintenance tools
 
@@ -122,16 +117,18 @@ bash eval_multi.sh
 Collect one explicit competitive-racing scenario with:
 
 ```bash
-python collect.py Austin Dataset_Austin 0 raceline1 0.8 8.0 0.1 6300 true
+python collect.py Austin Dataset_Austin 0 15 raceline1 0.8 12.0 0.1 6300 true
 ```
 
-The required inputs are track, output dataset directory, ego waypoint index, opponent raceline, opponent speed scale, collection duration, sample interval, seed, and rendering flag. To run the complete parallel collection matrix and wait for every scenario:
+The required inputs are track, output dataset directory, ego waypoint index, opponent interval, opponent raceline, opponent speed scale, collection duration, sample interval, seed, and rendering flag. To run the complete parallel collection matrix and wait for every scenario:
 
 ```bash
 bash collect.sh
 ```
 
-`collect.sh` owns the output dataset directory and all batch collection settings.
+`collect.sh` owns the output dataset directory and all batch collection settings. The current Austin batch runs 50 ego starting points against three opponent racelines, waypoint intervals `15`, `20`, and `25`, and speed scales `0.2`, `0.4`, `0.6`, `0.8`, and `1.0`, with 12 seconds per scenario: 2,250 scenarios total.
+
+Each training row stores the measured ego speed, expert steering and desired-speed targets, and 180 LiDAR values. Training keeps every row: the first row uses its measured speed as the initial speed input, and later rows use the preceding measured speed. The ego FOT expert projects the current LiDAR scan into occupied points and rejects intersecting trajectories; the non-reactive opponent tracks its assigned raceline. Every velocity choice produces a physically distinct trajectory over the candidate horizon, and all requested and generated speeds are bounded by 7.5 m/s.
 
 ## Training
 Trains the End2Race model using imitation learning on collected demonstrations.
@@ -154,7 +151,9 @@ Generate optimized racing lines for new tracks. First, upload the track map file
 python -m f1tenth_racetracks.generate_raceline
 ```
 
-Edit `f1tenth_racetracks/config.yaml` for track-specific generation settings. Shared vehicle parameters remain in the root `config.yaml` and are also reused by the planner.
+Edit `f1tenth_racetracks/config.yaml` for track-specific generation settings. Shared vehicle parameters remain in the root `config.yaml` and are also reused by the expert.
+
+The FOT implementation is adapted under the MIT license from [PythonRobotics](https://github.com/AtsushiSakai/PythonRobotics), pinned to commit `b38c510e083d69a5755d98d0680bd50f3d9a91fa`.
 
 ## License
 
