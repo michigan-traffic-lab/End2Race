@@ -550,7 +550,7 @@ class FrenetOptimalTrajectoryPlanner:
         if obstacle_tree is None or not path.x:
             return True
         distances, _ = obstacle_tree.query(
-            np.column_stack((path.x, path.y)), k=1
+            np.column_stack((path.x[1:], path.y[1:])), k=1
         )
         return bool(np.all(distances > self.conf.clearance_radius))
 
