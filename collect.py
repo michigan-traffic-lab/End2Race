@@ -12,6 +12,7 @@ import numpy as np
 from config import load_project_config
 from expert import create_expert_planner, create_opponent
 from utils import (
+    EGO_INITIAL_SPEED_FRACTION,
     SIMULATION_TIMESTEP,
     VIDEO_FPS,
     create_planner_render_callback,
@@ -159,6 +160,13 @@ def collect_scenario(vehicle, scenario):
         opponent_waypoints_xytheta, 1, rng, 0.0, 0.0, opponent_idx, 0
     )
     agent_positions = np.vstack([ego_position, opponent_pos])
+    initial_velocities = np.array(
+        [
+            EGO_INITIAL_SPEED_FRACTION * vehicle.maximum_speed,
+            opponent_planner.waypoints[opponent_idx, 2]
+            * scenario.opponent_speed_scale,
+        ]
+    )
 
     centerline_values = np.loadtxt(
         Path(config_directory) / f"{EGO_RACELINE}.csv",
@@ -170,7 +178,10 @@ def collect_scenario(vehicle, scenario):
         np.diff(centerline, axis=0), axis=1
     ).sum()
 
-    obs, _, done, _ = env.reset(poses=agent_positions)
+    obs, _, done, _ = env.reset(
+        poses=agent_positions,
+        velocities=initial_velocities,
+    )
 
     if scenario.render:
         env.render()

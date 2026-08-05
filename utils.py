@@ -6,6 +6,7 @@ from numba import njit
 
 SIMULATION_TIMESTEP = 0.01
 VIDEO_FPS = 100
+EGO_INITIAL_SPEED_FRACTION = 0.5
 
 
 @njit(cache=True)
@@ -118,14 +119,13 @@ def load_raceline(map_name, raceline_file):
     return values[:, [1, 2, 3, 5]]
 
 
-def load_raceline_with_speed(map_name, raceline_file, start_idx):
+def load_raceline_start(map_name, raceline_file, start_idx):
     waypoints = load_raceline(map_name, raceline_file)
     idx = start_idx % len(waypoints)
     start_pose = np.array(
         [[waypoints[idx, 0], waypoints[idx, 1], waypoints[idx, 2]]]
     )
-    initial_speed = waypoints[idx, 3]
-    return start_pose, initial_speed, waypoints
+    return start_pose, waypoints
 
 
 def calculate_metrics(trajectory, speeds):

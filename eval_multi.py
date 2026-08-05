@@ -11,6 +11,7 @@ from f110_gym.envs.base_classes import Integrator
 from config import load_project_config
 from expert import create_opponent
 from utils import (
+    EGO_INITIAL_SPEED_FRACTION,
     SIMULATION_TIMESTEP,
     VIDEO_FPS,
     calculate_metrics,
@@ -61,7 +62,13 @@ def evaluate_segment(model, device, vehicle, scenario):
         ego_waypoints[normalized_ego_idx, :3],
         opp_waypoints[opp_idx, :3],
     ])
-    initial_speed = ego_waypoints[normalized_ego_idx, 3]
+    initial_speed = EGO_INITIAL_SPEED_FRACTION * vehicle.maximum_speed
+    initial_velocities = np.array(
+        [
+            initial_speed,
+            opp_waypoints[opp_idx, 3] * scenario.opponent_speed_scale,
+        ]
+    )
 
     env = gym.make(
         "f110-v0",
@@ -106,7 +113,10 @@ def evaluate_segment(model, device, vehicle, scenario):
         np.diff(centerline, axis=0), axis=1
     ).sum()
 
-    obs, _, done, _ = env.reset(poses=positions)
+    obs, _, done, _ = env.reset(
+        poses=positions,
+        velocities=initial_velocities,
+    )
 
     if scenario.render:
         env.render()

@@ -11,12 +11,13 @@ from f110_gym.envs.base_classes import Integrator
 from config import load_project_config
 from model import End2Race
 from utils import (
+    EGO_INITIAL_SPEED_FRACTION,
     SIMULATION_TIMESTEP,
     VIDEO_FPS,
     calculate_metrics,
     create_single_agent_render_callback,
     downsample_lidar,
-    load_raceline_with_speed,
+    load_raceline_start,
     mask_lidar_points,
     project_point_to_centerline,
     require_end2race_runtime,
@@ -77,9 +78,10 @@ def evaluate_laps(model, device, vehicle, settings):
         )
         env.add_render_callback(render_callback)
 
-    start_pose, initial_speed, waypoints = load_raceline_with_speed(
+    start_pose, waypoints = load_raceline_start(
         settings.map_name, raceline, settings.start_idx
     )
+    initial_speed = EGO_INITIAL_SPEED_FRACTION * vehicle.maximum_speed
     start_position = start_pose[0, :2]
 
     centerline = waypoints[:, :2]
@@ -87,7 +89,10 @@ def evaluate_laps(model, device, vehicle, settings):
         np.diff(centerline, axis=0), axis=1
     ).sum()
 
-    obs, _, done, _ = env.reset(poses=start_pose)
+    obs, _, done, _ = env.reset(
+        poses=start_pose,
+        velocities=np.array([initial_speed]),
+    )
 
     hidden_size = model.gru.hidden_size
     hidden_state = torch.zeros((1, 1, hidden_size), device=device)

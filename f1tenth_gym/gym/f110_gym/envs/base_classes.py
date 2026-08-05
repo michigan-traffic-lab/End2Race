@@ -178,12 +178,13 @@ class RaceCar(object):
         """
         RaceCar.scan_simulator.set_map(map_path, map_ext)
 
-    def reset(self, pose):
+    def reset(self, pose, velocity):
         """
         Resets the vehicle to a pose
         
         Args:
             pose (np.ndarray (3, )): pose to reset the vehicle to
+            velocity (float): longitudinal velocity at reset
 
         Returns:
             None
@@ -196,6 +197,7 @@ class RaceCar(object):
         # clear state
         self.state = np.zeros((7, ))
         self.state[0:2] = pose[0:2]
+        self.state[3] = velocity
         self.state[4] = pose[2]
         self.steer_buffer = np.empty((0, ))
         # reset scan random generator
@@ -604,12 +606,13 @@ class Simulator(object):
 
         return observations
 
-    def reset(self, poses):
+    def reset(self, poses, velocities):
         """
         Resets the simulation environment by given poses
 
         Arges:
             poses (np.ndarray (num_agents, 3)): poses to reset agents to
+            velocities (np.ndarray (num_agents,)): velocities to reset agents to
 
         Returns:
             None
@@ -617,7 +620,9 @@ class Simulator(object):
         
         if poses.shape[0] != self.num_agents:
             raise ValueError('Number of poses for reset does not match number of agents.')
+        if velocities.shape != (self.num_agents,):
+            raise ValueError('Number of velocities for reset does not match number of agents.')
 
         # loop over poses to reset
         for i in range(self.num_agents):
-            self.agents[i].reset(poses[i, :])
+            self.agents[i].reset(poses[i, :], velocities[i])

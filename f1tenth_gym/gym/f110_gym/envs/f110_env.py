@@ -331,12 +331,14 @@ class F110Env(gym.Env):
 
         return obs, reward, done, info
 
-    def reset(self, poses):
+    def reset(self, poses, velocities=None):
         """
         Reset the gym environment by given poses
 
         Args:
             poses (np.ndarray (num_agents, 3)): poses to reset agents to
+            velocities (np.ndarray (num_agents,), optional): initial longitudinal
+                velocities; defaults to zero
 
         Returns:
             obs (dict): observation of the current step
@@ -351,6 +353,13 @@ class F110Env(gym.Env):
         self.near_start = True
         self.near_starts = np.array([True] * self.num_agents)
         self.toggle_list = np.zeros((self.num_agents,))
+        if velocities is None:
+            velocities = np.zeros(self.num_agents)
+        velocities = np.asarray(velocities, dtype=np.float64)
+        if velocities.shape != (self.num_agents,):
+            raise ValueError(
+                "Number of velocities for reset does not match number of agents."
+            )
 
         # states after reset
         self.start_xs = poses[:, 0]
@@ -370,10 +379,11 @@ class F110Env(gym.Env):
         )
 
         # call reset to simulator
-        self.sim.reset(poses)
+        self.sim.reset(poses, velocities)
 
         # get no input observations
         action = np.zeros((self.num_agents, 2))
+        action[:, 1] = velocities
         obs, reward, done, info = self.step(action)
 
         self.render_obs = {

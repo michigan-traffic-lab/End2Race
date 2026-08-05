@@ -130,6 +130,8 @@ bash collect.sh
 
 Each training row stores the measured ego speed, expert steering and desired-speed targets, and 180 LiDAR values. Training keeps every row: the first row uses its measured speed as the initial speed input, and later rows use the preceding measured speed. The ego FOT expert projects the current LiDAR scan into occupied points and rejects intersecting trajectories; the non-reactive opponent tracks its assigned raceline. Every velocity choice produces a physically distinct trajectory over the candidate horizon, and all requested and generated speeds are bounded by 7.5 m/s.
 
+Every collection and evaluation scenario initializes the ego at 50% of its 7.5 m/s maximum speed (3.75 m/s). A multi-agent opponent starts at its local raceline speed multiplied by the scenario's opponent speed scale. Subsequent acceleration and braking are determined by each controller.
+
 ## Training
 Trains the End2Race model using imitation learning on collected demonstrations.
 
