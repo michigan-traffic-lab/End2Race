@@ -15,7 +15,7 @@ training:
 
 vehicle:
   steering_limit: 0.52
-  maximum_speed: 7.5
+  maximum_speed: 8.0
   wheelbase: 0.33
   length: 0.51
   width: 0.31
@@ -26,31 +26,19 @@ vehicle:
 expert:
   tracker_steps: 10
   trajectory_points: 15
-  min_time: 0.5
-  max_time: 0.91
-  time_step: 0.2
-  road_width: 1.2
-  road_step: 0.3
-  terminal_course_speed_step: 0.75
-  terminal_course_speed_samples: 2
-  max_acceleration: 20.0
-  max_curvature: 1.7
-  clearance_radius: 0.45
-  jerk_cost: 0.01
-  time_cost: 0.1
-  speed_cost: 5.0
-  lateral_offset_cost: 1.0
-  lateral_cost: 1.0
-  longitudinal_cost: 1.0
-  speed_lookahead_base: 0.5
+  horizon: 0.6
+  time_step: 0.1
+  road_width: 0.8
+  road_step: 0.2
+  minimum_terminal_speed: 1.0
+  max_acceleration: 7.51
+  max_lateral_acceleration: 10.29
+  max_curvature: 1.35
+  collision_distance_scale: 0.5
+  collision_cost_weight: 2.0
+  collision_cost_power: 2.0
   min_lookahead: 0.5
-  max_lookahead: 1.8
+  max_lookahead: 2.5
   lookahead_speed_scale: 8.0
-  min_steering_gain: 0.5
-  max_steering_gain: 0.8
-  steering_speed_scale: 8.0
-  steering_derivative_gain: 0.2
+  steering_gain: 0.8
   interpolation_points: 10
-  fallback_min_distance: 0.6
-  fallback_time: 0.25
-  fallback_speed_reduction: 2.5

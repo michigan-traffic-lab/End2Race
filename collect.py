@@ -17,10 +17,11 @@ from utils import (
     VIDEO_FPS,
     create_planner_render_callback,
     downsample_lidar,
-    find_corresponding_waypoint,
+    find_opponent_start_index,
     project_point_to_centerline,
     random_position,
     require_end2race_runtime,
+    unwrap_progress,
 )
 from model import End2Race
 
@@ -149,12 +150,11 @@ def collect_scenario(vehicle, scenario):
             opponent_planner.waypoints[:, 3],
         )
     )
-    ego_waypoint = ego_waypoints_xytheta[scenario.ego_idx]
-    ego_map_idx = find_corresponding_waypoint(
-        ego_waypoint, opponent_waypoints_xytheta
-    )
-    opponent_idx = (ego_map_idx + scenario.interval_idx) % len(
-        opponent_waypoints_xytheta
+    opponent_idx = find_opponent_start_index(
+        ego_waypoints_xytheta,
+        opponent_waypoints_xytheta,
+        scenario.ego_idx,
+        scenario.interval_idx,
     )
     opponent_pos, _ = random_position(
         opponent_waypoints_xytheta, 1, rng, 0.0, 0.0, opponent_idx, 0
@@ -265,23 +265,22 @@ def collect_scenario(vehicle, scenario):
 
             obs, timestep, done, _ = env.step(action)
 
-            current_ego_progress, _ = project_point_to_centerline(
-                np.array([obs["poses_x"][0], obs["poses_y"][0]]), centerline
+            current_ego_progress = unwrap_progress(
+                project_point_to_centerline(
+                    np.array([obs["poses_x"][0], obs["poses_y"][0]]),
+                    centerline,
+                )[0],
+                initial_ego_progress,
+                centerline_total_length,
             )
-            current_opponent_progress, _ = project_point_to_centerline(
-                np.array([obs["poses_x"][1], obs["poses_y"][1]]), centerline
+            current_opponent_progress = unwrap_progress(
+                project_point_to_centerline(
+                    np.array([obs["poses_x"][1], obs["poses_y"][1]]),
+                    centerline,
+                )[0],
+                initial_opponent_progress,
+                centerline_total_length,
             )
-
-            if (
-                current_ego_progress
-                < initial_ego_progress - centerline_total_length / 2
-            ):
-                current_ego_progress += centerline_total_length
-            if (
-                current_opponent_progress
-                < initial_opponent_progress - centerline_total_length / 2
-            ):
-                current_opponent_progress += centerline_total_length
 
             final_state = (
                 "overtaking"
@@ -344,7 +343,7 @@ def collect_scenario(vehicle, scenario):
         for item in draw_traj_pts:
             item.delete()
         draw_traj_pts.clear()
-        type(env).render_callbacks.clear()
+        type(env.unwrapped).render_callbacks.clear()
     env.close()
 
 

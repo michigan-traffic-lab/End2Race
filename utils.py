@@ -73,6 +73,28 @@ def find_corresponding_waypoint(ego_waypoint, opponent_waypoints):
     return int(np.argmin(distances))
 
 
+def find_opponent_start_index(
+    ego_waypoints,
+    opponent_waypoints,
+    ego_idx,
+    interval_idx,
+):
+    """Map an ego start onto another raceline and apply a waypoint gap."""
+    normalized_ego_idx = ego_idx % len(ego_waypoints)
+    mapped_idx = find_corresponding_waypoint(
+        ego_waypoints[normalized_ego_idx],
+        opponent_waypoints,
+    )
+    return (mapped_idx + interval_idx) % len(opponent_waypoints)
+
+
+def unwrap_progress(progress, initial_progress, track_length):
+    """Keep progress continuous when a vehicle crosses the lap boundary."""
+    if progress < initial_progress - track_length / 2:
+        return progress + track_length
+    return progress
+
+
 def random_position(
     waypoints_xytheta,
     sampled_number=1,

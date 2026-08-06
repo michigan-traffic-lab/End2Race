@@ -95,19 +95,27 @@ class QuinticPolynomial:
         return 6.0 * self.a3 + 24.0 * self.a4 * time + 60.0 * self.a5 * time**2
 
 
-class QuarticPolynomial:
-    def __init__(self, xs, vxs, axs, vxe, axe, time):
+class QuarticLateralPolynomial:
+    """Lateral motion with free velocity and zero acceleration at the end."""
+
+    def __init__(self, xs, vxs, axs, xe, axe, time):
         self.a0 = xs
         self.a1 = vxs
         self.a2 = axs / 2.0
         matrix = np.array(
             [
-                [3.0 * time**2, 4.0 * time**3],
+                [time**3, time**4],
                 [6.0 * time, 12.0 * time**2],
             ]
         )
         vector = np.array(
-            [vxe - self.a1 - 2.0 * self.a2 * time, axe - 2.0 * self.a2]
+            [
+                xe
+                - self.a0
+                - self.a1 * time
+                - self.a2 * time**2,
+                axe - 2.0 * self.a2,
+            ]
         )
         self.a3, self.a4 = np.linalg.solve(matrix, vector)
 
@@ -129,7 +137,11 @@ class QuarticPolynomial:
         )
 
     def second_derivative(self, time):
-        return 2.0 * self.a2 + 6.0 * self.a3 * time + 12.0 * self.a4 * time**2
+        return (
+            2.0 * self.a2
+            + 6.0 * self.a3 * time
+            + 12.0 * self.a4 * time**2
+        )
 
     def third_derivative(self, time):
         return 6.0 * self.a3 + 24.0 * self.a4 * time
@@ -229,7 +241,6 @@ class FrenetPath:
         self.curvature = []
         self.velocity = []
         self.acceleration = []
-        self.cost = 0.0
 
 
 def lidar_scan_to_points(scan, pose):
@@ -265,7 +276,9 @@ def _frenet_to_cartesian(reference, path):
         lateral_distance = path.d[index]
         lateral_derivative = path.d_d[index]
         lateral_second_derivative = path.d_dd[index]
-        one_minus_curvature_distance = 1.0 - reference_curvature * lateral_distance
+        one_minus_curvature_distance = (
+            1.0 - reference_curvature * lateral_distance
+        )
         if abs(one_minus_curvature_distance) < 1e-6:
             break
 
@@ -278,6 +291,8 @@ def _frenet_to_cartesian(reference, path):
         )
         heading = _normalize_angle(reference_yaw + heading_offset)
         heading_cosine = math.cos(heading_offset)
+        if abs(heading_cosine) < 1e-6:
+            break
         tangent = lateral_derivative / one_minus_curvature_distance
         curvature_distance_rate = (
             curvature_rate * lateral_distance
@@ -292,6 +307,10 @@ def _frenet_to_cartesian(reference, path):
             / one_minus_curvature_distance
             + reference_curvature
         ) * heading_cosine / one_minus_curvature_distance
+        path.x.append(x_position)
+        path.y.append(y_position)
+        path.yaw.append(heading)
+        path.curvature.append(curvature)
         lateral_time_derivative = lateral_derivative * path.s_d[index]
         velocity = math.sqrt(
             one_minus_curvature_distance**2 * path.s_d[index] ** 2
@@ -312,10 +331,6 @@ def _frenet_to_cartesian(reference, path):
                 - curvature_distance_rate
             )
         )
-        path.x.append(x_position)
-        path.y.append(y_position)
-        path.yaw.append(heading)
-        path.curvature.append(curvature)
         path.velocity.append(velocity)
         path.acceleration.append(acceleration)
 
@@ -327,12 +342,8 @@ class TrajectoryTracker:
         self.min_lookahead = configuration.min_lookahead
         self.max_lookahead = configuration.max_lookahead
         self.lookahead_speed_scale = configuration.lookahead_speed_scale
-        self.min_steering_gain = configuration.min_steering_gain
-        self.max_steering_gain = configuration.max_steering_gain
-        self.steering_speed_scale = configuration.steering_speed_scale
-        self.derivative_gain = configuration.steering_derivative_gain
+        self.steering_gain = configuration.steering_gain
         self.interpolation_points = configuration.interpolation_points
-        self.previous_error = 0.0
 
     def plan(self, pose_x, pose_y, pose_theta, current_speed, trajectory):
         lookahead = (
@@ -340,12 +351,6 @@ class TrajectoryTracker:
             * (self.max_lookahead - self.min_lookahead)
             / self.lookahead_speed_scale
             + self.min_lookahead
-        )
-        steering_gain = (
-            self.max_steering_gain
-            - current_speed
-            * (self.max_steering_gain - self.min_steering_gain)
-            / self.steering_speed_scale
         )
         position = np.array([pose_x, pose_y])
         distances = np.linalg.norm(trajectory[:, :2] - position, axis=1)
@@ -387,11 +392,7 @@ class TrajectoryTracker:
             target - position,
         )
         error = 2.0 * lateral_error / actual_lookahead**2
-        steering = (
-            steering_gain * error
-            + self.derivative_gain * (error - self.previous_error)
-        )
-        self.previous_error = error
+        steering = self.steering_gain * error
         return float(steering), float(speed_values[index])
 
 
@@ -412,232 +413,288 @@ class FrenetOptimalTrajectoryPlanner:
             )
         )
         self.reference = PeriodicReference(self.waypoints[:, :2])
-        self.reference_speeds = self.waypoints[:, 2]
         self.maximum_speed = configuration.maximum_speed
         self.best_trajectory = None
-        self.fallback_count = 0
         self.tracker = TrajectoryTracker(configuration)
 
-    def _terminal_course_speeds(self, target_speed):
-        speeds = np.arange(
-            target_speed
-            - self.conf.terminal_course_speed_step
-            * self.conf.terminal_course_speed_samples,
-            target_speed
-            + self.conf.terminal_course_speed_step
-            * (self.conf.terminal_course_speed_samples + 1),
-            self.conf.terminal_course_speed_step,
+    def _terminal_speeds(self, physical_speed):
+        minimum_speed = max(
+            physical_speed
+            - self.conf.horizon * self.conf.max_acceleration,
+            self.conf.minimum_terminal_speed,
         )
-        course_speeds = []
-        for speed in speeds:
-            speed = float(max(speed, 0.0))
-            if all(
-                abs(speed - existing) > 1e-6
-                for existing in course_speeds
-            ):
-                course_speeds.append(speed)
-        return course_speeds
+        maximum_speed = min(
+            physical_speed
+            + self.conf.horizon * self.conf.max_acceleration,
+            self.maximum_speed,
+        )
+        return [
+            minimum_speed,
+            0.5 * (minimum_speed + physical_speed),
+            physical_speed,
+            0.5 * (physical_speed + maximum_speed),
+            maximum_speed,
+        ]
 
-    def _target_speed(self, waypoint_index, current_speed):
-        horizon_distance = self.conf.speed_lookahead_base
-        horizon_distance += max(current_speed, 1.0) * self.conf.max_time
-        point_spacing = self.reference.length / len(self.reference_speeds)
-        point_count = max(2, int(math.ceil(horizon_distance / point_spacing)))
-        indices = (
-            np.arange(waypoint_index, waypoint_index + point_count)
-            % len(self.reference_speeds)
+    def _lateral_targets(self):
+        if self.conf.road_width <= 0.0 or self.conf.road_step <= 0.0:
+            raise ValueError(
+                "expert.road_width and expert.road_step must be positive"
+            )
+        step_count = math.floor(
+            self.conf.road_width / self.conf.road_step + 1e-9
         )
-        return float(
-            np.clip(
-                np.min(self.reference_speeds[indices]),
-                0.0,
-                self.maximum_speed,
+        if step_count < 1:
+            raise ValueError(
+                "expert.road_step must not exceed expert.road_width"
+            )
+        return np.arange(-step_count, step_count + 1) * self.conf.road_step
+
+    def _sample_times(self):
+        interval_count = round(self.conf.horizon / self.conf.time_step)
+        if not math.isclose(
+            interval_count * self.conf.time_step,
+            self.conf.horizon,
+            rel_tol=0.0,
+            abs_tol=1e-9,
+        ):
+            raise ValueError("expert.horizon must be divisible by expert.time_step")
+        return np.linspace(
+            0.0,
+            self.conf.horizon,
+            interval_count + 1,
+        )
+
+    def _course_terminal_speed(
+        self,
+        course_distance,
+        course_speed,
+        lateral_target,
+        physical_terminal_speed,
+        lateral_terminal_velocity,
+    ):
+        tangential_speed_squared = (
+            physical_terminal_speed**2 - lateral_terminal_velocity**2
+        )
+        if tangential_speed_squared <= 0.0:
+            return None
+        physical_tangential_speed = math.sqrt(tangential_speed_squared)
+        terminal_course_speed = physical_terminal_speed
+        for _ in range(8):
+            course_acceleration = (
+                terminal_course_speed - course_speed
+            ) / self.conf.horizon
+            terminal_distance = (
+                course_distance
+                + course_speed * self.conf.horizon
+                + 0.5 * course_acceleration * self.conf.horizon**2
+            )
+            denominator = (
+                1.0
+                - self.reference.curvature(terminal_distance)
+                * lateral_target
+            )
+            if denominator <= 0.2:
+                return None
+            updated_speed = physical_tangential_speed / denominator
+            if math.isclose(
+                updated_speed,
+                terminal_course_speed,
+                rel_tol=0.0,
+                abs_tol=1e-8,
+            ):
+                return updated_speed
+            terminal_course_speed = updated_speed
+        return terminal_course_speed
+
+    def _generate_candidate(
+        self,
+        course_distance,
+        course_speed,
+        lateral_distance,
+        lateral_time_velocity,
+        lateral_target,
+        physical_terminal_speed,
+        sample_times,
+    ):
+        lateral = QuarticLateralPolynomial(
+            lateral_distance,
+            lateral_time_velocity,
+            0.0,
+            lateral_target,
+            0.0,
+            self.conf.horizon,
+        )
+        terminal_course_speed = self._course_terminal_speed(
+            course_distance,
+            course_speed,
+            lateral_target,
+            physical_terminal_speed,
+            lateral.first_derivative(self.conf.horizon),
+        )
+        if terminal_course_speed is None:
+            return None
+
+        course_acceleration = (
+            terminal_course_speed - course_speed
+        ) / self.conf.horizon
+        path = FrenetPath()
+        path.time = sample_times.copy()
+        for time in path.time:
+            course_speed_at_time = course_speed + course_acceleration * time
+            if course_speed_at_time <= 1e-6:
+                return None
+            lateral_time_derivative = lateral.first_derivative(time)
+            lateral_time_second = lateral.second_derivative(time)
+            lateral_derivative = (
+                lateral_time_derivative / course_speed_at_time
+            )
+            lateral_second = (
+                lateral_time_second
+                - lateral_derivative * course_acceleration
+            ) / course_speed_at_time**2
+            path.s.append(
+                course_distance
+                + course_speed * time
+                + 0.5 * course_acceleration * time**2
+            )
+            path.s_d.append(course_speed_at_time)
+            path.s_dd.append(course_acceleration)
+            path.s_ddd.append(0.0)
+            path.d.append(lateral.position(time))
+            path.d_d.append(lateral_derivative)
+            path.d_dd.append(lateral_second)
+            path.d_ddd.append(lateral.third_derivative(time))
+
+        _frenet_to_cartesian(self.reference, path)
+        if len(path.x) != len(path.time):
+            return None
+        if not self._is_dynamically_feasible(
+            path,
+            physical_terminal_speed,
+        ):
+            return None
+        return path
+
+    def _is_dynamically_feasible(self, path, physical_terminal_speed):
+        velocity = np.asarray(path.velocity)
+        acceleration = np.asarray(path.acceleration)
+        curvature = np.asarray(path.curvature)
+        future = slice(1, None)
+        return not (
+            np.any(~np.isfinite(velocity))
+            or np.any(~np.isfinite(acceleration))
+            or np.any(~np.isfinite(curvature))
+            or np.any(velocity[future] < -1e-9)
+            or np.any(velocity[future] > self.maximum_speed + 1e-9)
+            or np.any(
+                np.abs(acceleration[future])
+                > self.conf.max_acceleration + 1e-9
+            )
+            or np.any(
+                np.abs(curvature[future])
+                > self.conf.max_curvature + 1e-9
+            )
+            or np.any(
+                velocity[future] ** 2 * np.abs(curvature[future])
+                > self.conf.max_lateral_acceleration + 1e-9
+            )
+            or not math.isclose(
+                velocity[-1],
+                physical_terminal_speed,
+                rel_tol=0.0,
+                abs_tol=1e-5,
             )
         )
 
     def _generate_paths(
         self,
         course_distance,
-        course_speed,
-        course_acceleration,
         lateral_distance,
-        lateral_derivative,
-        lateral_second_derivative,
-        target_speed,
+        heading_error,
+        physical_speed,
     ):
+        reference_curvature = self.reference.curvature(course_distance)
+        denominator = max(
+            1.0 - reference_curvature * lateral_distance,
+            0.2,
+        )
+        course_speed = max(
+            physical_speed * math.cos(heading_error) / denominator,
+            0.05,
+        )
+        lateral_time_velocity = physical_speed * math.sin(heading_error)
+        lateral_targets = self._lateral_targets()
+        terminal_speeds = self._terminal_speeds(physical_speed)
+        sample_times = self._sample_times().tolist()
         paths = []
-        lateral_targets = np.arange(
-            -self.conf.road_width,
-            self.conf.road_width,
-            self.conf.road_step,
-        )
-        horizons = np.arange(
-            self.conf.min_time,
-            self.conf.max_time,
-            self.conf.time_step,
-        )
-        for horizon in horizons:
-            times = list(np.arange(0.0, horizon, self.conf.time_step))
-            for terminal_course_speed in self._terminal_course_speeds(
-                target_speed
-            ):
-                longitudinal = QuarticPolynomial(
+        for lateral_target in lateral_targets:
+            for terminal_speed in terminal_speeds:
+                path = self._generate_candidate(
                     course_distance,
                     course_speed,
-                    course_acceleration,
-                    terminal_course_speed,
-                    0.0,
-                    horizon,
+                    lateral_distance,
+                    lateral_time_velocity,
+                    float(lateral_target),
+                    float(terminal_speed),
+                    sample_times,
                 )
-                base_s = [longitudinal.position(time) for time in times]
-                base_s_d = [
-                    longitudinal.first_derivative(time) for time in times
-                ]
-                base_s_dd = [
-                    longitudinal.second_derivative(time) for time in times
-                ]
-                base_s_ddd = [
-                    longitudinal.third_derivative(time) for time in times
-                ]
-                for lateral_target in lateral_targets:
-                    path = FrenetPath()
-                    path.time = times
-                    path.s = base_s
-                    path.s_d = base_s_d
-                    path.s_dd = base_s_dd
-                    path.s_ddd = base_s_ddd
-                    lateral = QuinticPolynomial(
-                        lateral_distance,
-                        lateral_derivative * base_s_d[0],
-                        lateral_second_derivative * base_s_d[0] ** 2
-                        + lateral_derivative * base_s_dd[0],
-                        lateral_target,
-                        0.0,
-                        0.0,
-                        horizon,
-                    )
-                    for index, time in enumerate(times):
-                        time_first = lateral.first_derivative(time)
-                        time_second = lateral.second_derivative(time)
-                        inverse_speed = 1.0 / (base_s_d[index] + 1e-6) + 1e-6
-                        distance_first = time_first * inverse_speed
-                        path.d.append(lateral.position(time))
-                        path.d_d.append(distance_first)
-                        path.d_dd.append(
-                            (
-                                time_second
-                                - distance_first * base_s_dd[index]
-                            )
-                            * inverse_speed**2
-                        )
-                        path.d_ddd.append(lateral.third_derivative(time))
-
-                    lateral_jerk = sum(np.square(path.d_ddd))
-                    longitudinal_jerk = sum(np.square(path.s_ddd))
-                    lateral_cost = (
-                        self.conf.jerk_cost * lateral_jerk
-                        + self.conf.time_cost * horizon
-                        + self.conf.lateral_offset_cost * path.d[-1] ** 2
-                    )
-                    _frenet_to_cartesian(self.reference, path)
-                    future_velocity = np.asarray(path.velocity[1:])
-                    speed_error = np.mean(
-                        np.square(target_speed - future_velocity)
-                    )
-                    longitudinal_cost = (
-                        self.conf.jerk_cost * longitudinal_jerk
-                        + self.conf.time_cost * horizon
-                        + self.conf.speed_cost * speed_error
-                    )
-                    path.cost = (
-                        self.conf.lateral_cost * lateral_cost
-                        + self.conf.longitudinal_cost * longitudinal_cost
-                    )
+                if path is not None:
                     paths.append(path)
         return paths
 
-    def _collision_free(self, path, obstacle_tree):
-        if obstacle_tree is None or not path.x:
-            return True
-        distances, _ = obstacle_tree.query(
-            np.column_stack((path.x[1:], path.y[1:])), k=1
+    def _collision_costs(self, path, obstacle_tree):
+        future_point_count = max(len(path.x) - 1, 0)
+        if obstacle_tree is None:
+            return np.zeros(future_point_count)
+        if future_point_count == 0:
+            return np.empty(0)
+        future_points = np.column_stack(
+            (
+                np.asarray(path.x)[1:],
+                np.asarray(path.y)[1:],
+            )
         )
-        return bool(np.all(distances > self.conf.clearance_radius))
+        distances, _ = obstacle_tree.query(future_points, k=1)
+        normalized_deficits = np.maximum(
+            0.0,
+            1.0 - distances / self.conf.collision_distance_scale,
+        )
+        return normalized_deficits**self.conf.collision_cost_power
 
     def _best_path(self, paths, obstacle_tree):
         best_path = None
         best_cost = math.inf
         for path in paths:
-            if not path.x:
+            if len(path.x) < 2:
                 continue
-            if any(speed > self.maximum_speed for speed in path.velocity):
-                continue
-            if any(
-                abs(acceleration) > self.conf.max_acceleration
-                for acceleration in path.acceleration
-            ):
-                continue
-            if any(
-                abs(curvature) > self.conf.max_curvature
-                for curvature in path.curvature
-            ):
-                continue
-            if not self._collision_free(path, obstacle_tree):
-                continue
-            if path.cost <= best_cost:
-                best_cost = path.cost
+            future_velocity = np.clip(
+                np.asarray(path.velocity)[1:],
+                0.0,
+                self.maximum_speed,
+            )
+            velocity_costs = 1.0 - future_velocity / self.maximum_speed
+            collision_costs = self._collision_costs(path, obstacle_tree)
+            point_costs = velocity_costs + (
+                self.conf.collision_cost_weight * collision_costs
+            )
+            selection_cost = float(np.mean(point_costs))
+            if selection_cost < best_cost:
+                best_cost = selection_cost
                 best_path = path
         return best_path
 
-    def _fallback(self, course_distance, lateral_distance, speed):
-        self.fallback_count += 1
-        distance = max(
-            self.conf.fallback_min_distance,
-            speed * self.conf.fallback_time,
-        )
-        distances = np.linspace(0.0, distance, self.conf.trajectory_points)
-        target_speed = max(0.0, speed - self.conf.fallback_speed_reduction)
-        trajectory = np.zeros((len(distances), 5))
-        trajectory[:, 2] = target_speed
-        for index, offset in enumerate(distances):
-            path_distance = course_distance + offset
-            reference_x, reference_y = self.reference.position(path_distance)
-            reference_yaw = self.reference.yaw(path_distance)
-            trajectory[index, 0] = (
-                reference_x - math.sin(reference_yaw) * lateral_distance
-            )
-            trajectory[index, 1] = (
-                reference_y + math.cos(reference_yaw) * lateral_distance
-            )
-            trajectory[index, 3] = reference_yaw
-            trajectory[index, 4] = self.reference.curvature(path_distance)
-        return trajectory
-
     def plan(self, pose_x, pose_y, pose_theta, lidar_scan, velocity):
-        course_distance, lateral_distance, waypoint_index = self.reference.project(
+        course_distance, lateral_distance, _ = self.reference.project(
             pose_x, pose_y
         )
         reference_yaw = self.reference.yaw(course_distance)
-        reference_curvature = self.reference.curvature(course_distance)
         heading_error = _normalize_angle(pose_theta - reference_yaw)
-        denominator = max(
-            1.0 - reference_curvature * lateral_distance, 0.2
-        )
-        course_speed = max(
-            velocity * math.cos(heading_error) / denominator, 0.05
-        )
-        lateral_derivative = float(
-            np.clip(denominator * math.tan(heading_error), -1.5, 1.5)
-        )
-        target_speed = self._target_speed(waypoint_index, velocity)
         paths = self._generate_paths(
             course_distance,
-            course_speed,
-            0.0,
             lateral_distance,
-            lateral_derivative,
-            0.0,
-            target_speed,
+            heading_error,
+            velocity,
         )
 
         obstacle_tree = None
@@ -649,15 +706,14 @@ class FrenetOptimalTrajectoryPlanner:
             obstacle_tree = cKDTree(obstacles)
         path = self._best_path(paths, obstacle_tree)
         if path is None or len(path.x) < 2:
-            self.best_trajectory = self._fallback(
-                course_distance, lateral_distance, velocity
+            raise RuntimeError(
+                "FOT produced no dynamically feasible trajectory"
             )
-            return self.best_trajectory
 
         trajectory = np.zeros((len(path.x), 5))
         trajectory[:, 0] = path.x
         trajectory[:, 1] = path.y
-        trajectory[:, 2] = target_speed
+        trajectory[:, 2] = path.velocity
         trajectory[:, 3] = path.yaw
         trajectory[:, 4] = path.curvature
         self.best_trajectory = trajectory

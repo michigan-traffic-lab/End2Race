@@ -17,11 +17,12 @@ from utils import (
     calculate_metrics,
     create_multiagent_render_callback,
     downsample_lidar,
-    find_corresponding_waypoint,
+    find_opponent_start_index,
     load_raceline,
     mask_lidar_points,
     project_point_to_centerline,
     require_end2race_runtime,
+    unwrap_progress,
 )
 from model import End2Race
 
@@ -46,16 +47,20 @@ def evaluate_segment(model, device, vehicle, scenario):
     rng = np.random.default_rng(scenario.seed)
 
     ego_waypoints = load_raceline(scenario.map_name, f"{EGO_RACELINE}.csv")
-    if scenario.opponent_raceline != EGO_RACELINE:
-        opp_waypoints = load_raceline(
-            scenario.map_name, f"{scenario.opponent_raceline}.csv"
+    opp_waypoints = (
+        ego_waypoints
+        if scenario.opponent_raceline == EGO_RACELINE
+        else load_raceline(
+            scenario.map_name,
+            f"{scenario.opponent_raceline}.csv",
         )
-        ego_waypoint = ego_waypoints[scenario.ego_idx % len(ego_waypoints)]
-        ego_map_idx = find_corresponding_waypoint(ego_waypoint, opp_waypoints)
-        opp_idx = (ego_map_idx + INTERVAL_INDEX) % len(opp_waypoints)
-    else:
-        opp_waypoints = ego_waypoints
-        opp_idx = (scenario.ego_idx + INTERVAL_INDEX) % len(ego_waypoints)
+    )
+    opp_idx = find_opponent_start_index(
+        ego_waypoints,
+        opp_waypoints,
+        scenario.ego_idx,
+        INTERVAL_INDEX,
+    )
 
     normalized_ego_idx = scenario.ego_idx % len(ego_waypoints)
     positions = np.array([
@@ -200,20 +205,20 @@ def evaluate_segment(model, device, vehicle, scenario):
         ego_trajectory.append(ego_position)
         speeds.append(previous_speed)
 
-        ego_progress, _ = project_point_to_centerline(
-            np.asarray(ego_position), centerline
+        ego_progress = unwrap_progress(
+            project_point_to_centerline(
+                np.asarray(ego_position), centerline
+            )[0],
+            initial_ego_progress,
+            centerline_total_length,
         )
-        opponent_progress, _ = project_point_to_centerline(
-            np.asarray(opponent_position), centerline
+        opponent_progress = unwrap_progress(
+            project_point_to_centerline(
+                np.asarray(opponent_position), centerline
+            )[0],
+            initial_opponent_progress,
+            centerline_total_length,
         )
-
-        if ego_progress < initial_ego_progress - centerline_total_length / 2:
-            ego_progress += centerline_total_length
-        if (
-            opponent_progress
-            < initial_opponent_progress - centerline_total_length / 2
-        ):
-            opponent_progress += centerline_total_length
 
         final_state = (
             "overtaking" if ego_progress > opponent_progress else "following"
@@ -271,7 +276,7 @@ def evaluate_segment(model, device, vehicle, scenario):
     if scenario.render:
         for batch_object in batch_objects:
             batch_object.delete()
-        type(env).render_callbacks.clear()
+        type(env.unwrapped).render_callbacks.clear()
 
     env.close()
     avg_speed, speed_variance, total_distance = calculate_metrics(

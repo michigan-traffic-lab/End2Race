@@ -21,6 +21,7 @@ from utils import (
     mask_lidar_points,
     project_point_to_centerline,
     require_end2race_runtime,
+    unwrap_progress,
 )
 
 
@@ -200,8 +201,11 @@ def evaluate_laps(model, device, vehicle, settings):
         final_progress, _ = project_point_to_centerline(
             trajectory[-1], centerline
         )
-        if final_progress < initial_progress - centerline_total_length / 2:
-            final_progress += centerline_total_length
+        final_progress = unwrap_progress(
+            final_progress,
+            initial_progress,
+            centerline_total_length,
+        )
 
         lap_fraction = (
             final_progress - initial_progress
@@ -215,7 +219,7 @@ def evaluate_laps(model, device, vehicle, settings):
     if settings.render:
         for batch_object in batch_objects:
             batch_object.delete()
-        type(env).render_callbacks.clear()
+        type(env.unwrapped).render_callbacks.clear()
 
         if video_frames:
             imageio.mimwrite(

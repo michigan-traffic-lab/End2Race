@@ -13,13 +13,13 @@ MAP_NAME="Austin"
 DATASET_DIR="Dataset_${MAP_NAME}"
 EGO_RACELINE="raceline1"
 NUM_STARTPOINTS=50
-SIM_DURATION=12.0
+SIM_DURATION=8.0
 SAMPLE_INTERVAL=0.1
 SEED=6300
 RENDER=true
 OPPONENT_RACELINES=(raceline0 raceline1 raceline2)
-OPPONENT_SPEED_SCALES=(0.2 0.4 0.6 0.8 1.0)
-INTERVAL_INDICES=(15 20 25)
+OPPONENT_SPEED_SCALES=(0.4 0.6 0.8 1.0)
+INTERVAL_INDEX=15
 
 mapfile -t ego_indices < <(
     python - "$MAP_NAME" "$EGO_RACELINE" "$NUM_STARTPOINTS" <<'PY'
@@ -38,24 +38,22 @@ if (( ${#ego_indices[@]} == 0 )); then
     exit 1
 fi
 
-total_jobs=$((${#ego_indices[@]} * ${#OPPONENT_RACELINES[@]} * ${#OPPONENT_SPEED_SCALES[@]} * ${#INTERVAL_INDICES[@]}))
+total_jobs=$((${#ego_indices[@]} * ${#OPPONENT_RACELINES[@]} * ${#OPPONENT_SPEED_SCALES[@]}))
 echo "Collecting ${total_jobs} scenarios on ${MAP_NAME} with ${WORKERS} workers"
 
 pids=()
-for interval_idx in "${INTERVAL_INDICES[@]}"; do
-    for opponent_raceline in "${OPPONENT_RACELINES[@]}"; do
-        for opponent_speed_scale in "${OPPONENT_SPEED_SCALES[@]}"; do
-            for ego_idx in "${ego_indices[@]}"; do
-                while (( $(jobs -rp | wc -l) >= WORKERS )); do
-                    sleep 0.1
-                done
-                python collect.py \
-                    "$MAP_NAME" "$DATASET_DIR" "$ego_idx" "$interval_idx" \
-                    "$opponent_raceline" "$opponent_speed_scale" \
-                    "$SIM_DURATION" "$SAMPLE_INTERVAL" "$SEED" \
-                    "$RENDER" >/dev/null &
-                pids+=("$!")
+for opponent_raceline in "${OPPONENT_RACELINES[@]}"; do
+    for opponent_speed_scale in "${OPPONENT_SPEED_SCALES[@]}"; do
+        for ego_idx in "${ego_indices[@]}"; do
+            while (( $(jobs -rp | wc -l) >= WORKERS )); do
+                sleep 0.1
             done
+            python collect.py \
+                "$MAP_NAME" "$DATASET_DIR" "$ego_idx" "$INTERVAL_INDEX" \
+                "$opponent_raceline" "$opponent_speed_scale" \
+                "$SIM_DURATION" "$SAMPLE_INTERVAL" "$SEED" \
+                "$RENDER" >/dev/null &
+            pids+=("$!")
         done
     done
 done
