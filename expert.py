@@ -241,6 +241,7 @@ class FrenetPath:
         self.curvature = []
         self.velocity = []
         self.acceleration = []
+        self.target_velocity = None
 
 
 def lidar_scan_to_points(scan, pose):
@@ -417,7 +418,7 @@ class FrenetOptimalTrajectoryPlanner:
         self.best_trajectory = None
         self.tracker = TrajectoryTracker(configuration)
 
-    def _terminal_speeds(self, physical_speed):
+    def _terminal_speed_limits(self, physical_speed):
         minimum_speed = max(
             physical_speed
             - self.conf.horizon * self.conf.max_acceleration,
@@ -428,11 +429,26 @@ class FrenetOptimalTrajectoryPlanner:
             + self.conf.horizon * self.conf.max_acceleration,
             self.maximum_speed,
         )
+        return minimum_speed, maximum_speed
+
+    def _terminal_speeds(
+        self,
+        physical_speed,
+        minimum_speed=None,
+        maximum_speed=None,
+    ):
+        if minimum_speed is None or maximum_speed is None:
+            minimum_speed, maximum_speed = self._terminal_speed_limits(
+                physical_speed
+            )
+        reference_speed = float(
+            np.clip(physical_speed, minimum_speed, maximum_speed)
+        )
         return [
             minimum_speed,
-            0.5 * (minimum_speed + physical_speed),
-            physical_speed,
-            0.5 * (physical_speed + maximum_speed),
+            0.5 * (minimum_speed + reference_speed),
+            reference_speed,
+            0.5 * (reference_speed + maximum_speed),
             maximum_speed,
         ]
 
@@ -516,6 +532,7 @@ class FrenetOptimalTrajectoryPlanner:
         lateral_target,
         physical_terminal_speed,
         sample_times,
+        require_dynamic_feasibility=True,
     ):
         lateral = QuarticLateralPolynomial(
             lateral_distance,
@@ -539,6 +556,7 @@ class FrenetOptimalTrajectoryPlanner:
             terminal_course_speed - course_speed
         ) / self.conf.horizon
         path = FrenetPath()
+        path.target_velocity = physical_terminal_speed
         path.time = sample_times.copy()
         for time in path.time:
             course_speed_at_time = course_speed + course_acceleration * time
@@ -569,14 +587,102 @@ class FrenetOptimalTrajectoryPlanner:
         _frenet_to_cartesian(self.reference, path)
         if len(path.x) != len(path.time):
             return None
-        if not self._is_dynamically_feasible(
+        if require_dynamic_feasibility and not self._is_dynamically_feasible(
             path,
             physical_terminal_speed,
         ):
             return None
         return path
 
-    def _is_dynamically_feasible(self, path, physical_terminal_speed):
+    @staticmethod
+    def _feasible_boundary(
+        infeasible_speed,
+        feasible_speed,
+        candidate_for_speed,
+    ):
+        """Find the feasibility boundary from its feasible side."""
+        for _ in range(40):
+            midpoint = 0.5 * (infeasible_speed + feasible_speed)
+            if abs(infeasible_speed - feasible_speed) <= 1e-6:
+                break
+            if candidate_for_speed(midpoint) is None:
+                infeasible_speed = midpoint
+            else:
+                feasible_speed = midpoint
+        return feasible_speed
+
+    def _feasible_terminal_speeds(
+        self,
+        course_distance,
+        course_speed,
+        lateral_distance,
+        lateral_time_velocity,
+        lateral_target,
+        physical_speed,
+        sample_times,
+    ):
+        nominal_minimum, nominal_maximum = self._terminal_speed_limits(
+            physical_speed
+        )
+        candidate_cache = {}
+
+        def candidate_for_speed(terminal_speed):
+            terminal_speed = float(terminal_speed)
+            if terminal_speed not in candidate_cache:
+                candidate_cache[terminal_speed] = self._generate_candidate(
+                    course_distance,
+                    course_speed,
+                    lateral_distance,
+                    lateral_time_velocity,
+                    lateral_target,
+                    terminal_speed,
+                    sample_times,
+                )
+            return candidate_cache[terminal_speed]
+
+        nominal_speeds = self._terminal_speeds(
+            physical_speed,
+            nominal_minimum,
+            nominal_maximum,
+        )
+        feasible_seeds = [
+            speed
+            for speed in nominal_speeds
+            if candidate_for_speed(speed) is not None
+        ]
+        if not feasible_seeds:
+            return []
+
+        if candidate_for_speed(nominal_minimum) is not None:
+            feasible_minimum = nominal_minimum
+        else:
+            feasible_minimum = self._feasible_boundary(
+                nominal_minimum,
+                min(feasible_seeds),
+                candidate_for_speed,
+            )
+
+        if candidate_for_speed(nominal_maximum) is not None:
+            feasible_maximum = nominal_maximum
+        else:
+            feasible_maximum = self._feasible_boundary(
+                nominal_maximum,
+                max(feasible_seeds),
+                candidate_for_speed,
+            )
+
+        terminal_speeds = self._terminal_speeds(
+            physical_speed,
+            feasible_minimum,
+            feasible_maximum,
+        )
+        return list(dict.fromkeys(terminal_speeds))
+
+    def _is_dynamically_feasible(
+        self,
+        path,
+        physical_terminal_speed,
+    ):
         velocity = np.asarray(path.velocity)
         acceleration = np.asarray(path.acceleration)
         curvature = np.asarray(path.curvature)
@@ -613,6 +719,7 @@ class FrenetOptimalTrajectoryPlanner:
         lateral_distance,
         heading_error,
         physical_speed,
+        require_dynamic_feasibility=True,
     ):
         reference_curvature = self.reference.curvature(course_distance)
         denominator = max(
@@ -625,10 +732,21 @@ class FrenetOptimalTrajectoryPlanner:
         )
         lateral_time_velocity = physical_speed * math.sin(heading_error)
         lateral_targets = self._lateral_targets()
-        terminal_speeds = self._terminal_speeds(physical_speed)
         sample_times = self._sample_times().tolist()
         paths = []
         for lateral_target in lateral_targets:
+            if require_dynamic_feasibility:
+                terminal_speeds = self._feasible_terminal_speeds(
+                    course_distance,
+                    course_speed,
+                    lateral_distance,
+                    lateral_time_velocity,
+                    float(lateral_target),
+                    physical_speed,
+                    sample_times,
+                )
+            else:
+                terminal_speeds = self._terminal_speeds(physical_speed)
             for terminal_speed in terminal_speeds:
                 path = self._generate_candidate(
                     course_distance,
@@ -638,15 +756,81 @@ class FrenetOptimalTrajectoryPlanner:
                     float(lateral_target),
                     float(terminal_speed),
                     sample_times,
+                    require_dynamic_feasibility,
                 )
                 if path is not None:
                     paths.append(path)
         return paths
 
-    def _collision_costs(self, path, obstacle_tree):
+    def _dynamic_violation(self, path):
+        velocity = np.asarray(path.velocity)
+        acceleration = np.asarray(path.acceleration)
+        curvature = np.asarray(path.curvature)
+        if (
+            np.any(~np.isfinite(velocity))
+            or np.any(~np.isfinite(acceleration))
+            or np.any(~np.isfinite(curvature))
+        ):
+            return math.inf
+
+        future_velocity = velocity[1:]
+        future_acceleration = acceleration[1:]
+        future_curvature = curvature[1:]
+        terminal_error = abs(
+            velocity[-1] - path.target_velocity
+        )
+        violations = (
+            max(0.0, -float(np.min(future_velocity)))
+            / self.maximum_speed,
+            max(
+                0.0,
+                float(np.max(future_velocity)) / self.maximum_speed - 1.0,
+            ),
+            max(
+                0.0,
+                float(np.max(np.abs(future_acceleration)))
+                / self.conf.max_acceleration
+                - 1.0,
+            ),
+            max(
+                0.0,
+                float(np.max(np.abs(future_curvature)))
+                / self.conf.max_curvature
+                - 1.0,
+            ),
+            max(
+                0.0,
+                float(
+                    np.max(
+                        future_velocity**2
+                        * np.abs(future_curvature)
+                    )
+                )
+                / self.conf.max_lateral_acceleration
+                - 1.0,
+            ),
+            max(0.0, terminal_error - 1e-5) / self.maximum_speed,
+        )
+        return max(violations)
+
+    def _best_effort_path(self, paths, obstacle_tree):
+        ranked_paths = sorted(paths, key=self._dynamic_violation)
+        for path in ranked_paths:
+            if len(path.x) < 2:
+                continue
+            collision_distances = self._collision_distances(
+                path, obstacle_tree
+            )
+            if np.all(
+                collision_distances >= self.conf.hard_collision_distance
+            ):
+                return path
+        return None
+
+    def _collision_distances(self, path, obstacle_tree):
         future_point_count = max(len(path.x) - 1, 0)
         if obstacle_tree is None:
-            return np.zeros(future_point_count)
+            return np.full(future_point_count, math.inf)
         if future_point_count == 0:
             return np.empty(0)
         future_points = np.column_stack(
@@ -656,11 +840,7 @@ class FrenetOptimalTrajectoryPlanner:
             )
         )
         distances, _ = obstacle_tree.query(future_points, k=1)
-        normalized_deficits = np.maximum(
-            0.0,
-            1.0 - distances / self.conf.collision_distance_scale,
-        )
-        return normalized_deficits**self.conf.collision_cost_power
+        return distances
 
     def _best_path(self, paths, obstacle_tree):
         best_path = None
@@ -674,11 +854,26 @@ class FrenetOptimalTrajectoryPlanner:
                 self.maximum_speed,
             )
             velocity_costs = 1.0 - future_velocity / self.maximum_speed
-            collision_costs = self._collision_costs(path, obstacle_tree)
-            point_costs = velocity_costs + (
-                self.conf.collision_cost_weight * collision_costs
+            collision_distances = self._collision_distances(
+                path, obstacle_tree
             )
-            selection_cost = float(np.mean(point_costs))
+            if np.any(
+                collision_distances < self.conf.hard_collision_distance
+            ):
+                continue
+            normalized_deficits = np.maximum(
+                0.0,
+                1.0
+                - collision_distances / self.conf.soft_collision_clearance,
+            )
+            collision_costs = (
+                normalized_deficits**self.conf.collision_cost_power
+            )
+            selection_cost = float(
+                np.mean(velocity_costs)
+                + self.conf.collision_cost_weight
+                * np.max(collision_costs)
+            )
             if selection_cost < best_cost:
                 best_cost = selection_cost
                 best_path = path
@@ -705,9 +900,21 @@ class FrenetOptimalTrajectoryPlanner:
         if len(obstacles):
             obstacle_tree = cKDTree(obstacles)
         path = self._best_path(paths, obstacle_tree)
+        if path is None:
+            best_effort_paths = self._generate_paths(
+                course_distance,
+                lateral_distance,
+                heading_error,
+                velocity,
+                require_dynamic_feasibility=False,
+            )
+            path = self._best_effort_path(
+                best_effort_paths,
+                obstacle_tree,
+            )
         if path is None or len(path.x) < 2:
             raise RuntimeError(
-                "FOT produced no dynamically feasible trajectory"
+                "FOT produced no collision-safe trajectory"
             )
 
         trajectory = np.zeros((len(path.x), 5))

@@ -15,7 +15,7 @@ training:
 
 vehicle:
   steering_limit: 0.52
-  maximum_speed: 8.0
+  maximum_speed: 7.5
   wheelbase: 0.33
   length: 0.51
   width: 0.31
@@ -34,7 +34,8 @@ expert:
   max_acceleration: 7.51
   max_lateral_acceleration: 10.29
   max_curvature: 1.35
-  collision_distance_scale: 0.5
+  hard_collision_distance: 0.25
+  soft_collision_clearance: 0.5
   collision_cost_weight: 2.0
   collision_cost_power: 2.0
   min_lookahead: 0.5

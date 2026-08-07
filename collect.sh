@@ -8,7 +8,7 @@ if [[ "${CONDA_DEFAULT_ENV:-}" != "end2race" ]]; then
 fi
 python -c 'import sys; assert sys.version_info[:2] == (3, 11), "end2race requires Python 3.11"' || exit 1
 
-WORKERS=4
+WORKERS=12
 MAP_NAME="Austin"
 DATASET_DIR="Dataset_${MAP_NAME}"
 EGO_RACELINE="raceline1"
