@@ -12,13 +12,12 @@ WORKERS=12
 MAP_NAME="Austin"
 DATASET_DIR="Dataset_${MAP_NAME}"
 EGO_RACELINE="raceline1"
-NUM_STARTPOINTS=50
+NUM_STARTPOINTS=80
 SIM_DURATION=8.0
 SAMPLE_INTERVAL=0.1
-SEED=6300
 RENDER=true
 OPPONENT_RACELINES=(raceline0 raceline1 raceline2)
-OPPONENT_SPEED_SCALES=(0.4 0.6 0.8 1.0)
+OPPONENT_SPEED_SCALES=(0.4 0.6 0.8)
 INTERVAL_INDEX=15
 
 mapfile -t ego_indices < <(
@@ -51,8 +50,8 @@ for opponent_raceline in "${OPPONENT_RACELINES[@]}"; do
             python collect.py \
                 "$MAP_NAME" "$DATASET_DIR" "$ego_idx" "$INTERVAL_INDEX" \
                 "$opponent_raceline" "$opponent_speed_scale" \
-                "$SIM_DURATION" "$SAMPLE_INTERVAL" "$SEED" \
-                "$RENDER" >/dev/null &
+                "$SIM_DURATION" "$SAMPLE_INTERVAL" "$RENDER" \
+                >/dev/null &
             pids+=("$!")
         done
     done

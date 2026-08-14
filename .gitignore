@@ -1,6 +1,6 @@
 __pycache__
 *.egg-info/
-checkpoint_*.pt
+checkpoint/
 Dataset_*/
 eval_results/
 f1tenth_gym/docs/html/

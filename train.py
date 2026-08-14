@@ -13,6 +13,8 @@ from config import load_project_config
 from model import End2Race
 from utils import require_end2race_runtime
 
+CHECKPOINT_DIRECTORY = Path("checkpoint")
+
 
 class SequenceDataset(Dataset):
     def __init__(self, data_path: str | Path):
@@ -107,6 +109,7 @@ class SequenceDataset(Dataset):
 
 def train(model, train_loader, criterion, optimizer, config):
     device = next(model.parameters()).device
+    CHECKPOINT_DIRECTORY.mkdir(exist_ok=True)
 
     for epoch in range(config.num_epochs):
         model.train()
@@ -150,7 +153,9 @@ def train(model, train_loader, criterion, optimizer, config):
         avg_loss = total_loss / len(train_loader)
         print(f"Epoch {epoch + 1}/{config.num_epochs}, Loss: {avg_loss:.5f}")
 
-        checkpoint_path = Path(f"checkpoint_{epoch + 1:05d}.pt")
+        checkpoint_path = (
+            CHECKPOINT_DIRECTORY / f"checkpoint_{epoch + 1:05d}.pt"
+        )
         torch.save(model.state_dict(), checkpoint_path)
         print(f"Checkpoint saved to {checkpoint_path}")
 

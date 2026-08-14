@@ -1,14 +1,19 @@
-import cv2
-import numpy as np
-import os
-import yaml
+import csv
 import sys
-import matplotlib.pyplot as plt
-import trajectory_planning_helpers as tph
 from pathlib import Path
+
+import cv2
+import matplotlib.pyplot as plt
+import numpy as np
+import trajectory_planning_helpers as tph
+import yaml
 from scipy import interpolate
 
-from config import load_project_config, load_racetrack_config, merge_config_sections
+from config import (
+    load_project_config,
+    load_racetrack_config,
+    merge_config_sections,
+)
 
 
 def spline_distance(t_glob, path, point):
@@ -18,150 +23,112 @@ def spline_distance(t_glob, path, point):
     return float(np.linalg.norm(point - spline_point))
 
 
-def prep_track(reftrack_imp: np.ndarray,
-               reg_smooth_opts: dict,
-               stepsize_opts: dict,
-               debug: bool = True,
-               min_width: float = None) -> tuple:
-    """
-    Created by:
-    Alexander Heilmeier
-
-    Documentation:
-    This function prepares the inserted reference track for optimization.
-
-    Inputs:
-    reftrack_imp:               imported track [x_m, y_m, w_tr_right_m, w_tr_left_m]
-    reg_smooth_opts:            parameters for the spline approximation
-    stepsize_opts:              dict containing the stepsizes before spline approximation and after spline interpolation
-    debug:                      boolean showing if debug messages should be printed
-    min_width:                  [m] minimum enforced track width (None to deactivate)
-
-    Outputs:
-    reftrack_interp:            track after smoothing and interpolation [x_m, y_m, w_tr_right_m, w_tr_left_m]
-    normvec_normalized_interp:  normalized normal vectors on the reference line [x_m, y_m]
-    a_interp:                   LES coefficients when calculating the splines
-    coeffs_x_interp:            spline coefficients of the x-component
-    coeffs_y_interp:            spline coefficients of the y-component
-    """
-
+def prepare_track(reference_track, config):
+    """Smooth a lane and calculate its normalized spline vectors."""
     tph.spline_approximation.dist_to_p = spline_distance
+    track = tph.spline_approximation.spline_approximation(
+        track=reference_track,
+        k_reg=config.smoothing_regularization,
+        s_reg=config.smoothing_length,
+        stepsize_prep=config.preparation_step_size,
+        stepsize_reg=config.regularization_step_size,
+        debug=False,
+    )
+    closed_path = np.vstack((track[:, :2], track[0, :2]))
+    _, _, _, normal_vectors = tph.calc_splines.calc_splines(path=closed_path)
 
-    # smoothing and interpolating reference track
-    reftrack_interp = tph.spline_approximation. \
-        spline_approximation(track=reftrack_imp,
-                             k_reg=reg_smooth_opts["k_reg"],
-                             s_reg=reg_smooth_opts["s_reg"],
-                             stepsize_prep=stepsize_opts["stepsize_prep"],
-                             stepsize_reg=stepsize_opts["stepsize_reg"],
-                             debug=debug)
-
-    # calculate splines
-    refpath_interp_cl = np.vstack((reftrack_interp[:, :2], reftrack_interp[0, :2]))
-
-    coeffs_x_interp, coeffs_y_interp, a_interp, normvec_normalized_interp = tph.calc_splines.\
-        calc_splines(path=refpath_interp_cl)
-
-
-    normals_crossing = tph.check_normals_crossing.check_normals_crossing(track=reftrack_interp,
-                                                                         normvec_normalized=normvec_normalized_interp,
-                                                                         horizon=10)
+    normals_crossing = tph.check_normals_crossing.check_normals_crossing(
+        track=track,
+        normvec_normalized=normal_vectors,
+        horizon=10,
+    )
 
     if normals_crossing:
-        bound_1_tmp = reftrack_interp[:, :2] + normvec_normalized_interp * np.expand_dims(reftrack_interp[:, 2], axis=1)
-        bound_2_tmp = reftrack_interp[:, :2] - normvec_normalized_interp * np.expand_dims(reftrack_interp[:, 3], axis=1)
+        outer_bound = track[:, :2] + normal_vectors * track[:, 2, None]
+        inner_bound = track[:, :2] - normal_vectors * track[:, 3, None]
 
         plt.figure()
-
-        plt.plot(reftrack_interp[:, 0], reftrack_interp[:, 1], 'k-')
-        for i in range(bound_1_tmp.shape[0]):
-            temp = np.vstack((bound_1_tmp[i], bound_2_tmp[i]))
-            plt.plot(temp[:, 0], temp[:, 1], "r-", linewidth=0.7)
+        plt.plot(track[:, 0], track[:, 1], "k-")
+        for index in range(len(outer_bound)):
+            boundary = np.vstack((outer_bound[index], inner_bound[index]))
+            plt.plot(boundary[:, 0], boundary[:, 1], "r-", linewidth=0.7)
 
         plt.grid()
-        ax = plt.gca()
-        ax.set_aspect("equal", "datalim")
+        plt.gca().set_aspect("equal", "datalim")
         plt.xlabel("east in m")
         plt.ylabel("north in m")
         plt.title("Error: at least one pair of normals is crossed!")
-
         plt.show()
+        raise RuntimeError(
+            "At least two spline normals cross; check the input or increase "
+            "the smoothing factor"
+        )
 
-        raise IOError("At least two spline normals are crossed, check input or increase smoothing factor!")
+    minimum_width = 2.0 * config.width
+    widths = track[:, 2] + track[:, 3]
+    narrow = widths < minimum_width
+    if np.any(narrow):
+        inflation = 0.5 * (minimum_width - widths[narrow])
+        track[narrow, 2] += inflation
+        track[narrow, 3] += inflation
 
-    manipulated_track_width = False
+        print(
+            "Track was narrower than the vehicle requirement; inflated both "
+            "boundaries equally",
+            file=sys.stderr,
+        )
 
-    if min_width is not None:
-        for i in range(reftrack_interp.shape[0]):
-            cur_width = reftrack_interp[i, 2] + reftrack_interp[i, 3]
-
-            if cur_width < min_width:
-                manipulated_track_width = True
-
-                # inflate to both sides equally
-                reftrack_interp[i, 2] += (min_width - cur_width) / 2
-                reftrack_interp[i, 3] += (min_width - cur_width) / 2
-
-    if manipulated_track_width:
-        print("WARNING: Track region was smaller than requested minimum track width -> Applied artificial inflation in"
-              " order to match the requirements!", file=sys.stderr)
-
-    return reftrack_interp, normvec_normalized_interp, a_interp, coeffs_x_interp, coeffs_y_interp
+    return track, normal_vectors
 
 
 def reorder_vertex(image, lane):
     """Reorder vertices to form a continuous path."""
     path_img = np.zeros_like(image)
-    for idx in range(len(lane)):
-        cv2.circle(path_img, lane[idx], 1, (255, 255, 255), 1)
-    curr_kernel = np.ones((2, 2), np.uint8)
-    iter_cnt = 0
+    for point in lane:
+        cv2.circle(path_img, point, 1, (255, 255, 255), 1)
+    kernel = np.ones((2, 2), np.uint8)
+    dilation_count = 0
     while True:
-        if iter_cnt > 10:
-            exit(0)
-        curr_contours, curr_hierarchy = cv2.findContours(path_img, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-        if len(curr_contours) == 2 and curr_hierarchy[0][-1][-1] == 0:
-            break
-        path_img = cv2.dilate(path_img, curr_kernel, iterations=1)
-        iter_cnt += 1
-    path_img = cv2.ximgproc.thinning(path_img)
-    curr_contours, curr_hierarchy = cv2.findContours(path_img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    return np.squeeze(curr_contours[0])
-
-
-def transform_coords(path, height, s, tx, ty):
-    """Transform pixel coordinates to world coordinates."""
-    new_path_x = path[:, 0] * s + tx
-    new_path_y = (height - path[:, 1]) * s + ty
-    if path.shape[1] > 2:
-        new_right_dist = path[:, 2] * s
-        new_left_dist = path[:, 3] * s
-        return np.vstack((new_path_x, new_path_y, new_right_dist, new_left_dist)).T
-    else:
-        return np.vstack((new_path_x, new_path_y)).T
-
-
-def save_csv(data, csv_name, header=None):
-    """Save data to CSV file."""
-    import csv
-    with open(csv_name, mode='w', newline='', encoding='utf-8') as csv_file:
-        csv_writer = csv.writer(
-            csv_file,
-            delimiter=',',
-            quotechar='"',
-            quoting=csv.QUOTE_MINIMAL,
-            lineterminator='\n',
+        if dilation_count > 10:
+            raise RuntimeError("Could not connect the sampled lane vertices")
+        contours, hierarchy = cv2.findContours(
+            path_img,
+            cv2.RETR_TREE,
+            cv2.CHAIN_APPROX_SIMPLE,
         )
-        if header:
-            csv_writer.writerow(header)
-        for line in data:
-            csv_writer.writerow(line.tolist())
+        if len(contours) == 2 and hierarchy[0][-1][-1] == 0:
+            break
+        path_img = cv2.dilate(path_img, kernel, iterations=1)
+        dilation_count += 1
+    path_img = cv2.ximgproc.thinning(path_img)
+    contours, _ = cv2.findContours(
+        path_img,
+        cv2.RETR_EXTERNAL,
+        cv2.CHAIN_APPROX_SIMPLE,
+    )
+    return np.squeeze(contours[0])
+
+
+def transform_coords(path, height, scale, offset_x, offset_y):
+    """Transform pixel coordinates to world coordinates."""
+    new_path_x = path[:, 0] * scale + offset_x
+    new_path_y = (height - path[:, 1]) * scale + offset_y
+    if path.shape[1] > 2:
+        return np.column_stack(
+            (
+                new_path_x,
+                new_path_y,
+                path[:, 2] * scale,
+                path[:, 3] * scale,
+            )
+        )
+    return np.column_stack((new_path_x, new_path_y))
+
 
 def generate_lanes(config, map_dir):
     """Generate lanes from map image."""
-    # Read map parameters
-    yaml_file = os.path.join(map_dir, config.map_name + "_map.yaml")
-    with open(yaml_file, 'r') as stream:
+    yaml_file = map_dir / f"{config.map_name}_map.yaml"
+    with yaml_file.open(encoding="utf-8") as stream:
         parsed_yaml = yaml.safe_load(stream)
     scale = parsed_yaml["resolution"]
     offset_x = parsed_yaml["origin"][0]
@@ -179,30 +146,40 @@ def generate_lanes(config, map_dir):
     lane_fractions += (0.5 - lane_fractions) * shift_fraction
     lane_ratios = lane_fractions / (1.0 - lane_fractions)
 
-    # Read image
-    img_path = os.path.join(map_dir, config.map_name + "_map" + config.map_image_extension)
-    input_img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
+    image_path = map_dir / (
+        f"{config.map_name}_map{config.map_image_extension}"
+    )
+    input_img = cv2.imread(str(image_path), cv2.IMREAD_GRAYSCALE)
     h, w = input_img.shape[:2]
 
-    # Process image
     output_img = ~input_img
-    ret, output_img = cv2.threshold(output_img, thresh=127, maxval=255, type=cv2.THRESH_BINARY)
+    _, output_img = cv2.threshold(
+        output_img,
+        thresh=127,
+        maxval=255,
+        type=cv2.THRESH_BINARY,
+    )
 
-    # Find and filter contours
-    contours, hierarchy = cv2.findContours(output_img, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
-    for i, contour in enumerate(contours):
+    contours, _ = cv2.findContours(
+        output_img,
+        cv2.RETR_LIST,
+        cv2.CHAIN_APPROX_SIMPLE,
+    )
+    for contour in contours:
         if cv2.contourArea(contour) < 70:
             cv2.fillPoly(output_img, pts=[contour], color=(0, 0, 0))
 
-    # Dilate & Erode
     kernel = np.ones((5, 5), np.uint8)
     output_img = cv2.dilate(output_img, kernel, iterations=1)
     output_img = cv2.ximgproc.thinning(output_img)
 
-    # Separate outer and inner bounds
-    contours, hierarchy = cv2.findContours(output_img, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    contours, hierarchy = cv2.findContours(
+        output_img,
+        cv2.RETR_TREE,
+        cv2.CHAIN_APPROX_SIMPLE,
+    )
     parents = hierarchy[0][:, 3]
-    
+
     node = np.argmax(parents)
     tree_indices = []
     while node != -1:
@@ -213,38 +190,36 @@ def generate_lanes(config, map_dir):
     outer_bound = contours[tree_indices[1]]
     inner_bound = contours[tree_indices[2]]
 
-    # Euclidean distance transform
-    X, Y = np.meshgrid(np.arange(w), np.arange(h))
-    X = X.flatten().tolist()
-    Y = Y.flatten().tolist()
+    x_coordinates, y_coordinates = np.meshgrid(np.arange(w), np.arange(h))
     valid_pts = []
-    
-    for (x, y) in zip(X, Y):
-        outer_dist = cv2.pointPolygonTest(outer_bound, (x, y), True)
-        inner_dist = cv2.pointPolygonTest(inner_bound, (x, y), True)
+    for x, y in zip(x_coordinates.ravel(), y_coordinates.ravel()):
+        point = (int(x), int(y))
+        outer_dist = cv2.pointPolygonTest(outer_bound, point, True)
+        inner_dist = cv2.pointPolygonTest(inner_bound, point, True)
         if (
             outer_dist > config.outer_safe_distance / scale
             and inner_dist < -config.inner_safe_distance / scale
         ):
             ratio = np.abs(inner_dist) / (np.abs(outer_dist) + 1e-8)
             valid_pts.append([x, y, inner_dist, outer_dist, ratio])
-    
+
     valid_pts = np.array(valid_pts)
 
-    # Calculate lanes
     lanes = []
-    lane_names = []
-    for idx in range(len(lane_ratios)):
-        valid_ratio = (np.abs(valid_pts[:, -1] - lane_ratios[idx]) < lane_ratios[idx] / 10)
+    for index, lane_ratio in enumerate(lane_ratios):
+        valid_ratio = (
+            np.abs(valid_pts[:, -1] - lane_ratio) < lane_ratio / 10
+        )
         lane = valid_pts[valid_ratio, 0:2].astype(int)
         lane = reorder_vertex(output_img, lane)
         if config.clockwise:
             lane = np.flipud(lane)
-        
+
         left_dists, right_dists = [], []
-        for (x, y) in lane:
-            outer_dist = cv2.pointPolygonTest(outer_bound, (int(x), int(y)), True)
-            inner_dist = cv2.pointPolygonTest(inner_bound, (int(x), int(y)), True)
+        for x, y in lane:
+            point = (int(x), int(y))
+            outer_dist = cv2.pointPolygonTest(outer_bound, point, True)
+            inner_dist = cv2.pointPolygonTest(inner_bound, point, True)
             outer_dist = outer_dist - config.outer_safe_distance / scale
             inner_dist = abs(inner_dist) - config.inner_safe_distance / scale
             if config.clockwise:
@@ -253,188 +228,130 @@ def generate_lanes(config, map_dir):
             else:
                 left_dists.append(inner_dist)
                 right_dists.append(outer_dist)
-        
+
         lane = np.vstack((lane.T, right_dists, left_dists)).T
-        # Transform to world coordinates
         lane = transform_coords(lane, h, scale, offset_x, offset_y)
-        
-        # Use unified naming: lane0, lane1, lane2, etc.
-        lane_name = f"lane{idx}"
-        
-        # Save lane to CSV
-        csv_path = os.path.join(map_dir, f"{lane_name}.csv")
-        save_csv(lane, csv_path, header=["#x_m", "y_m", "w_tr_right_m", "w_tr_left_m"])
-        
+        csv_path = map_dir / f"lane{index}.csv"
+        with csv_path.open("w", newline="", encoding="utf-8") as stream:
+            writer = csv.writer(stream, lineterminator="\n")
+            writer.writerow(["#x_m", "y_m", "w_tr_right_m", "w_tr_left_m"])
+            writer.writerows(lane)
         lanes.append(lane)
-        lane_names.append(lane_name)
-    
-    return lanes, lane_names
+
+    return lanes
 
 
-def generate_raceline(lane_data, lane_name, config, module, map_dir):
+def generate_raceline(lane_data, config, module):
     """Generate raceline trajectory for a given lane."""
-    
-    # Vehicle parameters
-    veh_params = {
-        "v_max": config.maximum_speed,
-        "length": config.length,
-        "width": config.width,
-        "mass": config.mass,
-        "dragcoeff": config.drag_coefficient,
-        "g": config.gravity,
-    }
-
-    # Calculation parameters
-    stepsize_opts = {
-        "stepsize_prep": config.preparation_step_size,
-        "stepsize_reg": config.regularization_step_size,
-        "stepsize_interp_after_opt": config.interpolation_step_size,
-    }
-
-    # Smoothing parameters
-    reg_smooth_opts = {
-        "k_reg": config.smoothing_regularization,
-        "s_reg": config.smoothing_length,
-    }
-
-    # Velocity calculation options
-    vel_calc_opts = {
-        "dyn_model_exp": config.dynamic_model_exponent,
-        "vel_profile_conv_filt_window": config.velocity_filter_window,
-    }
-
-    # File paths
-    file_paths = {
-        "ggv_file": os.path.join(module, "vehicle_dynamic_info", "ggv.csv"),
-        "ax_max_machines_file": os.path.join(module, "vehicle_dynamic_info", "ax_max_machines.csv"),
-    }
-
-    # Import options
-    imp_opts = {
-        "flip_imp_track": False,
-        "set_new_start": False, 
-        "new_start": np.array([0.0, 0.0]),
-        "min_track_width": veh_params["width"] * 2.0,
-        "num_laps": config.num_laps,
-    }
-
-    # Use lane data directly as reftrack
-    reftrack_imp = lane_data
-
-    # Import vehicle dynamics data
+    dynamics_directory = module / "vehicle_dynamic_info"
     ggv, ax_max_machines = tph.import_veh_dyn_info.import_veh_dyn_info(
-        ggv_import_path=file_paths["ggv_file"],
-        ax_max_machines_import_path=file_paths["ax_max_machines_file"]
+        ggv_import_path=str(dynamics_directory / "ggv.csv"),
+        ax_max_machines_import_path=str(
+            dynamics_directory / "ax_max_machines.csv"
+        ),
     )
 
-    # Adjust v_max if necessary
     max_ggv_velocity = np.max(ggv[:, 0])
-    if veh_params["v_max"] > max_ggv_velocity:
-        veh_params["v_max"] = max_ggv_velocity * 0.95
+    maximum_speed = config.maximum_speed
+    if maximum_speed > max_ggv_velocity:
+        maximum_speed = max_ggv_velocity * 0.95
 
-    # Smooth and interpolate
-    reftrack_interp, normvec_normalized_interp, a_interp, coeffs_x_interp, coeffs_y_interp = \
-        prep_track(
-            reftrack_imp=reftrack_imp,
-            reg_smooth_opts=reg_smooth_opts,
-            stepsize_opts=stepsize_opts,
-            debug=False,
-            min_width=imp_opts["min_track_width"]
-        )
+    reference_track, normal_vectors = prepare_track(lane_data, config)
+    lateral_offsets = np.zeros(len(reference_track))
 
-    # Use lane directly (no optimization)
-    alpha_opt = np.zeros(reftrack_interp.shape[0])
-
-    # Create raceline trajectory
-    raceline_interp, a_opt, coeffs_x_opt, coeffs_y_opt, spline_inds_opt_interp, t_vals_opt_interp, s_points_opt_interp, \
-        spline_lengths_opt, el_lengths_opt_interp = tph.create_raceline.create_raceline(
-            refline=reftrack_interp[:, :2],
-            normvectors=normvec_normalized_interp,
-            alpha=alpha_opt,
-            stepsize_interp=stepsize_opts["stepsize_interp_after_opt"]
-        )
-
-    # Calculate heading and curvature
-    psi_vel_opt, kappa_opt = tph.calc_head_curv_an.calc_head_curv_an(
-        coeffs_x=coeffs_x_opt,
-        coeffs_y=coeffs_y_opt, 
-        ind_spls=spline_inds_opt_interp,
-        t_spls=t_vals_opt_interp
+    (
+        raceline,
+        _,
+        x_coefficients,
+        y_coefficients,
+        spline_indices,
+        spline_parameters,
+        distances,
+        spline_lengths,
+        element_lengths,
+    ) = tph.create_raceline.create_raceline(
+        refline=reference_track[:, :2],
+        normvectors=normal_vectors,
+        alpha=lateral_offsets,
+        stepsize_interp=config.interpolation_step_size,
     )
 
-    # Calculate velocity profile
-    vx_profile_opt = tph.calc_vel_profile.calc_vel_profile(
+    headings, curvatures = tph.calc_head_curv_an.calc_head_curv_an(
+        coeffs_x=x_coefficients,
+        coeffs_y=y_coefficients,
+        ind_spls=spline_indices,
+        t_spls=spline_parameters,
+    )
+
+    velocity_profile = tph.calc_vel_profile.calc_vel_profile(
         ggv=ggv,
         ax_max_machines=ax_max_machines,
-        v_max=veh_params["v_max"],
-        kappa=kappa_opt,
-        el_lengths=el_lengths_opt_interp,
+        v_max=maximum_speed,
+        kappa=curvatures,
+        el_lengths=element_lengths,
         closed=True,
-        filt_window=vel_calc_opts["vel_profile_conv_filt_window"],
-        dyn_model_exp=vel_calc_opts["dyn_model_exp"],
-        drag_coeff=veh_params["dragcoeff"],
-        m_veh=veh_params["mass"]
+        filt_window=config.velocity_filter_window,
+        dyn_model_exp=config.dynamic_model_exponent,
+        drag_coeff=config.drag_coefficient,
+        m_veh=config.mass,
     )
 
-    # Calculate acceleration profile
-    vx_profile_opt_cl = np.append(vx_profile_opt, vx_profile_opt[0])
-    ax_profile_opt = tph.calc_ax_profile.calc_ax_profile(
-        vx_profile=vx_profile_opt_cl,
-        el_lengths=el_lengths_opt_interp,
-        eq_length_output=False
+    closed_velocity_profile = np.append(velocity_profile, velocity_profile[0])
+    acceleration_profile = tph.calc_ax_profile.calc_ax_profile(
+        vx_profile=closed_velocity_profile,
+        el_lengths=element_lengths,
+        eq_length_output=False,
     )
 
-    # Calculate lap time
-    t_profile_cl = tph.calc_t_profile.calc_t_profile(
-        vx_profile=vx_profile_opt,
-        ax_profile=ax_profile_opt,
-        el_lengths=el_lengths_opt_interp
+    time_profile = tph.calc_t_profile.calc_t_profile(
+        vx_profile=velocity_profile,
+        ax_profile=acceleration_profile,
+        el_lengths=element_lengths,
     )
 
-    # Assemble final trajectory
-    trajectory = np.column_stack((
-        s_points_opt_interp,
-        raceline_interp,
-        psi_vel_opt + 0.5 * np.pi,
-        kappa_opt,
-        vx_profile_opt,
-        ax_profile_opt
-    ))
+    trajectory = np.column_stack(
+        (
+            distances,
+            raceline,
+            headings + 0.5 * np.pi,
+            curvatures,
+            velocity_profile,
+            acceleration_profile,
+        )
+    )
+    closed_trajectory = np.vstack((trajectory, trajectory[0]))
+    closed_trajectory[-1, 0] = np.sum(spline_lengths)
+    return closed_trajectory, time_profile[-1]
 
-    # Create closed trajectory
-    traj_cl = np.vstack((trajectory, trajectory[0, :]))
-    traj_cl[-1, 0] = np.sum(spline_lengths_opt)
-
-    return traj_cl, t_profile_cl[-1]
 
 def main():
     module = Path(__file__).resolve().parent
     project = load_project_config()
-    racetracks = load_racetrack_config()
-    config = merge_config_sections(racetracks.raceline_generation, project.vehicle)
-    module = str(module)
-    map_dir = os.path.join(module, config.map_name)
-    
-    # Create output directory
-    os.makedirs(map_dir, exist_ok=True)
-    
+    racetrack = load_racetrack_config()
+    config = merge_config_sections(
+        racetrack,
+        project.vehicle,
+    )
+    map_dir = module / config.map_name
+    map_dir.mkdir(exist_ok=True)
+
     print(f"Generating lanes for {config.map_name}...")
-    lanes, lane_names = generate_lanes(config, map_dir)
-    
-    # Generate raceline for each lane
-    for idx, (lane, lane_name) in enumerate(zip(lanes, lane_names)):
+    lanes = generate_lanes(config, map_dir)
+
+    for index, lane in enumerate(lanes):
+        lane_name = f"lane{index}"
         print(f"\nProcessing {lane_name}...")
-        
-        # Generate raceline trajectory
-        trajectory, laptime = generate_raceline(
-            lane, lane_name, config, module, map_dir
-        )
-        # Use unified naming: raceline0, raceline1, raceline2, etc.
-        export_path = os.path.join(map_dir, f"raceline{idx}.csv")
-        
+        trajectory, laptime = generate_raceline(lane, config, module)
+        export_path = map_dir / f"raceline{index}.csv"
         header = "s_m;x_m;y_m;psi_rad;kappa_radpm;vx_mps;ax_mps2"
-        np.savetxt(export_path, trajectory, delimiter=";", fmt="%.6f", header=header)
-        
+        np.savetxt(
+            export_path,
+            trajectory,
+            delimiter=";",
+            fmt="%.6f",
+            header=header,
+        )
+
         print(f"  Estimated laptime: {laptime:.2f}s")
         print(f"  Trajectory exported to: {export_path}")
 

@@ -240,7 +240,7 @@ def evaluate_segment(model, device, vehicle, scenario):
             if frame is not None:
                 video_frames.append(frame)
 
-        if np.any(obs["collisions"]):
+        if obs["collisions"][0]:
             collision_occurred = True
             done = True
 

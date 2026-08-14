@@ -9,7 +9,7 @@ fi
 python -c 'import sys; assert sys.version_info[:2] == (3, 11), "end2race requires Python 3.11"' || exit 1
 
 MAP_NAME="Austin"
-CHECKPOINT_PATH="checkpoint_00100.pt"
+CHECKPOINT_PATH="checkpoint/checkpoint_00100.pt"
 NOISE=0.0
 SEED=42
 RENDER=false

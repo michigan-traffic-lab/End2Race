@@ -26,12 +26,9 @@ PROJECT_CONFIG_SCHEMA = {
     "vehicle": {
         "steering_limit",
         "maximum_speed",
-        "wheelbase",
-        "length",
         "width",
         "mass",
         "drag_coefficient",
-        "gravity",
     },
     "expert": {
         "tracker_steps",
@@ -44,7 +41,6 @@ PROJECT_CONFIG_SCHEMA = {
         "max_acceleration",
         "max_lateral_acceleration",
         "max_curvature",
-        "hard_collision_distance",
         "soft_collision_clearance",
         "collision_cost_weight",
         "collision_cost_power",
@@ -57,33 +53,20 @@ PROJECT_CONFIG_SCHEMA = {
 }
 
 RACETRACK_CONFIG_SCHEMA = {
-    "raceline_generation": {
-        "map_name",
-        "map_image_extension",
-        "num_lanes",
-        "side_lane_center_shift_fraction",
-        "clockwise",
-        "inner_safe_distance",
-        "outer_safe_distance",
-        "num_laps",
-        "preparation_step_size",
-        "regularization_step_size",
-        "interpolation_step_size",
-        "smoothing_regularization",
-        "smoothing_length",
-        "dynamic_model_exponent",
-        "velocity_filter_window",
-    },
-    "conversion": {"pattern", "output_suffix", "require_confirmation"},
-    "greyscale": {"input_path", "output_path"},
-    "rename": {
-        "donkey_waypoint_suffix",
-        "centerline_source_suffix",
-        "centerline_target_suffix",
-        "raceline_source_suffix",
-        "raceline_target_suffix",
-        "remove_extensions",
-    },
+    "map_name",
+    "map_image_extension",
+    "num_lanes",
+    "side_lane_center_shift_fraction",
+    "clockwise",
+    "inner_safe_distance",
+    "outer_safe_distance",
+    "preparation_step_size",
+    "regularization_step_size",
+    "interpolation_step_size",
+    "smoothing_regularization",
+    "smoothing_length",
+    "dynamic_model_exponent",
+    "velocity_filter_window",
 }
 
 

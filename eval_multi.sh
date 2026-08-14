@@ -10,15 +10,15 @@ python -c 'import sys; assert sys.version_info[:2] == (3, 11), "end2race require
 
 WORKERS=12
 MAP_NAME="Austin"
-CHECKPOINT_PATH="checkpoint_00100.pt"
+CHECKPOINT_PATH="checkpoint/checkpoint_00100.pt"
 EGO_RACELINE="raceline1"
-NUM_STARTPOINTS=50
+NUM_STARTPOINTS=80
 SIM_DURATION=8.0
 NOISE=0.0
 SEED=42
 RENDER=false
 OPPONENT_RACELINES=(raceline0 raceline1 raceline2)
-OPPONENT_SPEED_SCALES=(0.5 0.6 0.7 0.8)
+OPPONENT_SPEED_SCALES=(0.4 0.6 0.8)
 
 if [[ ! -f "$CHECKPOINT_PATH" ]]; then
     echo "Checkpoint not found: $CHECKPOINT_PATH" >&2

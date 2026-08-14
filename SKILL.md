@@ -11,8 +11,6 @@ When changing code, keep the implementation direct and minimal.
 
 - Write the simplest code that expresses the current design.
 - Remove stale code, stale docs, stale config keys, stale metrics, and unused scripts in the same change that makes them obsolete.
-- Preserve `submitted/`; never delete, rewrite, or use it as scratch space.
-- Preserve code and retained artifacts needed to regenerate contributing intermediates for the final temporal and HOTA PKLs.
 - Do not preserve backward compatibility unless the user explicitly asks for it.
 - Do not add compatibility aliases, migration branches, deprecated names, or fallback paths for removed behavior.
 - Do not add dummy wrappers or pass-through helper functions. Inline one-use helpers unless the helper names a real domain step.
@@ -21,6 +19,8 @@ When changing code, keep the implementation direct and minimal.
 - Keep names current. If behavior changes, rename variables, config keys, metrics, files, and docs to match the new behavior.
 - Keep comments rare and useful. Explain non-obvious reasoning, not what the next line does.
 - Keep edits scoped. Do not refactor unrelated code, but do remove directly related dead paths.
+- All checkpoints, metrics, model name, shall have the simplest name such as checkpoint_xxxxx.pt, instead of A_B_C_checkpoint_xxxxx.pt
+- All checkpoint, metrics, and saved config shall be directly put under checkpoint folder without nesting.
 
 ## Review Checklist
 

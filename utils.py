@@ -95,29 +95,14 @@ def unwrap_progress(progress, initial_progress, track_length):
     return progress
 
 
-def random_position(
-    waypoints_xytheta,
-    sampled_number=1,
-    rng=None,
-    xy_noise=0.0,
-    theta_noise=0.0,
-    ego_idx=100,
-    interval_idx=20,
-):
-    """Return deterministic or noise-perturbed starting poses on a raceline."""
-    if rng is None:
-        rng = np.random.default_rng()
-    poses = []
-    for sample_index in range(sampled_number):
-        waypoint_index = (
-            ego_idx + sample_index * interval_idx
-        ) % len(waypoints_xytheta)
-        x, y, theta = waypoints_xytheta[waypoint_index, :3]
-        x += rng.random() * xy_noise
-        y += rng.random() * xy_noise
-        theta = (theta % (2.0 * np.pi)) + rng.random() * theta_noise
-        poses.append((x, y, theta))
-    return np.asarray(poses), ego_idx
+def raceline_pose(waypoints_xytheta, index):
+    """Return one pose from a periodic raceline."""
+    pose = np.array(
+        waypoints_xytheta[index % len(waypoints_xytheta), :3],
+        copy=True,
+    )
+    pose[2] %= 2.0 * np.pi
+    return pose
 
 
 def require_end2race_runtime():

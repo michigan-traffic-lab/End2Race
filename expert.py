@@ -27,8 +27,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 
-from __future__ import annotations
-
 import math
 from pathlib import Path
 
@@ -41,58 +39,6 @@ from utils import nearest_point
 
 
 LIDAR_FIELD_OF_VIEW = 6.28
-
-
-class QuinticPolynomial:
-    def __init__(self, xs, vxs, axs, xe, vxe, axe, time):
-        self.a0 = xs
-        self.a1 = vxs
-        self.a2 = axs / 2.0
-        matrix = np.array(
-            [
-                [time**3, time**4, time**5],
-                [3.0 * time**2, 4.0 * time**3, 5.0 * time**4],
-                [6.0 * time, 12.0 * time**2, 20.0 * time**3],
-            ]
-        )
-        vector = np.array(
-            [
-                xe - self.a0 - self.a1 * time - self.a2 * time**2,
-                vxe - self.a1 - 2.0 * self.a2 * time,
-                axe - 2.0 * self.a2,
-            ]
-        )
-        self.a3, self.a4, self.a5 = np.linalg.solve(matrix, vector)
-
-    def position(self, time):
-        return (
-            self.a0
-            + self.a1 * time
-            + self.a2 * time**2
-            + self.a3 * time**3
-            + self.a4 * time**4
-            + self.a5 * time**5
-        )
-
-    def first_derivative(self, time):
-        return (
-            self.a1
-            + 2.0 * self.a2 * time
-            + 3.0 * self.a3 * time**2
-            + 4.0 * self.a4 * time**3
-            + 5.0 * self.a5 * time**4
-        )
-
-    def second_derivative(self, time):
-        return (
-            2.0 * self.a2
-            + 6.0 * self.a3 * time
-            + 12.0 * self.a4 * time**2
-            + 20.0 * self.a5 * time**3
-        )
-
-    def third_derivative(self, time):
-        return 6.0 * self.a3 + 24.0 * self.a4 * time + 60.0 * self.a5 * time**2
 
 
 class QuarticLateralPolynomial:
@@ -142,10 +88,6 @@ class QuarticLateralPolynomial:
             + 6.0 * self.a3 * time
             + 12.0 * self.a4 * time**2
         )
-
-    def third_derivative(self, time):
-        return 6.0 * self.a3 + 24.0 * self.a4 * time
-
 
 class PeriodicReference:
     """Periodic cubic-spline representation of a closed racing line."""
@@ -230,11 +172,9 @@ class FrenetPath:
         self.d = []
         self.d_d = []
         self.d_dd = []
-        self.d_ddd = []
         self.s = []
         self.s_d = []
         self.s_dd = []
-        self.s_ddd = []
         self.x = []
         self.y = []
         self.yaw = []
@@ -337,7 +277,7 @@ def _frenet_to_cartesian(reference, path):
 
 
 class TrajectoryTracker:
-    """Speed-adaptive lookahead tracker retained after controller validation."""
+    """Track planned trajectories with pure pursuit."""
 
     def __init__(self, configuration):
         self.min_lookahead = configuration.min_lookahead
@@ -578,11 +518,9 @@ class FrenetOptimalTrajectoryPlanner:
             )
             path.s_d.append(course_speed_at_time)
             path.s_dd.append(course_acceleration)
-            path.s_ddd.append(0.0)
             path.d.append(lateral.position(time))
             path.d_d.append(lateral_derivative)
             path.d_dd.append(lateral_second)
-            path.d_ddd.append(lateral.third_derivative(time))
 
         _frenet_to_cartesian(self.reference, path)
         if len(path.x) != len(path.time):
@@ -813,26 +751,12 @@ class FrenetOptimalTrajectoryPlanner:
         )
         return max(violations)
 
-    def _best_effort_path(self, paths, obstacle_tree):
-        ranked_paths = sorted(paths, key=self._dynamic_violation)
-        for path in ranked_paths:
-            if len(path.x) < 2:
-                continue
-            collision_distances = self._collision_distances(
-                path, obstacle_tree
-            )
-            if np.all(
-                collision_distances >= self.conf.hard_collision_distance
-            ):
-                return path
-        return None
+    def _best_effort_path(self, paths):
+        return min(paths, key=self._dynamic_violation) if paths else None
 
     def _collision_distances(self, path, obstacle_tree):
-        future_point_count = max(len(path.x) - 1, 0)
         if obstacle_tree is None:
-            return np.full(future_point_count, math.inf)
-        if future_point_count == 0:
-            return np.empty(0)
+            return np.full(len(path.x) - 1, math.inf)
         future_points = np.column_stack(
             (
                 np.asarray(path.x)[1:],
@@ -846,8 +770,6 @@ class FrenetOptimalTrajectoryPlanner:
         best_path = None
         best_cost = math.inf
         for path in paths:
-            if len(path.x) < 2:
-                continue
             future_velocity = np.clip(
                 np.asarray(path.velocity)[1:],
                 0.0,
@@ -857,10 +779,6 @@ class FrenetOptimalTrajectoryPlanner:
             collision_distances = self._collision_distances(
                 path, obstacle_tree
             )
-            if np.any(
-                collision_distances < self.conf.hard_collision_distance
-            ):
-                continue
             normalized_deficits = np.maximum(
                 0.0,
                 1.0
@@ -910,12 +828,9 @@ class FrenetOptimalTrajectoryPlanner:
             )
             path = self._best_effort_path(
                 best_effort_paths,
-                obstacle_tree,
             )
-        if path is None or len(path.x) < 2:
-            raise RuntimeError(
-                "FOT produced no collision-safe trajectory"
-            )
+        if path is None:
+            raise RuntimeError("FOT produced no usable trajectory")
 
         trajectory = np.zeros((len(path.x), 5))
         trajectory[:, 0] = path.x

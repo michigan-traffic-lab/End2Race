@@ -16,12 +16,9 @@ training:
 vehicle:
   steering_limit: 0.52
   maximum_speed: 7.5
-  wheelbase: 0.33
-  length: 0.51
   width: 0.31
   mass: 3.362
   drag_coefficient: 0.0075
-  gravity: 9.81
 
 expert:
   tracker_steps: 10
@@ -34,9 +31,8 @@ expert:
   max_acceleration: 7.51
   max_lateral_acceleration: 10.29
   max_curvature: 1.35
-  hard_collision_distance: 0.25
   soft_collision_clearance: 0.5
-  collision_cost_weight: 2.0
+  collision_cost_weight: 4.5
   collision_cost_power: 2.0
   min_lookahead: 0.5
   max_lookahead: 2.5

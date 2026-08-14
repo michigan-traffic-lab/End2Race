@@ -39,10 +39,9 @@ end2race/
 
 ## Configuration
 
-Three YAML files hold shared project, localization, and track-tool settings. Workflow settings stay with the scripts that own their execution:
+Two YAML files hold shared project and track-tool settings. Workflow settings stay with the scripts that own their execution:
 
 - `config.yaml`: model, training, vehicle, and expert-planner settings
-- `localization/config.yaml`: particle-filter localization
 - `f1tenth_racetracks/config.yaml`: raceline generation and track maintenance tools
 
 Unknown, removed, or missing configuration keys are rejected.
@@ -98,7 +97,7 @@ Evaluates the model in competitive racing scenarios against an expert opponent. 
 
 
 ```bash
-python eval_multi.py Austin checkpoint_00100.pt 0 raceline1 0.5 8.0 0.0 42 false
+python eval_multi.py Austin checkpoint/checkpoint_00100.pt 0 raceline1 0.8 8.0 0.0 42 false
 ```
 
 The required inputs are track, checkpoint, ego waypoint index, opponent raceline, opponent speed scale, evaluation duration, LiDAR noise ratio, seed, and rendering flag. `eval_multi.sh` owns these evaluation settings for batch runs.
@@ -117,20 +116,20 @@ bash eval_multi.sh
 Collect one explicit competitive-racing scenario with:
 
 ```bash
-python collect.py Austin Dataset_Austin 0 15 raceline1 0.8 8.0 0.1 6300 true
+python collect.py Austin Dataset_Austin 0 15 raceline1 0.8 8.0 0.1 true
 ```
 
-The required inputs are track, output dataset directory, ego waypoint index, opponent interval, opponent raceline, opponent speed scale, collection duration, sample interval, seed, and rendering flag. To run the complete parallel collection matrix and wait for every scenario:
+The required inputs are track, output dataset directory, ego waypoint index, opponent interval, opponent raceline, opponent speed scale, collection duration, sample interval, and rendering flag. To run the complete parallel collection matrix and wait for every scenario:
 
 ```bash
 bash collect.sh
 ```
 
-`collect.sh` owns the output dataset directory and all batch collection settings. The current Austin batch runs 50 ego starting points against three opponent racelines at waypoint interval `15` and speed scales `0.4`, `0.6`, `0.8`, and `1.0`, with 8 seconds per scenario: 600 scenarios total.
+`collect.sh` owns the output dataset directory and all batch collection settings. The current Austin batch runs 80 ego starting points against three opponent racelines at waypoint interval `15` and speed scales `0.4`, `0.6`, and `0.8`, with 8 seconds per scenario: 720 scenarios total.
 
-Each training row stores the measured ego speed, expert steering and desired-speed targets, and 180 LiDAR values. Training keeps every row: the first row uses its measured speed as the initial speed input, and later rows use the preceding measured speed. The ego FOT expert projects the current LiDAR scan into occupied points and balances clearance against speed over every point on each dynamically feasible trajectory; the non-reactive opponent tracks its assigned raceline. Every velocity choice produces a physically distinct trajectory over the candidate horizon, and generated speeds are bounded by 8.0 m/s.
+Each training row stores the measured ego speed, expert steering and desired-speed targets, and 180 LiDAR values. Training keeps every row: the first row uses its measured speed as the initial speed input, and later rows use the preceding measured speed. The ego FOT expert projects the current LiDAR scan into occupied points and selects among dynamically feasible trajectories using mean velocity cost and worst-point clearance cost; the non-reactive opponent tracks its assigned raceline. Every velocity choice produces a physically distinct trajectory over the candidate horizon, and generated speeds are bounded by 7.5 m/s.
 
-Every collection and evaluation scenario initializes the ego at 50% of its 8.0 m/s maximum speed (4.0 m/s). A multi-agent opponent starts at its local raceline speed multiplied by the scenario's opponent speed scale. Subsequent acceleration and braking are determined by each controller.
+Every collection and evaluation scenario initializes the ego at 50% of its 7.5 m/s maximum speed (3.75 m/s). A multi-agent opponent starts at its local raceline speed multiplied by the scenario's opponent speed scale. Subsequent acceleration and braking are determined by each controller.
 
 ## Training
 Trains the End2Race model using imitation learning on collected demonstrations.
@@ -139,7 +138,7 @@ Trains the End2Race model using imitation learning on collected demonstrations.
 python train.py Dataset_Austin
 ```
 
-The command selects the input dataset, while the training section contains only optimization settings. Adam uses the configured learning rate for every epoch. Every epoch is saved as `checkpoint_00001.pt`, `checkpoint_00002.pt`, and so on; the evaluation orchestrators explicitly select which checkpoint to load.
+The command selects the input dataset, while the training section contains only optimization settings. Adam uses the configured learning rate for every epoch. Every epoch is saved directly under `checkpoint/` as `checkpoint_00001.pt`, `checkpoint_00002.pt`, and so on; the evaluation orchestrators explicitly select which checkpoint to load.
 
 ## Model Architecture
 

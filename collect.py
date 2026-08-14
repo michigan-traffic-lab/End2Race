@@ -19,7 +19,7 @@ from utils import (
     downsample_lidar,
     find_opponent_start_index,
     project_point_to_centerline,
-    random_position,
+    raceline_pose,
     require_end2race_runtime,
     unwrap_progress,
 )
@@ -38,7 +38,6 @@ class CollectionScenario:
     opponent_speed_scale: float
     sim_duration: float
     sample_interval: float
-    seed: int
     render: bool
 
 
@@ -108,8 +107,6 @@ def save_data(
 
 
 def collect_scenario(vehicle, scenario):
-    rng = np.random.default_rng(scenario.seed)
-
     ego_planner, config_directory = create_expert_planner(
         scenario.map_name, EGO_RACELINE
     )
@@ -141,9 +138,7 @@ def collect_scenario(vehicle, scenario):
     ego_waypoints_xytheta = np.column_stack(
         (ego_planner.waypoints[:, :2], ego_planner.waypoints[:, 3])
     )
-    ego_position, _ = random_position(
-        ego_waypoints_xytheta, 1, rng, 0.0, 0.0, scenario.ego_idx, 0
-    )
+    ego_position = raceline_pose(ego_waypoints_xytheta, scenario.ego_idx)
     opponent_waypoints_xytheta = np.column_stack(
         (
             opponent_planner.waypoints[:, :2],
@@ -156,9 +151,7 @@ def collect_scenario(vehicle, scenario):
         scenario.ego_idx,
         scenario.interval_idx,
     )
-    opponent_pos, _ = random_position(
-        opponent_waypoints_xytheta, 1, rng, 0.0, 0.0, opponent_idx, 0
-    )
+    opponent_pos = raceline_pose(opponent_waypoints_xytheta, opponent_idx)
     agent_positions = np.vstack([ego_position, opponent_pos])
     initial_velocities = np.array(
         [
@@ -288,7 +281,7 @@ def collect_scenario(vehicle, scenario):
                 else "following"
             )
 
-            if np.any(obs["collisions"]):
+            if obs["collisions"][0]:
                 done = True
                 collision_occurred = True
 
@@ -349,15 +342,15 @@ def collect_scenario(vehicle, scenario):
 
 def main():
     require_end2race_runtime()
-    if len(sys.argv) != 11:
+    if len(sys.argv) != 10:
         raise SystemExit(
             "Usage: python collect.py "
             "<map_name> <dataset_dir> <ego_idx> <interval_idx> "
             "<opponent_raceline> <opponent_speed_scale> <sim_duration> "
-            "<sample_interval> <seed> <render:true|false>"
+            "<sample_interval> <render:true|false>"
         )
 
-    render_value = sys.argv[10]
+    render_value = sys.argv[9]
     if render_value not in {"true", "false"}:
         raise ValueError("render must be true or false")
     scenario = CollectionScenario(
@@ -369,7 +362,6 @@ def main():
         opponent_speed_scale=float(sys.argv[6]),
         sim_duration=float(sys.argv[7]),
         sample_interval=float(sys.argv[8]),
-        seed=int(sys.argv[9]),
         render=render_value == "true",
     )
     if (
