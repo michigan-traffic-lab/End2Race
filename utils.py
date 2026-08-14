@@ -80,6 +80,8 @@ def find_opponent_start_index(
     interval_idx,
 ):
     """Map an ego start onto another raceline and apply a waypoint gap."""
+    ego_waypoints = ego_waypoints[:-1]
+    opponent_waypoints = opponent_waypoints[:-1]
     normalized_ego_idx = ego_idx % len(ego_waypoints)
     mapped_idx = find_corresponding_waypoint(
         ego_waypoints[normalized_ego_idx],
@@ -282,7 +284,12 @@ def get_ego_idx_range(map_name, ego_raceline, num_startpoints):
     raceline_path = os.path.join(
         "f1tenth_racetracks", map_name, f"{ego_raceline}.csv"
     )
-    waypoint_count = len(np.loadtxt(raceline_path, delimiter=";", skiprows=1))
-    return np.linspace(
-        0, waypoint_count - 1, num_startpoints, dtype=int
-    ).tolist()
+    waypoints = np.loadtxt(raceline_path, delimiter=";", skiprows=1, ndmin=2)
+    if np.linalg.norm(waypoints[-1, 1:3] - waypoints[0, 1:3]) > 1e-9:
+        raise ValueError(f"{raceline_path} must repeat its first waypoint at the end")
+    unique_waypoints = waypoints[:-1]
+    track_length = waypoints[-1, 0]
+    targets = np.arange(num_startpoints) * track_length / num_startpoints
+    progress_delta = np.abs(unique_waypoints[:, None, 0] - targets[None, :])
+    progress_delta = np.minimum(progress_delta, track_length - progress_delta)
+    return np.argmin(progress_delta, axis=0).astype(int).tolist()
