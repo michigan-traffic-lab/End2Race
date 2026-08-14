@@ -7,14 +7,14 @@ model:
   lidar_normalization_k: 0.3
 
 training:
-  batch_size: 128
+  batch_size: 1024
   learning_rate: 0.001
-  num_epochs: 100
+  num_epochs: 2000
   speed_loss_weight: 0.05
   gradient_clip_norm: 1.0
 
 vehicle:
-  steering_limit: 0.52
+  steering_limit: 0.4189
   maximum_speed: 7.5
   width: 0.31
   mass: 3.362

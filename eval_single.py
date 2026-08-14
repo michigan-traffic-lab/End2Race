@@ -1,4 +1,4 @@
-import sys
+import argparse
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -24,11 +24,17 @@ from utils import (
     unwrap_progress,
 )
 
+EVALUATION_NOISE = 0.0
+EVALUATION_SEED = 42
+LAP_COUNT = 10
+START_INDEX = 0
+MINIMUM_LAP_TIME = 10.0
+
 
 @dataclass(frozen=True)
 class EvaluationSettings:
     map_name: str
-    checkpoint_path: str
+    checkpoint_path: Path
     noise: float
     seed: int
     render: bool
@@ -58,11 +64,10 @@ def evaluate_laps(model, device, vehicle, settings):
         noise_str = (
             f"_noise{int(settings.noise * 100)}" if settings.noise > 0 else ""
         )
-        lap_str = f"_lap{settings.lap_num}"
-        video_dir = Path("eval_results") / f"{model_name}{noise_str}{lap_str}"
+        video_dir = Path("eval_results") / f"{model_name}{noise_str}"
         video_dir.mkdir(parents=True, exist_ok=True)
         video_path = video_dir / (
-            f"{model_name}_{settings.map_name}{noise_str}{lap_str}.mp4"
+            f"{model_name}_{settings.map_name}{noise_str}.mp4"
         )
 
     render_info = {"speed": 0.0, "steer": 0.0, "lap_time": 0.0, "laps": 0}
@@ -260,42 +265,30 @@ def evaluate_laps(model, device, vehicle, settings):
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("map_name")
+    parser.add_argument("--render", action="store_true")
+    arguments = parser.parse_args()
+
     require_end2race_runtime()
-    if len(sys.argv) != 9:
-        raise SystemExit(
-            "Usage: python eval_single.py "
-            "<map_name> <checkpoint_path> <noise> <seed> <render:true|false> "
-            "<lap_num> <start_idx> <minimum_lap_time>"
-        )
-
-    render_value = sys.argv[5]
-    if render_value not in {"true", "false"}:
-        raise ValueError("render must be true or false")
-    settings = EvaluationSettings(
-        map_name=sys.argv[1],
-        checkpoint_path=sys.argv[2],
-        noise=float(sys.argv[3]),
-        seed=int(sys.argv[4]),
-        render=render_value == "true",
-        lap_num=int(sys.argv[6]),
-        start_idx=int(sys.argv[7]),
-        minimum_lap_time=float(sys.argv[8]),
+    project = load_project_config()
+    checkpoint_path = Path("checkpoint") / (
+        f"checkpoint_{project.training.num_epochs:05d}.pt"
     )
-    if (
-        not settings.map_name
-        or not settings.checkpoint_path
-        or not 0 <= settings.noise <= 1
-        or settings.lap_num <= 0
-        or settings.start_idx < 0
-        or settings.minimum_lap_time <= 0
-    ):
-        raise ValueError(
-            "map_name and checkpoint_path must be nonempty, noise must be between "
-            "0 and 1, lap_num and minimum_lap_time must be positive, and "
-            "start_idx must be nonnegative"
-        )
+    if not checkpoint_path.is_file():
+        raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
 
-    vehicle = load_project_config().vehicle
+    settings = EvaluationSettings(
+        map_name=arguments.map_name,
+        checkpoint_path=checkpoint_path,
+        noise=EVALUATION_NOISE,
+        seed=EVALUATION_SEED,
+        render=arguments.render,
+        lap_num=LAP_COUNT,
+        start_idx=START_INDEX,
+        minimum_lap_time=MINIMUM_LAP_TIME,
+    )
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = End2Race().to(device)
     model.load_state_dict(
@@ -303,7 +296,7 @@ def main():
     )
     model.eval()
 
-    evaluate_laps(model, device, vehicle, settings)
+    evaluate_laps(model, device, project.vehicle, settings)
 
 
 if __name__ == "__main__":

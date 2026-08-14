@@ -10,7 +10,7 @@ python -c 'import sys; assert sys.version_info[:2] == (3, 11), "end2race require
 
 WORKERS=12
 MAP_NAME="Austin"
-CHECKPOINT_PATH="checkpoint/checkpoint_00100.pt"
+CHECKPOINT_PATH="checkpoint/checkpoint_01000.pt"
 EGO_RACELINE="raceline1"
 NUM_STARTPOINTS=80
 SIM_DURATION=8.0

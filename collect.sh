@@ -10,7 +10,7 @@ python -c 'import sys; assert sys.version_info[:2] == (3, 11), "end2race require
 
 WORKERS=12
 MAP_NAME="Austin"
-DATASET_DIR="Dataset_${MAP_NAME}"
+DATASET_DIR="dataset"
 EGO_RACELINE="raceline1"
 NUM_STARTPOINTS=80
 SIM_DURATION=8.0
@@ -80,6 +80,21 @@ echo "following: ${following}"
 echo "overtaking: ${overtaking}"
 echo "collisions: ${#collision_files[@]}"
 echo "failures: ${failures}"
+if ! python summarize_dataset.py "$DATASET_DIR" \
+    --map-name "$MAP_NAME" \
+    --ego-raceline "$EGO_RACELINE" \
+    --num-startpoints "$NUM_STARTPOINTS" \
+    --sim-duration "$SIM_DURATION" \
+    --sample-interval "$SAMPLE_INTERVAL" \
+    --render "$RENDER" \
+    --interval-index "$INTERVAL_INDEX" \
+    --workers "$WORKERS" \
+    --opponent-racelines "${OPPONENT_RACELINES[@]}" \
+    --opponent-speed-scales "${OPPONENT_SPEED_SCALES[@]}" \
+    --collection-failures "$failures"; then
+    echo "Failed to generate ${DATASET_DIR}/summary.json" >&2
+    exit 1
+fi
 if (( failures > 0 )); then
     exit 1
 fi

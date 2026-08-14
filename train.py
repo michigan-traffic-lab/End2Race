@@ -1,4 +1,3 @@
-import sys
 from pathlib import Path
 
 import numpy as np
@@ -14,6 +13,7 @@ from model import End2Race
 from utils import require_end2race_runtime
 
 CHECKPOINT_DIRECTORY = Path("checkpoint")
+DATASET_DIRECTORY = Path("dataset")
 
 
 class SequenceDataset(Dataset):
@@ -153,23 +153,20 @@ def train(model, train_loader, criterion, optimizer, config):
         avg_loss = total_loss / len(train_loader)
         print(f"Epoch {epoch + 1}/{config.num_epochs}, Loss: {avg_loss:.5f}")
 
-        checkpoint_path = (
-            CHECKPOINT_DIRECTORY / f"checkpoint_{epoch + 1:05d}.pt"
-        )
-        torch.save(model.state_dict(), checkpoint_path)
-        print(f"Checkpoint saved to {checkpoint_path}")
+    checkpoint_path = (
+        CHECKPOINT_DIRECTORY / f"checkpoint_{config.num_epochs:05d}.pt"
+    )
+    torch.save(model.state_dict(), checkpoint_path)
+    print(f"Checkpoint saved to {checkpoint_path}")
 
 
 def main():
     require_end2race_runtime()
-    if len(sys.argv) != 2:
-        raise SystemExit("Usage: python train.py <dataset_dir>")
-
     config = load_project_config().training
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
-    data_path = Path(sys.argv[1]) / "success"
+    data_path = DATASET_DIRECTORY / "success"
     dataset = SequenceDataset(data_path)
 
     train_loader = DataLoader(

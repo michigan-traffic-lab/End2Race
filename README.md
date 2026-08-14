@@ -86,10 +86,10 @@ The evaluation is conducted using the [F1Tenth Gym simulator](https://github.com
 Evaluates the model's lap completion ability across different track configurations, testing its robustness to varying track layouts and racing line complexities without opponent interaction.
 
 ```bash
-bash eval_single.sh
+python eval_single.py Austin --render
 ```
 
-`eval_single.sh` owns the checkpoint, track, noise, rendering, seed, lap count, start index, and minimum lap time and passes them to `eval_single.py`.
+The track is the only required argument. Add `--render` to save a video, or omit it for evaluation without rendering. The evaluator automatically loads the final checkpoint corresponding to `training.num_epochs`; all other evaluation settings are internal constants.
 
 ### Multi-Agent Evaluation
 
@@ -97,7 +97,7 @@ Evaluates the model in competitive racing scenarios against an expert opponent. 
 
 
 ```bash
-python eval_multi.py Austin checkpoint/checkpoint_00100.pt 0 raceline1 0.8 8.0 0.0 42 false
+python eval_multi.py Austin checkpoint/checkpoint_01000.pt 0 raceline1 0.8 8.0 0.0 42 false
 ```
 
 The required inputs are track, checkpoint, ego waypoint index, opponent raceline, opponent speed scale, evaluation duration, LiDAR noise ratio, seed, and rendering flag. `eval_multi.sh` owns these evaluation settings for batch runs.
@@ -116,7 +116,7 @@ bash eval_multi.sh
 Collect one explicit competitive-racing scenario with:
 
 ```bash
-python collect.py Austin Dataset_Austin 0 15 raceline1 0.8 8.0 0.1 true
+python collect.py Austin dataset 0 15 raceline1 0.8 8.0 0.1 true
 ```
 
 The required inputs are track, output dataset directory, ego waypoint index, opponent interval, opponent raceline, opponent speed scale, collection duration, sample interval, and rendering flag. To run the complete parallel collection matrix and wait for every scenario:
@@ -127,6 +127,8 @@ bash collect.sh
 
 `collect.sh` owns the output dataset directory and all batch collection settings. The current Austin batch runs 80 ego starting points against three opponent racelines at waypoint interval `15` and speed scales `0.4`, `0.6`, and `0.8`, with 8 seconds per scenario: 720 scenarios total.
 
+After all collection workers finish, `collect.sh` writes `dataset/summary.json`. The summary snapshots the collection, vehicle, and expert configuration; reports collision-free, collision, overtaking, and following outcomes; counts training rows and artifacts; and provides a breakdown by opponent raceline and speed scale. It is generated from the saved CSV and collision metadata, so a partial collection also retains a summary before `collect.sh` reports a worker failure.
+
 Each training row stores the measured ego speed, expert steering and desired-speed targets, and 180 LiDAR values. Training keeps every row: the first row uses its measured speed as the initial speed input, and later rows use the preceding measured speed. The ego FOT expert projects the current LiDAR scan into occupied points and selects among dynamically feasible trajectories using mean velocity cost and worst-point clearance cost; the non-reactive opponent tracks its assigned raceline. Every velocity choice produces a physically distinct trajectory over the candidate horizon, and generated speeds are bounded by 7.5 m/s.
 
 Every collection and evaluation scenario initializes the ego at 50% of its 7.5 m/s maximum speed (3.75 m/s). A multi-agent opponent starts at its local raceline speed multiplied by the scenario's opponent speed scale. Subsequent acceleration and braking are determined by each controller.
@@ -135,10 +137,10 @@ Every collection and evaluation scenario initializes the ego at 50% of its 7.5 m
 Trains the End2Race model using imitation learning on collected demonstrations.
 
 ```bash
-python train.py Dataset_Austin
+python train.py
 ```
 
-The command selects the input dataset, while the training section contains only optimization settings. Adam uses the configured learning rate for every epoch. Every epoch is saved directly under `checkpoint/` as `checkpoint_00001.pt`, `checkpoint_00002.pt`, and so on; the evaluation orchestrators explicitly select which checkpoint to load.
+Training reads successful demonstrations from `dataset/success/`, while the training section contains only optimization settings. Adam uses the configured learning rate for every epoch. After the final epoch, the model is saved directly under `checkpoint/` as `checkpoint_01000.pt`; the evaluation orchestrators explicitly select this checkpoint.
 
 ## Model Architecture
 
