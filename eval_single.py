@@ -8,7 +8,6 @@ import numpy as np
 import torch
 from f110_gym.envs.base_classes import Integrator
 
-from config import load_project_config
 from model import End2Race
 from utils import (
     SIMULATION_STEPS_PER_CONTROL,
@@ -18,6 +17,7 @@ from utils import (
     calculate_metrics,
     create_single_agent_render_callback,
     downsample_lidar,
+    load_racetrack_config,
     load_raceline_start,
     mask_lidar_points,
     project_point_to_centerline,
@@ -280,7 +280,7 @@ def main():
     arguments = parser.parse_args()
 
     require_end2race_runtime()
-    project = load_project_config()
+    vehicle = load_racetrack_config().vehicle
     checkpoint_path = arguments.checkpoint_path
     if not checkpoint_path.is_file():
         raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
@@ -305,7 +305,7 @@ def main():
 
     raise SystemExit(
         0
-        if evaluate_laps(model, device, project.vehicle, settings)
+        if evaluate_laps(model, device, vehicle, settings)
         else 1
     )
 

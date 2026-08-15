@@ -8,8 +8,7 @@ import numpy as np
 import torch
 from f110_gym.envs.base_classes import Integrator
 
-from config import load_project_config
-from expert import create_opponent
+from latticeplanner.lattice_planner import create_opponent
 from utils import (
     SIMULATION_STEPS_PER_CONTROL,
     EGO_INITIAL_SPEED_FRACTION,
@@ -19,6 +18,7 @@ from utils import (
     create_multiagent_render_callback,
     downsample_lidar,
     find_opponent_start_index,
+    load_racetrack_config,
     load_raceline,
     mask_lidar_points,
     project_point_to_centerline,
@@ -340,7 +340,7 @@ def main():
             "and noise must be between 0 and 1"
         )
 
-    vehicle = load_project_config().vehicle
+    vehicle = load_racetrack_config().vehicle
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = End2Race().to(device)
     model.load_state_dict(

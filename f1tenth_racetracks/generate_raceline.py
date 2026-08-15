@@ -1,6 +1,7 @@
 import csv
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import cv2
 import matplotlib.pyplot as plt
@@ -9,11 +10,7 @@ import trajectory_planning_helpers as tph
 import yaml
 from scipy import interpolate
 
-from config import (
-    load_project_config,
-    load_racetrack_config,
-    merge_config_sections,
-)
+from utils import load_racetrack_config
 
 
 def spline_distance(t_glob, path, point):
@@ -326,11 +323,10 @@ def generate_raceline(lane_data, config, module):
 
 def main():
     module = Path(__file__).resolve().parent
-    project = load_project_config()
     racetrack = load_racetrack_config()
-    config = merge_config_sections(
-        racetrack,
-        project.vehicle,
+    config = SimpleNamespace(
+        **vars(racetrack.track),
+        **vars(racetrack.vehicle),
     )
     map_dir = module / config.map_name
     map_dir.mkdir(exist_ok=True)

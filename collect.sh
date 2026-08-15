@@ -15,6 +15,10 @@ EGO_RACELINE="raceline1"
 NUM_STARTPOINTS=80
 SIM_DURATION=8.0
 RENDER=false
+RENDER_FLAG=()
+if [[ "$RENDER" == true ]]; then
+    RENDER_FLAG=(--render)
+fi
 OPPONENT_RACELINES=(raceline0 raceline1 raceline2)
 OPPONENT_SPEED_SCALES=(0.4 0.6 0.8)
 INTERVAL_INDEX=15
@@ -104,10 +108,12 @@ for opponent_raceline in "${OPPONENT_RACELINES[@]}"; do
                 fi
                 sleep 0.1
             done
-            python collect.py \
-                "$MAP_NAME" "$DATASET_DIR" "$ego_idx" "$INTERVAL_INDEX" \
-                "$opponent_raceline" "$opponent_speed_scale" \
-                "$SIM_DURATION" "$RENDER" \
+            python expert.py \
+                --map_name "$MAP_NAME" --dataset_dir "$DATASET_DIR" \
+                --ego_idx "$ego_idx" --interval_idx "$INTERVAL_INDEX" \
+                --opponent_raceline "$opponent_raceline" \
+                --opponent_speed_scale "$opponent_speed_scale" \
+                --sim_duration "$SIM_DURATION" "${RENDER_FLAG[@]}" \
                 >/dev/null &
             pids+=("$!")
         done
@@ -129,35 +135,168 @@ for pid in "${pids[@]}"; do
     fi
 done
 
-success_files=("$DATASET_DIR"/success/*.csv)
-collision_files=("$DATASET_DIR"/collision/*.json)
-following=0
-for path in "${success_files[@]}"; do
-    if [[ $(basename "$path") == f_* ]]; then
-        ((following += 1))
-    fi
-done
-overtaking=$((${#success_files[@]} - following))
+python - "$DATASET_DIR" "$MAP_NAME" "$EGO_RACELINE" "$NUM_STARTPOINTS" \
+    "$SIM_DURATION" "$RENDER" "$INTERVAL_INDEX" "$WORKERS" "$failures" \
+    "${OPPONENT_RACELINES[*]}" "${OPPONENT_SPEED_SCALES[*]}" <<'PY' || exit 1
+import json
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
 
-echo "Collection finished"
-echo "following: ${following}"
-echo "overtaking: ${overtaking}"
-echo "collisions: ${#collision_files[@]}"
-echo "failures: ${failures}"
-if ! python summarize_dataset.py "$DATASET_DIR" \
-    --map-name "$MAP_NAME" \
-    --ego-raceline "$EGO_RACELINE" \
-    --num-startpoints "$NUM_STARTPOINTS" \
-    --sim-duration "$SIM_DURATION" \
-    --render "$RENDER" \
-    --interval-index "$INTERVAL_INDEX" \
-    --workers "$WORKERS" \
-    --opponent-racelines "${OPPONENT_RACELINES[@]}" \
-    --opponent-speed-scales "${OPPONENT_SPEED_SCALES[@]}" \
-    --collection-failures "$failures"; then
-    echo "Failed to generate ${DATASET_DIR}/summary.json" >&2
-    exit 1
-fi
+from latticeplanner.lattice_planner import load_lattice_config
+from model import End2Race
+from utils import (
+    CONTROL_FREQUENCY_HZ,
+    EXPERT_PLANNER_FREQUENCY_HZ,
+    SIMULATION_FREQUENCY_HZ,
+    load_racetrack_config,
+)
+
+(
+    dataset_dir,
+    map_name,
+    ego_raceline,
+    num_startpoints,
+    sim_duration,
+    render,
+    interval_index,
+    workers,
+    failures,
+    racelines,
+    speed_scales,
+) = sys.argv[1:]
+dataset_dir = Path(dataset_dir)
+num_startpoints = int(num_startpoints)
+sim_duration = float(sim_duration)
+render = render == "true"
+interval_index = int(interval_index)
+workers = int(workers)
+failures = int(failures)
+opponent_racelines = racelines.split()
+opponent_speed_scales = [float(scale) for scale in speed_scales.split()]
+
+success_dir = dataset_dir / "success"
+collision_dir = dataset_dir / "collision"
+success_paths = list(success_dir.glob("*.csv"))
+collision_paths = list(collision_dir.glob("*.json"))
+
+
+def episode(path, outcome):
+    state, raceline, ego_idx, _, _, speed_scale = path.stem.split("_")
+    return {
+        "outcome": outcome,
+        "final_state": "overtaking" if state == "o" else "following",
+        "opponent_raceline": f"raceline{raceline[2:]}",
+        "ego_idx": int(ego_idx[1:]),
+        "speed_scale": float(speed_scale[1:]),
+    }
+
+
+def percentage(numerator, denominator):
+    if denominator == 0:
+        return 0.0
+    return round(100.0 * numerator / denominator, 4)
+
+
+def tally(episodes):
+    collision_free = [
+        item for item in episodes if item["outcome"] == "collision_free"
+    ]
+    overtakes = sum(
+        item["final_state"] == "overtaking" for item in collision_free
+    )
+    return {
+        "recorded_scenarios": len(episodes),
+        "collision_free_scenarios": len(collision_free),
+        "collision_scenarios": len(episodes) - len(collision_free),
+        "successful_overtakes": overtakes,
+        "collision_free_following": len(collision_free) - overtakes,
+        "collision_free_rate_percent": percentage(
+            len(collision_free), len(episodes)
+        ),
+        "successful_overtake_rate_percent": percentage(
+            overtakes, len(episodes)
+        ),
+    }
+
+
+episodes = [episode(path, "collision_free") for path in success_paths] + [
+    episode(path, "collision") for path in collision_paths
+]
+results = tally(episodes)
+summary = {
+    "generated_at_utc": datetime.now(timezone.utc)
+    .isoformat(timespec="seconds")
+    .replace("+00:00", "Z"),
+    "collection_config": {
+        "mode": "multi_agent",
+        "map_name": map_name,
+        "ego_raceline": ego_raceline,
+        "num_startpoints": num_startpoints,
+        "ego_indices": sorted({item["ego_idx"] for item in episodes}),
+        "opponent_racelines": opponent_racelines,
+        "opponent_speed_scales": opponent_speed_scales,
+        "interval_index": interval_index,
+        "simulation_duration_seconds": sim_duration,
+        "simulation_frequency_hz": SIMULATION_FREQUENCY_HZ,
+        "control_frequency_hz": CONTROL_FREQUENCY_HZ,
+        "expert_planner_frequency_hz": EXPERT_PLANNER_FREQUENCY_HZ,
+        "render": render,
+        "workers": workers,
+    },
+    "data_config": {
+        "lidar_features": End2Race.NUM_LIDAR_FEATURES,
+        "csv_columns": 4 + End2Race.NUM_LIDAR_FEATURES,
+        "vehicle": vars(load_racetrack_config().vehicle),
+        "expert": vars(load_lattice_config().expert),
+    },
+    "results": {
+        "expected_scenarios": num_startpoints
+        * len(opponent_racelines)
+        * len(opponent_speed_scales),
+        "collection_process_failures": failures,
+        **results,
+        "collisions_while_overtaking": sum(
+            item["final_state"] == "overtaking"
+            for item in episodes
+            if item["outcome"] == "collision"
+        ),
+        "training_rows": sum(
+            sum(1 for _ in path.open(encoding="utf-8")) - 1
+            for path in success_paths
+        ),
+        "success_videos": len(list(success_dir.glob("*.mp4"))),
+        "collision_videos": len(list(collision_dir.glob("*.mp4"))),
+        "breakdown": [
+            {
+                "opponent_raceline": raceline,
+                "opponent_speed_scale": speed_scale,
+                **tally(
+                    [
+                        item
+                        for item in episodes
+                        if item["opponent_raceline"] == raceline
+                        and item["speed_scale"] == speed_scale
+                    ]
+                ),
+            }
+            for raceline in opponent_racelines
+            for speed_scale in opponent_speed_scales
+        ],
+    },
+}
+
+summary_path = dataset_dir / "summary.json"
+summary_path.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
+
+print("Collection finished")
+print(f"following: {results['collision_free_following']}")
+print(f"overtaking: {results['successful_overtakes']}")
+print(f"collisions: {results['collision_scenarios']}")
+print(f"failures: {failures}")
+print(f"Dataset summary saved to {summary_path}")
+PY
+
 if (( stopped_early )); then
     exit 2
 fi

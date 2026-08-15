@@ -20,33 +20,34 @@ https://github.com/user-attachments/assets/5369f5ea-13fa-44c3-a6aa-5b3c2b59b10c
 ## Code Structure
 ```
 end2race/
-├── config.yaml                # Shared project configuration
 ├── f1tenth_gym/               # F1Tenth simulator environment
 ├── f1tenth_racetracks/        # Track data with pre-generated lanes and racelines
-│   ├── config.yaml            # Racetrack tool configuration
+│   ├── config.yaml            # Track and vehicle configuration
 │   └── generate_raceline.py   # Raceline generation tool
-├── expert.py                  # PythonRobotics FOT expert and trajectory tracker
+├── latticeplanner/
+│   ├── lattice_config.yaml    # Expert-planner configuration
+│   └── lattice_planner.py     # PythonRobotics FOT expert and trajectory tracker
+├── expert.py                  # One multi-agent expert collection scenario
 ├── model.py                   # GRU network architecture
 ├── train.py                   # Training script
-├── collect.py                 # One expert-data collection scenario
-├── collect.sh                 # Parallel collection orchestrator
+├── collect.sh                 # Parallel collection orchestrator and dataset summary
 ├── eval_single.py             # One single-agent lap evaluation
-├── eval_single.sh             # Single-agent evaluation orchestrator
 ├── eval_multi.py              # One multi-agent racing evaluation
 ├── eval_multi.sh              # Parallel multi-agent orchestrator
-└── utils.py                   # Shared utility functions
+└── utils.py                   # Shared utilities and configuration loading
 ```
 
 ## Configuration
 
-Two YAML files hold shared project and track-tool settings. Workflow settings stay with the scripts that own their execution:
+Two YAML files hold planner and track-tool settings. Workflow settings stay with the scripts that own their execution:
 
-- `config.yaml`: model, training, vehicle, and expert-planner settings
-- `f1tenth_racetracks/config.yaml`: raceline generation and track maintenance tools
+- `latticeplanner/lattice_config.yaml`: the `expert` section of planner and tracker settings
+- `f1tenth_racetracks/config.yaml`: a `track` section for raceline generation and a
+  `vehicle` section shared by the expert, the evaluators, and the raceline tool
 
-Unknown, removed, or missing configuration keys are rejected. Physics runs at
-120 Hz, while LiDAR-driven FOT replanning, policy updates, and data collection
-run every third simulator step at exactly 40 Hz (25 ms), without interpolation.
+The model dimensions and preprocessing constants live with the model definition
+in `model.py`. Physics runs at 120 Hz, LiDAR-driven FOT replanning runs at
+10 Hz, and data collection runs at 40 Hz (25 ms).
 
 ## Environment Setup
 
@@ -87,10 +88,10 @@ The evaluation is conducted using the [F1Tenth Gym simulator](https://github.com
 Evaluates the model's lap completion ability across different track configurations, testing its robustness to varying track layouts and racing line complexities without opponent interaction.
 
 ```bash
-python eval_single.py Austin --render
+python eval_single.py Austin checkpoint/checkpoint.pt --render
 ```
 
-The track is the only required argument. Add `--render` to save a video, or omit it for evaluation without rendering. The evaluator automatically loads the final checkpoint corresponding to `training.num_epochs`; all other evaluation settings are internal constants.
+The track and checkpoint path are required arguments. Add `--render` to save a video, or omit it for evaluation without rendering. All other evaluation settings are internal constants.
 
 ### Multi-Agent Evaluation
 
@@ -98,7 +99,7 @@ Evaluates the model in competitive racing scenarios against an expert opponent. 
 
 
 ```bash
-python eval_multi.py Austin checkpoint/checkpoint_01000.pt 0 raceline1 0.8 8.0 0.0 42 false
+python eval_multi.py Austin checkpoint/checkpoint.pt 0 raceline1 0.8 8.0 0.0 42 false
 ```
 
 The required inputs are track, checkpoint, ego waypoint index, opponent raceline, opponent speed scale, evaluation duration, LiDAR noise ratio, seed, and rendering flag. `eval_multi.sh` owns these evaluation settings for batch runs.
@@ -117,10 +118,14 @@ bash eval_multi.sh
 Collect one explicit competitive-racing scenario with:
 
 ```bash
-python collect.py Austin dataset 0 15 raceline1 0.8 8.0 true
+python expert.py --map_name Austin --dataset_dir dataset --ego_idx 0 \
+  --interval_idx 15 --opponent_raceline raceline1 \
+  --opponent_speed_scale 0.8 --sim_duration 8.0 --render
 ```
 
-The required inputs are track, output dataset directory, ego waypoint index, opponent interval, opponent raceline, opponent speed scale, collection duration, and rendering flag. Collection runs 120 Hz physics, replans the FOT trajectory every 12th physics step (10 Hz), tracks the held trajectory at every physics step, and saves one live observation and aligned tracker action every third physics step (40 Hz). This produces exact 25 ms intervals without interpolation. To run the complete parallel collection matrix and wait for every scenario:
+These are the defaults except for `--render`, so the arguments may be omitted.
+
+Collection runs 120 Hz physics, replans the FOT trajectory every 12th physics step (10 Hz), tracks the held trajectory at every physics step, and saves one live observation and aligned tracker action every third physics step (40 Hz). This produces exact 25 ms intervals without interpolation. To run the complete parallel multi-agent collection matrix and wait for every scenario:
 
 ```bash
 bash collect.sh
@@ -128,7 +133,7 @@ bash collect.sh
 
 `collect.sh` owns the output dataset directory and all batch collection settings. The current Austin batch runs 80 ego starting points against three opponent racelines at waypoint interval `15` and speed scales `0.4`, `0.6`, and `0.8`, with 8 seconds per scenario: 720 scenarios total.
 
-After all collection workers finish, `collect.sh` writes `dataset/summary.json`. The summary snapshots the collection, vehicle, and expert configuration; reports collision-free, collision, overtaking, and following outcomes; counts training rows and artifacts; and provides a breakdown by opponent raceline and speed scale. It is generated from the saved CSV and collision metadata, so a partial collection also retains a summary before `collect.sh` reports a worker failure.
+After all collection workers finish, `collect.sh` prints the following, overtaking, collision, and worker-failure counts and writes `dataset/summary.json`. The summary snapshots the collection, vehicle, and expert configuration; reports collision-free, collision, overtaking, and following outcomes with their rates; counts training rows and saved videos; and provides a breakdown by opponent raceline and speed scale. It is generated from the saved CSV and collision metadata, so a partial collection also retains a summary before `collect.sh` reports a worker failure.
 
 Each training row stores the measured ego speed, expert steering and desired-speed targets, and 180 LiDAR values from the same decision instant. Training keeps every 40 Hz row: the first row uses its measured speed as the initial speed input, and later rows use the measured speed from the preceding 25 ms step. The ego FOT expert replans every 12th physics step from the corresponding LiDAR scan, projects that scan into occupied points, and selects among dynamically feasible trajectories using mean velocity cost and worst-point clearance cost; its tracker supplies the 40 Hz labels while following that held trajectory. The non-reactive opponent tracks its assigned raceline. Every velocity choice produces a physically distinct trajectory over the candidate horizon, and generated speeds are bounded by 7.5 m/s.
 
@@ -141,11 +146,23 @@ Trains the End2Race model using imitation learning on collected demonstrations.
 python train.py
 ```
 
-Training reads successful demonstrations from `dataset/success/`. It trains one model for up to 5,000 epochs, saving and evaluating a checkpoint every 500 epochs. Each checkpoint must complete one collision-free lap on Austin, Hockenheim, MoscowRaceway, and Nuerburgring in that order, then evaluate Austin's 720 multi-agent scenarios. That evaluation always completes at least 100 scenarios and stops early only if its aggregate collision rate then exceeds 20%. The first failure stops that checkpoint's remaining evaluation. A model that never passes is removed at 5,000 epochs; training tries at most 10 models. The usable checkpoint and resumable training state remain directly under `checkpoint/`.
+The main training parameters are command-line options:
+
+```bash
+python train.py \
+  --model_path checkpoint/checkpoint.pt \
+  --batch_size 1024 \
+  --learning_rate 0.001 \
+  --num_epochs 5000 \
+  --speed_loss_weight 0.05 \
+  --gradient_clip_norm 1.0
+```
+
+These are the defaults, so the arguments may be omitted. Training reads successful demonstrations from `dataset/success/`. It trains one model for up to `--num_epochs`, overwriting `--model_path` with the current model every 500 epochs and at the final epoch. Each saved model must complete one collision-free lap on Austin, Hockenheim, MoscowRaceway, and Nuerburgring in that order, then evaluate Austin's 720 multi-agent scenarios. That evaluation always completes at least 100 scenarios and stops early only if its aggregate collision rate then exceeds 20%. The first failure stops that model's remaining evaluation. A model that never passes is removed after the final epoch; training tries at most 10 models. The model and `training_state.pt` remain together without nested directories; by default both are directly under `checkpoint/`. Rerunning `train.py` with an existing `training_state.pt` resumes that model at its recorded epoch.
 
 ## Model Architecture
 
-The policy downsamples each full-circle simulator scan to 180 LiDAR values and applies one shared, fixed sigmoid normalization coefficient. The normalized LiDAR vector is concatenated with a 30-dimensional speed embedding, producing a 210-dimensional recurrent input. A single-layer GRU with 420 hidden units feeds an action head with dimensions `420 -> 128 -> 2`, which predicts steering and desired speed. During training, the speed embedding is replaced by a learned dummy embedding at 20% of timesteps.
+The policy downsamples each full-circle simulator scan to 180 LiDAR values and applies one shared, fixed sigmoid normalization coefficient. The normalized LiDAR vector is concatenated with a 30-dimensional speed embedding, producing a 210-dimensional recurrent input. A single-layer GRU with 420 hidden units feeds an action head with dimensions `420 -> 128 -> 2`, which predicts steering and desired speed. During training, the speed embedding is replaced by a learned dummy embedding at 20% of timesteps. All of these dimensions live as class attributes on `End2Race` in `model.py`.
 
 ## Raceline Generation (Optional)
 
@@ -155,7 +172,7 @@ Generate optimized racing lines for new tracks. First, upload the track map file
 python -m f1tenth_racetracks.generate_raceline
 ```
 
-Edit `f1tenth_racetracks/config.yaml` for track-specific generation settings. Shared vehicle parameters remain in the root `config.yaml` and are also reused by the expert.
+Edit `f1tenth_racetracks/config.yaml` for track-generation and shared vehicle settings. The expert and evaluation workflows reuse its `vehicle` section.
 
 The FOT implementation is adapted under the MIT license from [PythonRobotics](https://github.com/AtsushiSakai/PythonRobotics), pinned to commit `b38c510e083d69a5755d98d0680bd50f3d9a91fa`.
 

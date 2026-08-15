@@ -1,14 +1,22 @@
-map_name: Austin
-map_image_extension: .png
-num_lanes: 3
-side_lane_center_shift_fraction: 0.4
-clockwise: true
-inner_safe_distance: 0.3
-outer_safe_distance: 0.3
-preparation_step_size: 0.5
-regularization_step_size: 2.0
-interpolation_step_size: 0.2
-smoothing_regularization: 3
-smoothing_length: 0.0
-dynamic_model_exponent: 1.0
-velocity_filter_window: 31
+track:
+  map_name: Austin
+  map_image_extension: .png
+  num_lanes: 3
+  side_lane_center_shift_fraction: 0.4
+  clockwise: true
+  inner_safe_distance: 0.3
+  outer_safe_distance: 0.3
+  preparation_step_size: 0.5
+  regularization_step_size: 2.0
+  interpolation_step_size: 0.2
+  smoothing_regularization: 3
+  smoothing_length: 0.0
+  dynamic_model_exponent: 1.0
+  velocity_filter_window: 31
+
+vehicle:
+  steering_limit: 0.4189
+  maximum_speed: 7.5
+  width: 0.31
+  mass: 3.362
+  drag_coefficient: 0.0075

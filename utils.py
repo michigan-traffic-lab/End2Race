@@ -1,8 +1,31 @@
 import os
 import sys
+from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
+import yaml
 from numba import njit
+
+
+def load_yaml_config(path):
+    """Load a config whose sections become nested namespaces."""
+    with path.open(encoding="utf-8") as stream:
+        values = yaml.safe_load(stream)
+
+    return SimpleNamespace(
+        **{
+            name: SimpleNamespace(**section)
+            for name, section in values.items()
+        }
+    )
+
+
+def load_racetrack_config():
+    return load_yaml_config(
+        Path(__file__).resolve().parent / "f1tenth_racetracks" / "config.yaml"
+    )
+
 
 SIMULATION_FREQUENCY_HZ = 120
 CONTROL_FREQUENCY_HZ = 40

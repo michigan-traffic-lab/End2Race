@@ -1,3 +1,4 @@
+import argparse
 import subprocess
 from pathlib import Path
 
@@ -8,7 +9,6 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, Dataset
 
-from config import load_project_config
 from eval_single import (
     EVALUATION_NOISE,
     EVALUATION_SEED,
@@ -19,13 +19,10 @@ from eval_single import (
     evaluate_laps,
 )
 from model import End2Race
-from utils import require_end2race_runtime
+from utils import load_racetrack_config, require_end2race_runtime
 
-CHECKPOINT_DIRECTORY = Path("checkpoint")
-TRAINING_STATE_PATH = CHECKPOINT_DIRECTORY / "training_state.pt"
 DATASET_DIRECTORY = Path("dataset")
 EPOCH_INTERVAL = 500
-MAX_EPOCHS = 5000
 MAX_MODELS = 10
 SINGLE_AGENT_MAPS = (
     "Austin",
@@ -35,6 +32,22 @@ SINGLE_AGENT_MAPS = (
 )
 
 
+def parse_arguments():
+    parser = argparse.ArgumentParser(
+        description="Train End2Race speed-conditioned model"
+    )
+    parser.add_argument(
+        "--model_path", type=Path, default=Path("checkpoint/checkpoint.pt")
+    )
+    parser.add_argument("--batch_size", type=int, default=1024)
+    parser.add_argument("--learning_rate", type=float, default=0.001)
+    parser.add_argument("--num_epochs", type=int, default=5000)
+    parser.add_argument("--speed_loss_weight", type=float, default=0.05)
+    parser.add_argument("--gradient_clip_norm", type=float, default=1.0)
+
+    return parser.parse_args()
+
+
 class SequenceDataset(Dataset):
     def __init__(self, data_path: str | Path):
         self.lidar_columns = [
@@ -42,6 +55,11 @@ class SequenceDataset(Dataset):
         ]
         self.speed_column = "current_speed"
         self.action_columns = ["steer", "desired_speed"]
+        self.expected_columns = (
+            ["time", self.speed_column]
+            + self.action_columns
+            + self.lidar_columns
+        )
         self.sequence_length = self._determine_sequence_length(data_path)
         self.sequences = []
         self._load_episodes(data_path)
@@ -53,24 +71,9 @@ class SequenceDataset(Dataset):
         csv_files = sorted(Path(data_path).glob("*.csv"))
         for csv_file in csv_files:
             df = pd.read_csv(csv_file)
-            available_lidar_columns = [
-                column for column in df.columns if column.startswith("lidar_")
-            ]
-            if available_lidar_columns != self.lidar_columns:
+            if list(df.columns) != self.expected_columns:
                 raise ValueError(
-                    f"{csv_file} must contain exactly "
-                    f"{End2Race.NUM_LIDAR_FEATURES} ordered LiDAR columns"
-                )
-
-            missing_actions = set(self.action_columns) - set(df.columns)
-            if missing_actions:
-                raise ValueError(
-                    f"{csv_file} is missing action columns: "
-                    f"{sorted(missing_actions)}"
-                )
-            if self.speed_column not in df.columns:
-                raise ValueError(
-                    f"{csv_file} is missing speed column: {self.speed_column}"
+                    f"{csv_file} does not match the collected CSV header"
                 )
 
             if len(df) < self.sequence_length:
@@ -86,12 +89,7 @@ class SequenceDataset(Dataset):
         csv_files = sorted(Path(data_path).glob("*.csv"))
         if not csv_files:
             raise FileNotFoundError(f"No training CSV files found in {data_path}")
-        df = pd.read_csv(csv_files[0])
-        sequence_length = len(df)
-        if sequence_length < 1:
-            raise ValueError(
-                f"Training episodes in {data_path} must contain at least one row"
-            )
+        sequence_length = len(pd.read_csv(csv_files[0]))
         print(f"Sequence length: {sequence_length}")
         return sequence_length
 
@@ -126,7 +124,14 @@ class SequenceDataset(Dataset):
         )
 
 
-def train_epoch(model, train_loader, criterion, optimizer, config):
+def train_epoch(
+    model,
+    train_loader,
+    criterion,
+    optimizer,
+    speed_loss_weight,
+    gradient_clip_norm,
+):
     device = next(model.parameters()).device
     model.train()
     total_loss = 0.0
@@ -149,10 +154,10 @@ def train_epoch(model, train_loader, criterion, optimizer, config):
         speed_loss = criterion(
             predicted_actions_flat[:, 1], target_actions_flat[:, 1]
         )
-        loss = steer_loss + speed_loss * config.speed_loss_weight
+        loss = steer_loss + speed_loss * speed_loss_weight
         loss.backward()
         torch.nn.utils.clip_grad_norm_(
-            model.parameters(), max_norm=config.gradient_clip_norm
+            model.parameters(), max_norm=gradient_clip_norm
         )
         optimizer.step()
         total_loss += loss.item()
@@ -181,7 +186,7 @@ def evaluate_checkpoint(model, device, vehicle, checkpoint_path):
     )
 
 
-def save_training_state(model_number, epoch, model, optimizer):
+def save_training_state(path, model_number, epoch, model, optimizer):
     torch.save(
         {
             "model_number": model_number,
@@ -189,88 +194,88 @@ def save_training_state(model_number, epoch, model, optimizer):
             "model_state_dict": model.state_dict(),
             "optimizer_state_dict": optimizer.state_dict(),
         },
-        TRAINING_STATE_PATH,
+        path,
     )
 
 
-def remove_checkpoints():
-    for checkpoint_path in CHECKPOINT_DIRECTORY.glob("checkpoint_*.pt"):
-        checkpoint_path.unlink()
-    TRAINING_STATE_PATH.unlink(missing_ok=True)
-
-
 def main():
+    args = parse_arguments()
     require_end2race_runtime()
-    project = load_project_config()
-    config = project.training
-    if config.num_epochs != MAX_EPOCHS:
-        raise ValueError(f"training.num_epochs must be {MAX_EPOCHS}")
+    vehicle = load_racetrack_config().vehicle
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
+    print(f"Training arguments: {vars(args)}")
 
-    data_path = DATASET_DIRECTORY / "success"
-    dataset = SequenceDataset(data_path)
+    dataset = SequenceDataset(DATASET_DIRECTORY / "success")
 
     train_loader = DataLoader(
         dataset,
-        batch_size=config.batch_size,
+        batch_size=args.batch_size,
         shuffle=True,
         pin_memory=device.type == "cuda",
     )
 
     criterion = nn.MSELoss()
-    CHECKPOINT_DIRECTORY.mkdir(exist_ok=True)
+    args.model_path.parent.mkdir(parents=True, exist_ok=True)
+    training_state_path = args.model_path.with_name("training_state.pt")
     print(f"Train batches: {len(train_loader)}")
-    if TRAINING_STATE_PATH.is_file():
-        state = torch.load(TRAINING_STATE_PATH, map_location=device)
+    if training_state_path.is_file():
+        state = torch.load(training_state_path, map_location=device)
         model_number = state["model_number"]
         completed_epochs = state["epoch"]
+        if completed_epochs > args.num_epochs:
+            raise ValueError(
+                f"Training state epoch {completed_epochs} exceeds "
+                f"--num_epochs {args.num_epochs}"
+            )
         model = End2Race().to(device)
         model.load_state_dict(state["model_state_dict"])
-        optimizer = optim.Adam(model.parameters(), lr=config.learning_rate)
+        optimizer = optim.Adam(model.parameters(), lr=args.learning_rate)
         optimizer.load_state_dict(state["optimizer_state_dict"])
-        checkpoint_path = (
-            CHECKPOINT_DIRECTORY / f"checkpoint_{completed_epochs:05d}.pt"
-        )
+        for parameter_group in optimizer.param_groups:
+            parameter_group["lr"] = args.learning_rate
         print(
             f"Resuming model {model_number}/{MAX_MODELS} at "
             f"epoch {completed_epochs}"
         )
-        if evaluate_checkpoint(model, device, project.vehicle, checkpoint_path):
+        if evaluate_checkpoint(model, device, vehicle, args.model_path):
             print(f"Model {model_number} passed all evaluations")
             return
     else:
         model_number = 1
         completed_epochs = 0
         model = None
-        optimizer = None
 
     while model_number <= MAX_MODELS:
         print(f"\nStarting model {model_number}/{MAX_MODELS}")
         if model is None:
             model = End2Race().to(device)
-            optimizer = optim.Adam(model.parameters(), lr=config.learning_rate)
-        for epoch in range(completed_epochs + 1, MAX_EPOCHS + 1):
-            loss = train_epoch(model, train_loader, criterion, optimizer, config)
-            if epoch % EPOCH_INTERVAL:
-                continue
-            checkpoint_path = (
-                CHECKPOINT_DIRECTORY / f"checkpoint_{epoch:05d}.pt"
+            optimizer = optim.Adam(model.parameters(), lr=args.learning_rate)
+        for epoch in range(completed_epochs + 1, args.num_epochs + 1):
+            loss = train_epoch(
+                model,
+                train_loader,
+                criterion,
+                optimizer,
+                args.speed_loss_weight,
+                args.gradient_clip_norm,
             )
-            torch.save(model.state_dict(), checkpoint_path)
-            save_training_state(model_number, epoch, model, optimizer)
-            print(f"Epoch {epoch}/{MAX_EPOCHS}, loss: {loss:.5f}")
-            if evaluate_checkpoint(
-                model, device, project.vehicle, checkpoint_path
-            ):
+            if epoch % EPOCH_INTERVAL and epoch != args.num_epochs:
+                continue
+            torch.save(model.state_dict(), args.model_path)
+            save_training_state(
+                training_state_path, model_number, epoch, model, optimizer
+            )
+            print(f"Epoch {epoch}/{args.num_epochs}, loss: {loss:.5f}")
+            if evaluate_checkpoint(model, device, vehicle, args.model_path):
                 print(f"Model {model_number} passed all evaluations")
                 return
-        print(f"Model {model_number} did not pass; removing checkpoints")
-        remove_checkpoints()
+        print(f"Model {model_number} did not pass; removing saved model")
+        args.model_path.unlink(missing_ok=True)
+        training_state_path.unlink(missing_ok=True)
         model_number += 1
         completed_epochs = 0
         model = None
-        optimizer = None
     raise RuntimeError(f"No usable model found after {MAX_MODELS} attempts")
 
 
