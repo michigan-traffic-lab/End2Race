@@ -28,6 +28,9 @@ SOFTWARE.
 """
 
 import math
+import multiprocessing as mp
+import os
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
 import numpy as np
@@ -184,6 +187,25 @@ class FrenetPath:
         self.target_velocity = None
 
 
+_FOT_CANDIDATE_WORKER = None
+
+
+def _initialize_fot_candidate_worker(
+    configuration, map_path, raceline_path
+):
+    global _FOT_CANDIDATE_WORKER
+    _FOT_CANDIDATE_WORKER = FrenetOptimalTrajectoryPlanner(
+        configuration,
+        map_path,
+        raceline_path,
+        parallel_workers=1,
+    )
+
+
+def _generate_lateral_paths_in_worker(arguments):
+    return _FOT_CANDIDATE_WORKER._generate_lateral_paths(*arguments)
+
+
 def lidar_scan_to_points(scan, pose):
     scan = np.asarray(scan, dtype=np.float64).reshape(-1)
     valid = np.isfinite(scan) & (scan > 0.0)
@@ -338,11 +360,18 @@ class TrajectoryTracker:
 
 
 class FrenetOptimalTrajectoryPlanner:
-    def __init__(self, configuration, map_path, raceline_path):
+    def __init__(
+        self,
+        configuration,
+        map_path,
+        raceline_path,
+        parallel_workers=None,
+    ):
         self.conf = configuration
         self.map_path = map_path
+        self.raceline_path = Path(raceline_path)
         values = np.loadtxt(
-            raceline_path, delimiter=";", skiprows=1, ndmin=2
+            self.raceline_path, delimiter=";", skiprows=1, ndmin=2
         )
         self.waypoints = np.column_stack(
             (
@@ -357,6 +386,12 @@ class FrenetOptimalTrajectoryPlanner:
         self.maximum_speed = configuration.maximum_speed
         self.best_trajectory = None
         self.tracker = TrajectoryTracker(configuration)
+        if parallel_workers is None:
+            parallel_workers = int(
+                os.environ.get("FOT_PARALLEL_WORKERS", "1")
+            )
+        self.parallel_workers = max(1, int(parallel_workers))
+        self._candidate_pool = None
 
     def _terminal_speed_limits(self, physical_speed):
         minimum_speed = max(
@@ -589,7 +624,7 @@ class FrenetOptimalTrajectoryPlanner:
             if candidate_for_speed(speed) is not None
         ]
         if not feasible_seeds:
-            return []
+            return [], candidate_cache
 
         if candidate_for_speed(nominal_minimum) is not None:
             feasible_minimum = nominal_minimum
@@ -614,7 +649,7 @@ class FrenetOptimalTrajectoryPlanner:
             feasible_minimum,
             feasible_maximum,
         )
-        return list(dict.fromkeys(terminal_speeds))
+        return list(dict.fromkeys(terminal_speeds)), candidate_cache
 
     def _is_dynamically_feasible(
         self,
@@ -671,34 +706,100 @@ class FrenetOptimalTrajectoryPlanner:
         lateral_time_velocity = physical_speed * math.sin(heading_error)
         lateral_targets = self._lateral_targets()
         sample_times = self._sample_times().tolist()
+        lateral_arguments = [
+            (
+                course_distance,
+                course_speed,
+                lateral_distance,
+                lateral_time_velocity,
+                float(lateral_target),
+                physical_speed,
+                sample_times,
+                require_dynamic_feasibility,
+            )
+            for lateral_target in lateral_targets
+        ]
+        if self.parallel_workers > 1 and len(lateral_arguments) > 1:
+            worker_count = min(
+                self.parallel_workers, len(lateral_arguments)
+            )
+            if self._candidate_pool is None:
+                self._candidate_pool = ProcessPoolExecutor(
+                    max_workers=worker_count,
+                    mp_context=mp.get_context("fork"),
+                    initializer=_initialize_fot_candidate_worker,
+                    initargs=(
+                        self.conf,
+                        self.map_path,
+                        str(self.raceline_path),
+                    ),
+                )
+            lateral_path_groups = self._candidate_pool.map(
+                _generate_lateral_paths_in_worker,
+                lateral_arguments,
+            )
+            return [
+                path
+                for lateral_paths in lateral_path_groups
+                for path in lateral_paths
+            ]
+
         paths = []
-        for lateral_target in lateral_targets:
-            if require_dynamic_feasibility:
-                terminal_speeds = self._feasible_terminal_speeds(
+        for arguments in lateral_arguments:
+            paths.extend(self._generate_lateral_paths(*arguments))
+        return paths
+
+    def _generate_lateral_paths(
+        self,
+        course_distance,
+        course_speed,
+        lateral_distance,
+        lateral_time_velocity,
+        lateral_target,
+        physical_speed,
+        sample_times,
+        require_dynamic_feasibility,
+    ):
+        if require_dynamic_feasibility:
+            terminal_speeds, candidate_cache = (
+                self._feasible_terminal_speeds(
                     course_distance,
                     course_speed,
                     lateral_distance,
                     lateral_time_velocity,
-                    float(lateral_target),
+                    lateral_target,
                     physical_speed,
                     sample_times,
                 )
+            )
+        else:
+            terminal_speeds = self._terminal_speeds(physical_speed)
+            candidate_cache = {}
+
+        paths = []
+        for terminal_speed in terminal_speeds:
+            terminal_speed = float(terminal_speed)
+            if terminal_speed in candidate_cache:
+                path = candidate_cache[terminal_speed]
             else:
-                terminal_speeds = self._terminal_speeds(physical_speed)
-            for terminal_speed in terminal_speeds:
                 path = self._generate_candidate(
                     course_distance,
                     course_speed,
                     lateral_distance,
                     lateral_time_velocity,
-                    float(lateral_target),
-                    float(terminal_speed),
+                    lateral_target,
+                    terminal_speed,
                     sample_times,
                     require_dynamic_feasibility,
                 )
-                if path is not None:
-                    paths.append(path)
+            if path is not None:
+                paths.append(path)
         return paths
+
+    def close(self):
+        if self._candidate_pool is not None:
+            self._candidate_pool.shutdown()
+            self._candidate_pool = None
 
     def _dynamic_violation(self, path):
         velocity = np.asarray(path.velocity)

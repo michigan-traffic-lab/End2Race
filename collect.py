@@ -8,11 +8,15 @@ import f110_gym  # Registers the F1TENTH Gym environment.
 import gym
 import imageio
 import numpy as np
+from f110_gym.envs.base_classes import Integrator
 
 from config import load_project_config
 from expert import create_expert_planner, create_opponent
 from utils import (
+    CONTROL_TIMESTEP,
     EGO_INITIAL_SPEED_FRACTION,
+    SIMULATION_STEPS_PER_CONTROL,
+    SIMULATION_STEPS_PER_EXPERT_PLAN,
     SIMULATION_TIMESTEP,
     VIDEO_FPS,
     create_planner_render_callback,
@@ -37,7 +41,6 @@ class CollectionScenario:
     opponent_raceline: str
     opponent_speed_scale: float
     sim_duration: float
-    sample_interval: float
     render: bool
 
 
@@ -120,6 +123,7 @@ def collect_scenario(vehicle, scenario):
         map_ext=".png",
         timestep=SIMULATION_TIMESTEP,
         num_agents=2,
+        integrator=Integrator.RK4,
     )
 
     render_info = {
@@ -192,13 +196,30 @@ def collect_scenario(vehicle, scenario):
     )
 
     elapsed_time = 0.0
+    simulation_step = 0
+    total_simulation_steps = round(
+        scenario.sim_duration / SIMULATION_TIMESTEP
+    )
+    if not np.isclose(
+        total_simulation_steps * SIMULATION_TIMESTEP,
+        scenario.sim_duration,
+        rtol=0.0,
+        atol=1e-9,
+    ):
+        raise ValueError(
+            "sim_duration must be divisible by the simulation timestep"
+        )
     collected_data = []
-    next_record_time = scenario.sample_interval
-    tracker_steps = ego_planner.conf.tracker_steps
+    planner_steps = ego_planner.conf.tracker_steps
+    if planner_steps != SIMULATION_STEPS_PER_EXPERT_PLAN:
+        raise ValueError(
+            "expert.tracker_steps must match the number of simulation steps "
+            f"per FOT plan ({SIMULATION_STEPS_PER_EXPERT_PLAN})"
+        )
     video_frames = []
     collision_occurred = False
 
-    while not done and elapsed_time < scenario.sim_duration:
+    while not done and simulation_step < total_simulation_steps:
         ego_trajectory = ego_planner.plan(
             obs["poses_x"][0],
             obs["poses_y"][0],
@@ -214,8 +235,8 @@ def collect_scenario(vehicle, scenario):
             obs["linear_vels_x"][1],
         )
 
-        for _ in range(tracker_steps):
-            if done or elapsed_time >= scenario.sim_duration:
+        for _ in range(planner_steps):
+            if done or simulation_step >= total_simulation_steps:
                 break
 
             ego_steer, ego_speed = ego_planner.tracker.plan(
@@ -256,7 +277,23 @@ def collect_scenario(vehicle, scenario):
                     }
                 )
 
+            if simulation_step % SIMULATION_STEPS_PER_CONTROL == 0:
+                lidar = downsample_lidar(
+                    np.asarray(obs["scans"][0]).ravel(),
+                    target_points=End2Race.NUM_LIDAR_FEATURES,
+                )
+                collected_data.append(
+                    [
+                        round(len(collected_data) * CONTROL_TIMESTEP, 6),
+                        obs["linear_vels_x"][0],
+                        ego_steer,
+                        ego_speed,
+                    ]
+                    + lidar.tolist()
+                )
+
             obs, timestep, done, _ = env.step(action)
+            simulation_step += 1
 
             current_ego_progress = unwrap_progress(
                 project_point_to_centerline(
@@ -286,23 +323,8 @@ def collect_scenario(vehicle, scenario):
                 collision_occurred = True
 
             elapsed_time = min(
-                elapsed_time + timestep, scenario.sim_duration
+                simulation_step * timestep, scenario.sim_duration
             )
-            while elapsed_time >= next_record_time:
-                lidar = downsample_lidar(
-                    np.asarray(obs["scans"][0]).ravel(),
-                    target_points=End2Race.NUM_LIDAR_FEATURES,
-                )
-                collected_data.append(
-                    [
-                        round(next_record_time, 4),
-                        obs["linear_vels_x"][0],
-                        ego_steer,
-                        ego_speed,
-                    ]
-                    + lidar.tolist()
-                )
-                next_record_time += scenario.sample_interval
 
             if scenario.render:
                 frame = env.render(mode="rgb_array")
@@ -342,15 +364,15 @@ def collect_scenario(vehicle, scenario):
 
 def main():
     require_end2race_runtime()
-    if len(sys.argv) != 10:
+    if len(sys.argv) != 9:
         raise SystemExit(
             "Usage: python collect.py "
             "<map_name> <dataset_dir> <ego_idx> <interval_idx> "
             "<opponent_raceline> <opponent_speed_scale> <sim_duration> "
-            "<sample_interval> <render:true|false>"
+            "<render:true|false>"
         )
 
-    render_value = sys.argv[9]
+    render_value = sys.argv[8]
     if render_value not in {"true", "false"}:
         raise ValueError("render must be true or false")
     scenario = CollectionScenario(
@@ -361,7 +383,6 @@ def main():
         opponent_raceline=sys.argv[5],
         opponent_speed_scale=float(sys.argv[6]),
         sim_duration=float(sys.argv[7]),
-        sample_interval=float(sys.argv[8]),
         render=render_value == "true",
     )
     if (
@@ -371,12 +392,11 @@ def main():
         or scenario.interval_idx <= 0
         or scenario.opponent_speed_scale <= 0
         or scenario.sim_duration <= 0
-        or scenario.sample_interval <= 0
     ):
         raise ValueError(
             "map_name and dataset_dir must be nonempty, ego_idx must be "
             "nonnegative, and interval_idx, opponent_speed_scale, "
-            "sim_duration, and sample_interval must be positive"
+            "and sim_duration must be positive"
         )
 
     vehicle = load_project_config().vehicle

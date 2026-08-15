@@ -11,6 +11,7 @@ from f110_gym.envs.base_classes import Integrator
 from config import load_project_config
 from expert import create_opponent
 from utils import (
+    SIMULATION_STEPS_PER_CONTROL,
     EGO_INITIAL_SPEED_FRACTION,
     SIMULATION_TIMESTEP,
     VIDEO_FPS,
@@ -110,6 +111,9 @@ def evaluate_segment(model, device, vehicle, scenario):
     hidden_size = model.gru.hidden_size
     hidden_state = torch.zeros((1, 1, hidden_size), device=device)
     previous_speed = initial_speed
+    control_step = 0
+    ego_steer = 0.0
+    ego_speed = initial_speed
 
     centerline_path = f"f1tenth_racetracks/{scenario.map_name}/raceline1.csv"
     centerline_values = np.loadtxt(centerline_path, delimiter=";", skiprows=1)
@@ -145,30 +149,32 @@ def evaluate_segment(model, device, vehicle, scenario):
     opponent_trajectory = None
 
     while not done and lap_time < scenario.sim_duration:
-        lidar = mask_lidar_points(
-            downsample_lidar(
-                obs["scans"][0], target_points=End2Race.NUM_LIDAR_FEATURES
-            ),
-            scenario.noise,
-            rng,
-        )
-
-        with torch.no_grad():
-            lidar_tensor = torch.as_tensor(
-                lidar, dtype=torch.float32, device=device
-            )[None, None]
-            speed_tensor = torch.tensor(
-                [[[previous_speed]]], dtype=torch.float32, device=device
+        if control_step == 0:
+            lidar = mask_lidar_points(
+                downsample_lidar(
+                    obs["scans"][0], target_points=End2Race.NUM_LIDAR_FEATURES
+                ),
+                scenario.noise,
+                rng,
             )
-            actions, hidden_state = model(
-                lidar_tensor, speed_tensor, hidden_state
-            )
-            ego_steer = actions[0, -1, 0].item()
-            ego_speed = actions[0, -1, 1].item()
 
-        ego_steer = np.clip(
-            ego_steer, -vehicle.steering_limit, vehicle.steering_limit
-        )
+            with torch.no_grad():
+                lidar_tensor = torch.as_tensor(
+                    lidar, dtype=torch.float32, device=device
+                )[None, None]
+                speed_tensor = torch.tensor(
+                    [[[previous_speed]]], dtype=torch.float32, device=device
+                )
+                actions, hidden_state = model(
+                    lidar_tensor, speed_tensor, hidden_state
+                )
+                ego_steer = actions[0, -1, 0].item()
+                ego_speed = actions[0, -1, 1].item()
+
+            ego_steer = np.clip(
+                ego_steer, -vehicle.steering_limit, vehicle.steering_limit
+            )
+            previous_speed = obs["linear_vels_x"][0]
 
         if tracker_count == 0:
             opponent_trajectory = opponent.plan(
@@ -198,12 +204,12 @@ def evaluate_segment(model, device, vehicle, scenario):
         )
         obs, timestep, done, _ = env.step(action)
         lap_time += timestep
-        previous_speed = obs["linear_vels_x"][0]
+        control_step = (control_step + 1) % SIMULATION_STEPS_PER_CONTROL
 
         ego_position = [obs["poses_x"][0], obs["poses_y"][0]]
         opponent_position = [obs["poses_x"][1], obs["poses_y"][1]]
         ego_trajectory.append(ego_position)
-        speeds.append(previous_speed)
+        speeds.append(obs["linear_vels_x"][0])
 
         ego_progress = unwrap_progress(
             project_point_to_centerline(

@@ -10,6 +10,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from config import load_project_config
+from utils import (
+    CONTROL_FREQUENCY_HZ,
+    CONTROL_TIMESTEP,
+    EXPERT_PLANNER_FREQUENCY_HZ,
+    SIMULATION_FREQUENCY_HZ,
+    SIMULATION_STEPS_PER_CONTROL,
+    SIMULATION_STEPS_PER_EXPERT_PLAN,
+    SIMULATION_TIMESTEP,
+)
 
 
 ARTIFACT_PATTERN = re.compile(
@@ -36,7 +45,6 @@ def parse_arguments():
     parser.add_argument("--ego-raceline", required=True)
     parser.add_argument("--num-startpoints", required=True, type=int)
     parser.add_argument("--sim-duration", required=True, type=float)
-    parser.add_argument("--sample-interval", required=True, type=float)
     parser.add_argument("--render", required=True, type=parse_bool)
     parser.add_argument("--interval-index", required=True, type=int)
     parser.add_argument("--workers", required=True, type=int)
@@ -235,7 +243,16 @@ def summarize(args):
             "opponent_speed_scales": args.opponent_speed_scales,
             "interval_index": args.interval_index,
             "simulation_duration_seconds": args.sim_duration,
-            "sample_interval_seconds": args.sample_interval,
+            "simulation_frequency_hz": SIMULATION_FREQUENCY_HZ,
+            "simulation_timestep_seconds": SIMULATION_TIMESTEP,
+            "control_frequency_hz": CONTROL_FREQUENCY_HZ,
+            "control_timestep_seconds": CONTROL_TIMESTEP,
+            "simulation_steps_per_control": SIMULATION_STEPS_PER_CONTROL,
+            "expert_planner_frequency_hz": EXPERT_PLANNER_FREQUENCY_HZ,
+            "simulation_steps_per_expert_plan": (
+                SIMULATION_STEPS_PER_EXPERT_PLAN
+            ),
+            "sample_interval_seconds": CONTROL_TIMESTEP,
             "render": args.render,
             "workers": args.workers,
         },

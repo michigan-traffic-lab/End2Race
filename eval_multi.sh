@@ -10,7 +10,7 @@ python -c 'import sys; assert sys.version_info[:2] == (3, 11), "end2race require
 
 WORKERS=12
 MAP_NAME="Austin"
-CHECKPOINT_PATH="checkpoint/checkpoint_01000.pt"
+CHECKPOINT_PATH="${1:-}"
 EGO_RACELINE="raceline1"
 NUM_STARTPOINTS=80
 SIM_DURATION=8.0
@@ -19,8 +19,9 @@ SEED=42
 RENDER=false
 OPPONENT_RACELINES=(raceline0 raceline1 raceline2)
 OPPONENT_SPEED_SCALES=(0.4 0.6 0.8)
+MIN_SCENARIOS_BEFORE_COLLISION_GUARD=100
 
-if [[ ! -f "$CHECKPOINT_PATH" ]]; then
+if [[ -z "$CHECKPOINT_PATH" || ! -f "$CHECKPOINT_PATH" ]]; then
     echo "Checkpoint not found: $CHECKPOINT_PATH" >&2
     exit 1
 fi
@@ -59,10 +60,38 @@ echo "Evaluating ${total_jobs} scenarios on ${MAP_NAME} with ${WORKERS} workers"
 
 pids=()
 job_id=0
+stopped_early=0
+
+stop_active_workers() {
+    for pid in "${pids[@]}"; do
+        if kill -0 "$pid" 2>/dev/null; then
+            kill -TERM "$pid"
+        fi
+    done
+}
+
+monitor_collision_rate() {
+    local collision_count completed_count
+    local -a completed_files
+    completed_files=("$results_dir"/*.status)
+    completed_count=${#completed_files[@]}
+    collision_count=$(awk -F= '/^STATE=3$/{count += 1} END {print count + 0}' "$results_dir"/*.out 2>/dev/null)
+    if (( completed_count >= MIN_SCENARIOS_BEFORE_COLLISION_GUARD && collision_count * 100 > 20 * completed_count )); then
+        printf 'Stopping early: %d/%d complete, %d collisions (over 20%% threshold)\n' \
+            "$completed_count" "$total_jobs" "$collision_count" >&2
+        stop_active_workers
+        return 1
+    fi
+}
+
 for ego_idx in "${ego_indices[@]}"; do
     for opponent_raceline in "${OPPONENT_RACELINES[@]}"; do
         for opponent_speed_scale in "${OPPONENT_SPEED_SCALES[@]}"; do
             while (( $(jobs -rp | wc -l) >= WORKERS )); do
+                if ! monitor_collision_rate; then
+                    stopped_early=1
+                    break 3
+                fi
                 sleep 0.1
             done
             (
@@ -79,9 +108,28 @@ for ego_idx in "${ego_indices[@]}"; do
     done
 done
 
-for pid in "${pids[@]}"; do
-    wait "$pid"
+if (( stopped_early )); then
+    for pid in "${pids[@]}"; do
+        wait "$pid" || true
+    done
+    exit 2
+fi
+
+while (( $(jobs -rp | wc -l) > 0 )); do
+    if ! monitor_collision_rate; then
+        stopped_early=1
+        break
+    fi
+    sleep 0.1
 done
+
+for pid in "${pids[@]}"; do
+    wait "$pid" || true
+done
+
+if (( stopped_early )); then
+    exit 2
+fi
 
 following=0
 overtaking=0

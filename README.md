@@ -44,8 +44,9 @@ Two YAML files hold shared project and track-tool settings. Workflow settings st
 - `config.yaml`: model, training, vehicle, and expert-planner settings
 - `f1tenth_racetracks/config.yaml`: raceline generation and track maintenance tools
 
-Unknown, removed, or missing configuration keys are rejected.
-The simulator timestep and video frame rate are internal code constants shared by all workflows.
+Unknown, removed, or missing configuration keys are rejected. Physics runs at
+120 Hz, while LiDAR-driven FOT replanning, policy updates, and data collection
+run every third simulator step at exactly 40 Hz (25 ms), without interpolation.
 
 ## Environment Setup
 
@@ -116,10 +117,10 @@ bash eval_multi.sh
 Collect one explicit competitive-racing scenario with:
 
 ```bash
-python collect.py Austin dataset 0 15 raceline1 0.8 8.0 0.1 true
+python collect.py Austin dataset 0 15 raceline1 0.8 8.0 true
 ```
 
-The required inputs are track, output dataset directory, ego waypoint index, opponent interval, opponent raceline, opponent speed scale, collection duration, sample interval, and rendering flag. To run the complete parallel collection matrix and wait for every scenario:
+The required inputs are track, output dataset directory, ego waypoint index, opponent interval, opponent raceline, opponent speed scale, collection duration, and rendering flag. Collection runs 120 Hz physics, replans the FOT trajectory every 12th physics step (10 Hz), tracks the held trajectory at every physics step, and saves one live observation and aligned tracker action every third physics step (40 Hz). This produces exact 25 ms intervals without interpolation. To run the complete parallel collection matrix and wait for every scenario:
 
 ```bash
 bash collect.sh
@@ -129,7 +130,7 @@ bash collect.sh
 
 After all collection workers finish, `collect.sh` writes `dataset/summary.json`. The summary snapshots the collection, vehicle, and expert configuration; reports collision-free, collision, overtaking, and following outcomes; counts training rows and artifacts; and provides a breakdown by opponent raceline and speed scale. It is generated from the saved CSV and collision metadata, so a partial collection also retains a summary before `collect.sh` reports a worker failure.
 
-Each training row stores the measured ego speed, expert steering and desired-speed targets, and 180 LiDAR values. Training keeps every row: the first row uses its measured speed as the initial speed input, and later rows use the preceding measured speed. The ego FOT expert projects the current LiDAR scan into occupied points and selects among dynamically feasible trajectories using mean velocity cost and worst-point clearance cost; the non-reactive opponent tracks its assigned raceline. Every velocity choice produces a physically distinct trajectory over the candidate horizon, and generated speeds are bounded by 7.5 m/s.
+Each training row stores the measured ego speed, expert steering and desired-speed targets, and 180 LiDAR values from the same decision instant. Training keeps every 40 Hz row: the first row uses its measured speed as the initial speed input, and later rows use the measured speed from the preceding 25 ms step. The ego FOT expert replans every 12th physics step from the corresponding LiDAR scan, projects that scan into occupied points, and selects among dynamically feasible trajectories using mean velocity cost and worst-point clearance cost; its tracker supplies the 40 Hz labels while following that held trajectory. The non-reactive opponent tracks its assigned raceline. Every velocity choice produces a physically distinct trajectory over the candidate horizon, and generated speeds are bounded by 7.5 m/s.
 
 Every collection and evaluation scenario initializes the ego at 50% of its 7.5 m/s maximum speed (3.75 m/s). A multi-agent opponent starts at its local raceline speed multiplied by the scenario's opponent speed scale. Subsequent acceleration and braking are determined by each controller.
 
@@ -140,7 +141,7 @@ Trains the End2Race model using imitation learning on collected demonstrations.
 python train.py
 ```
 
-Training reads successful demonstrations from `dataset/success/`, while the training section contains only optimization settings. Adam uses the configured learning rate for every epoch. After the final epoch, the model is saved directly under `checkpoint/` as `checkpoint_01000.pt`; the evaluation orchestrators explicitly select this checkpoint.
+Training reads successful demonstrations from `dataset/success/`. It trains one model for up to 5,000 epochs, saving and evaluating a checkpoint every 500 epochs. Each checkpoint must complete one collision-free lap on Austin, Hockenheim, MoscowRaceway, and Nuerburgring in that order, then evaluate Austin's 720 multi-agent scenarios. That evaluation always completes at least 100 scenarios and stops early only if its aggregate collision rate then exceeds 20%. The first failure stops that checkpoint's remaining evaluation. A model that never passes is removed at 5,000 epochs; training tries at most 10 models. The usable checkpoint and resumable training state remain directly under `checkpoint/`.
 
 ## Model Architecture
 

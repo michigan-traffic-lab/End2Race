@@ -11,6 +11,7 @@ from f110_gym.envs.base_classes import Integrator
 from config import load_project_config
 from model import End2Race
 from utils import (
+    SIMULATION_STEPS_PER_CONTROL,
     EGO_INITIAL_SPEED_FRACTION,
     SIMULATION_TIMESTEP,
     VIDEO_FPS,
@@ -26,7 +27,7 @@ from utils import (
 
 EVALUATION_NOISE = 0.0
 EVALUATION_SEED = 42
-LAP_COUNT = 10
+LAP_COUNT = 1
 START_INDEX = 0
 MINIMUM_LAP_TIME = 10.0
 
@@ -103,6 +104,9 @@ def evaluate_laps(model, device, vehicle, settings):
     hidden_size = model.gru.hidden_size
     hidden_state = torch.zeros((1, 1, hidden_size), device=device)
     previous_speed = initial_speed
+    control_step = 0
+    ego_steer = 0.0
+    ego_speed = initial_speed
 
     initial_progress, _ = project_point_to_centerline(
         np.array([obs["poses_x"][0], obs["poses_y"][0]]), centerline
@@ -122,40 +126,42 @@ def evaluate_laps(model, device, vehicle, settings):
         env.render("human")
 
     while not done and lap_count < settings.lap_num:
-        lidar = mask_lidar_points(
-            downsample_lidar(
-                obs["scans"][0], target_points=End2Race.NUM_LIDAR_FEATURES
-            ),
-            settings.noise,
-            rng,
-        )
-
-        with torch.no_grad():
-            lidar_tensor = torch.as_tensor(
-                lidar, dtype=torch.float32, device=device
-            )[None, None]
-            speed_tensor = torch.tensor(
-                [[[previous_speed]]], dtype=torch.float32, device=device
+        if control_step == 0:
+            lidar = mask_lidar_points(
+                downsample_lidar(
+                    obs["scans"][0], target_points=End2Race.NUM_LIDAR_FEATURES
+                ),
+                settings.noise,
+                rng,
             )
-            actions, hidden_state = model(
-                lidar_tensor, speed_tensor, hidden_state
-            )
-            ego_steer = actions[0, -1, 0].item()
-            ego_speed = actions[0, -1, 1].item()
 
-        ego_steer = np.clip(
-            ego_steer, -vehicle.steering_limit, vehicle.steering_limit
-        )
+            with torch.no_grad():
+                lidar_tensor = torch.as_tensor(
+                    lidar, dtype=torch.float32, device=device
+                )[None, None]
+                speed_tensor = torch.tensor(
+                    [[[previous_speed]]], dtype=torch.float32, device=device
+                )
+                actions, hidden_state = model(
+                    lidar_tensor, speed_tensor, hidden_state
+                )
+                ego_steer = actions[0, -1, 0].item()
+                ego_speed = actions[0, -1, 1].item()
+
+            ego_steer = np.clip(
+                ego_steer, -vehicle.steering_limit, vehicle.steering_limit
+            )
+            previous_speed = obs["linear_vels_x"][0]
 
         action = np.array([[ego_steer, ego_speed]])
         obs, timestep, done, _ = env.step(action)
         lap_time += timestep
-        previous_speed = obs["linear_vels_x"][0]
+        control_step = (control_step + 1) % SIMULATION_STEPS_PER_CONTROL
         current_position = np.array(
             [obs["poses_x"][0], obs["poses_y"][0]]
         )
         trajectory.append(current_position)
-        speeds.append(previous_speed)
+        speeds.append(obs["linear_vels_x"][0])
 
         if settings.render:
             render_info.update(
@@ -256,25 +262,26 @@ def evaluate_laps(model, device, vehicle, settings):
         print(f"Mean Lap Time: {mean_lap_time:.2f}s")
         print(f"Lap Time Variance: {lap_time_variance:.3f}s²")
 
+    passed = not collision_occurred and lap_count >= settings.lap_num
     if collision_occurred:
         print("\nStatus: Collision occurred")
-    elif lap_count >= settings.lap_num:
+    elif passed:
         print("\nStatus: Successfully completed all laps")
     else:
         print("\nStatus: Incomplete - stopped before completing all laps")
+    return passed
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("map_name")
+    parser.add_argument("checkpoint_path", type=Path)
     parser.add_argument("--render", action="store_true")
     arguments = parser.parse_args()
 
     require_end2race_runtime()
     project = load_project_config()
-    checkpoint_path = Path("checkpoint") / (
-        f"checkpoint_{project.training.num_epochs:05d}.pt"
-    )
+    checkpoint_path = arguments.checkpoint_path
     if not checkpoint_path.is_file():
         raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
 
@@ -296,7 +303,11 @@ def main():
     )
     model.eval()
 
-    evaluate_laps(model, device, project.vehicle, settings)
+    raise SystemExit(
+        0
+        if evaluate_laps(model, device, project.vehicle, settings)
+        else 1
+    )
 
 
 if __name__ == "__main__":
