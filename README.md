@@ -14,6 +14,7 @@ https://github.com/user-attachments/assets/5369f5ea-13fa-44c3-a6aa-5b3c2b59b10c
 - [Evaluation](#evaluation)
 - [Data Collection](#data-collection)
 - [Training](#training)
+- [PPO Fine-Tuning](#ppo-fine-tuning)
 - [Model Architecture](#model-architecture)
 - [Raceline Generation (Optional)](#raceline-generation-optional)
 
@@ -31,6 +32,8 @@ end2race/
 ├── expert.py                  # One multi-agent expert collection scenario
 ├── model.py                   # GRU network architecture
 ├── train.py                   # Training script
+├── ppo/                       # PPO environment and actor-critic wrappers
+├── train_ppo.py               # PPO fine-tuning entry point
 ├── collect.sh                 # Parallel collection orchestrator and dataset summary
 ├── eval_single.py             # One single-agent lap evaluation
 ├── eval_multi.py              # One multi-agent racing evaluation
@@ -190,6 +193,18 @@ python train.py \
 ```
 
 These are the defaults, so the arguments may be omitted. Training trains one model for `--num_epochs`. It reads episodes from `<--dataset_dir>/success/` and writes `epoch_<epoch>.pt` with a five-digit epoch, such as `epoch_05000.pt`, into `--output_dir` every `--save_interval` epochs and at the final epoch, so a run whose length is not a multiple of the interval still saves its last model. Training performs no evaluation and keeps no resume state; use [Hyperparameter Sweep](#hyperparameter-sweep) to train and screen a grid of runs.
+
+## PPO Fine-Tuning
+
+Fine-tune a checkpoint produced by `train.py` with recurrent PPO:
+
+```bash
+python train_ppo.py \
+  --checkpoint_path checkpoint/epoch_05000.pt \
+  --output_dir runs/ppo
+```
+
+Each PPO epoch runs all 720 Austin scenarios once. Every scenario is replicated across 16 environments under one stochastic policy, each trajectory receives GAE, and the collected groups are trained once with PPO-Clip. PPO uses the same 40 Hz End2Race control rate and the same latticeplanner opponent as multi-agent evaluation. See [ppo/README.md](ppo/README.md) for the pipeline, reward, and artifacts.
 
 ## Model Architecture
 
