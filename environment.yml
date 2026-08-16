@@ -1,6 +1,0 @@
-name: end2race
-channels:
-  - defaults
-dependencies:
-  - python=3.11
-  - pip

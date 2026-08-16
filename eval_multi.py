@@ -1,5 +1,4 @@
-import sys
-from dataclasses import dataclass
+import argparse
 from pathlib import Path
 
 import gym
@@ -10,10 +9,6 @@ from f110_gym.envs.base_classes import Integrator
 
 from latticeplanner.lattice_planner import create_opponent
 from utils import (
-    SIMULATION_STEPS_PER_CONTROL,
-    EGO_INITIAL_SPEED_FRACTION,
-    SIMULATION_TIMESTEP,
-    VIDEO_FPS,
     calculate_metrics,
     create_multiagent_render_callback,
     downsample_lidar,
@@ -22,91 +17,105 @@ from utils import (
     load_raceline,
     mask_lidar_points,
     project_point_to_centerline,
+    racetrack_path,
     require_end2race_runtime,
+    simulation_config,
     unwrap_progress,
 )
 from model import End2Race
 
-INTERVAL_INDEX = 15
-EGO_RACELINE = "raceline1"
+def parse_arguments():
+    parser = argparse.ArgumentParser(description="Evaluate End2Race in one multi-agent scenario")
+    # Model and artifacts
+    parser.add_argument("--map_name", default="Austin")
+    parser.add_argument("--checkpoint_path", type=Path, required=True)
+    parser.add_argument("--output_dir", type=Path, default=Path("eval_results"))
+    parser.add_argument("--render", action="store_true")
+
+    # Scenario settings
+    parser.add_argument("--ego_raceline", default="raceline1")
+    parser.add_argument("--ego_idx", type=int, default=0)
+    parser.add_argument("--opponent_raceline", default="raceline1")
+    parser.add_argument("--opponent_speed_scale", type=float, default=0.8)
+    # Waypoint gap placing the opponent ahead of the ego at reset
+    parser.add_argument("--interval_idx", type=int, default=15)
+    parser.add_argument("--sim_duration", type=float, default=8.0)
+    parser.add_argument("--noise", type=float, default=0.0)
+    parser.add_argument("--seed", type=int, default=42)
+
+    args = parser.parse_args()
+    if (
+        args.ego_idx < 0
+        or args.opponent_speed_scale <= 0
+        or args.sim_duration <= 0
+        or not 0 <= args.noise <= 1
+    ):
+        parser.error(
+            "--ego_idx must be nonnegative, --opponent_speed_scale and "
+            "--sim_duration must be positive, and --noise must be between 0 and 1"
+        )
+    return args
 
 
-@dataclass(frozen=True)
-class EvaluationScenario:
-    map_name: str
-    checkpoint_path: str
-    ego_idx: int
-    opponent_raceline: str
-    opponent_speed_scale: float
-    sim_duration: float
-    noise: float
-    seed: int
-    render: bool
+def evaluate_segment(model, device, vehicle, args):
+    simulation = simulation_config()
+    rng = np.random.default_rng(args.seed)
 
-
-def evaluate_segment(model, device, vehicle, scenario):
-    rng = np.random.default_rng(scenario.seed)
-
-    ego_waypoints = load_raceline(scenario.map_name, f"{EGO_RACELINE}.csv")
+    ego_waypoints = load_raceline(args.map_name, f"{args.ego_raceline}.csv")
     opp_waypoints = (
         ego_waypoints
-        if scenario.opponent_raceline == EGO_RACELINE
+        if args.opponent_raceline == args.ego_raceline
         else load_raceline(
-            scenario.map_name,
-            f"{scenario.opponent_raceline}.csv",
+            args.map_name,
+            f"{args.opponent_raceline}.csv",
         )
     )
     opp_idx = find_opponent_start_index(
         ego_waypoints,
         opp_waypoints,
-        scenario.ego_idx,
-        INTERVAL_INDEX,
+        args.ego_idx,
+        args.interval_idx,
     )
 
-    normalized_ego_idx = scenario.ego_idx % len(ego_waypoints)
+    normalized_ego_idx = args.ego_idx % len(ego_waypoints)
     positions = np.array([
         ego_waypoints[normalized_ego_idx, :3],
         opp_waypoints[opp_idx, :3],
     ])
-    initial_speed = EGO_INITIAL_SPEED_FRACTION * vehicle.maximum_speed
+    initial_speed = simulation.ego_initial_speed_fraction * vehicle.maximum_speed
     initial_velocities = np.array(
         [
             initial_speed,
-            opp_waypoints[opp_idx, 3] * scenario.opponent_speed_scale,
+            opp_waypoints[opp_idx, 3] * args.opponent_speed_scale,
         ]
     )
 
     env = gym.make(
         "f110-v0",
-        map=(
-            f"f1tenth_racetracks/{scenario.map_name}/"
-            f"{scenario.map_name}_map"
-        ),
+        map=str(racetrack_path(args.map_name, f"{args.map_name}_map")),
         map_ext=".png",
         num_agents=2,
-        timestep=SIMULATION_TIMESTEP,
+        timestep=simulation.timestep,
         integrator=Integrator.RK4,
     )
-    render_info = {
-        "ego_speed": 0.0,
-        "ego_steer": 0.0,
-        "opp_speed": 0.0,
-        "opp_steer": 0.0,
-        "state": "unknown",
-    }
-    visited_points = [[], []]
-    drawn_points = [[], []]
-    batch_objects = []
-    if scenario.render:
+    if args.render:
+        render_info = {
+            "ego_speed": 0.0,
+            "ego_steer": 0.0,
+            "opp_speed": 0.0,
+            "opp_steer": 0.0,
+            "state": "unknown",
+        }
+        visited_points = [[], []]
+        drawn_points = [[], []]
+        batch_objects = []
         render_callback = create_multiagent_render_callback(
             render_info, visited_points, drawn_points, batch_objects
         )
         env.add_render_callback(render_callback)
 
     video_frames = []
-    opponent, _ = create_opponent(
-        scenario.map_name, scenario.opponent_raceline
-    )
+    opponent = create_opponent(args.map_name, args.opponent_raceline)
     tracker_steps = opponent.conf.tracker_steps
     hidden_size = model.gru.hidden_size
     hidden_state = torch.zeros((1, 1, hidden_size), device=device)
@@ -115,7 +124,7 @@ def evaluate_segment(model, device, vehicle, scenario):
     ego_steer = 0.0
     ego_speed = initial_speed
 
-    centerline_path = f"f1tenth_racetracks/{scenario.map_name}/raceline1.csv"
+    centerline_path = racetrack_path(args.map_name, "raceline1.csv")
     centerline_values = np.loadtxt(centerline_path, delimiter=";", skiprows=1)
     centerline = centerline_values[:, 1:3]
     centerline_total_length = np.linalg.norm(
@@ -127,7 +136,7 @@ def evaluate_segment(model, device, vehicle, scenario):
         velocities=initial_velocities,
     )
 
-    if scenario.render:
+    if args.render:
         env.render()
 
     initial_ego_progress, _ = project_point_to_centerline(
@@ -148,13 +157,13 @@ def evaluate_segment(model, device, vehicle, scenario):
     tracker_count = 0
     opponent_trajectory = None
 
-    while not done and lap_time < scenario.sim_duration:
+    while not done and lap_time < args.sim_duration:
         if control_step == 0:
             lidar = mask_lidar_points(
                 downsample_lidar(
                     obs["scans"][0], target_points=End2Race.NUM_LIDAR_FEATURES
                 ),
-                scenario.noise,
+                args.noise,
                 rng,
             )
 
@@ -197,14 +206,14 @@ def evaluate_segment(model, device, vehicle, scenario):
             -vehicle.steering_limit,
             vehicle.steering_limit,
         )
-        opponent_speed *= scenario.opponent_speed_scale
+        opponent_speed *= args.opponent_speed_scale
 
         action = np.array(
             [[ego_steer, ego_speed], [opponent_steer, opponent_speed]]
         )
         obs, timestep, done, _ = env.step(action)
         lap_time += timestep
-        control_step = (control_step + 1) % SIMULATION_STEPS_PER_CONTROL
+        control_step = (control_step + 1) % simulation.steps_per_control
 
         ego_position = [obs["poses_x"][0], obs["poses_y"][0]]
         opponent_position = [obs["poses_x"][1], obs["poses_y"][1]]
@@ -230,7 +239,7 @@ def evaluate_segment(model, device, vehicle, scenario):
             "overtaking" if ego_progress > opponent_progress else "following"
         )
 
-        if scenario.render:
+        if args.render:
             render_info.update(
                 {
                     "ego_speed": ego_speed,
@@ -242,9 +251,7 @@ def evaluate_segment(model, device, vehicle, scenario):
             )
             visited_points[0].append(ego_position)
             visited_points[1].append(opponent_position)
-            frame = env.render(mode="rgb_array")
-            if frame is not None:
-                video_frames.append(frame)
+            video_frames.append(env.render(mode="rgb_array"))
 
         if obs["collisions"][0]:
             collision_occurred = True
@@ -252,34 +259,21 @@ def evaluate_segment(model, device, vehicle, scenario):
 
         tracker_count = (tracker_count + 1) % tracker_steps
 
-    if scenario.render and video_frames:
-        if collision_occurred:
-            state_prefix = "c"
-        else:
-            state_prefix = "o" if final_state == "overtaking" else "f"
-        opponent_raceline_number = scenario.opponent_raceline.replace(
-            "raceline", ""
+    if args.render and video_frames:
+        state_prefix = "c" if collision_occurred else final_state[0]
+        opponent_raceline_number = args.opponent_raceline.replace("raceline", "")
+        noise_suffix = f"_noise{int(args.noise * 100)}" if args.noise else ""
+        args.output_dir.mkdir(parents=True, exist_ok=True)
+        video_path = args.output_dir / (
+            f"{state_prefix}_ol{opponent_raceline_number}_e{args.ego_idx}"
+            f"_o{opp_idx}_s{args.opponent_speed_scale}{noise_suffix}.mp4"
         )
-        video_name = (
-            f"{state_prefix}_ol{opponent_raceline_number}_e{scenario.ego_idx}"
-            f"_o{opp_idx}"
-            f"_s{scenario.opponent_speed_scale}.mp4"
-        )
-        model_name = Path(scenario.checkpoint_path).stem
-        noise_suffix = (
-            f"_noise{int(scenario.noise * 100)}" if scenario.noise else ""
-        )
-        video_dir = Path("eval_results") / (
-            f"{model_name}_{scenario.map_name}{noise_suffix}"
-        )
-        video_dir.mkdir(parents=True, exist_ok=True)
-        video_path = video_dir / video_name
         imageio.mimwrite(
-            video_path, video_frames, fps=VIDEO_FPS, macro_block_size=1
+            video_path, video_frames, fps=simulation.video_fps, macro_block_size=1
         )
         print(f"Video saved to {video_path}")
 
-    if scenario.render:
+    if args.render:
         for batch_object in batch_objects:
             batch_object.delete()
         type(env.unwrapped).render_callbacks.clear()
@@ -296,64 +290,25 @@ def evaluate_segment(model, device, vehicle, scenario):
 
     return {
         "state": state,
-        "avg_speed": 0 if collision_occurred else avg_speed,
-        "speed_variance": 0 if collision_occurred else speed_variance,
-        "total_distance": total_distance,
+        "avg_speed": 0.0 if collision_occurred else float(avg_speed),
+        "speed_variance": 0.0 if collision_occurred else float(speed_variance),
+        "total_distance": float(total_distance),
     }
 
 
 def main():
+    args = parse_arguments()
     require_end2race_runtime()
-    if len(sys.argv) != 10:
-        raise SystemExit(
-            "Usage: python eval_multi.py "
-            "<map_name> <checkpoint_path> <ego_idx> <opponent_raceline> "
-            "<opponent_speed_scale> <sim_duration> <noise> <seed> "
-            "<render:true|false>"
-        )
-
-    render_value = sys.argv[9]
-    if render_value not in {"true", "false"}:
-        raise ValueError("render must be true or false")
-    scenario = EvaluationScenario(
-        map_name=sys.argv[1],
-        checkpoint_path=sys.argv[2],
-        ego_idx=int(sys.argv[3]),
-        opponent_raceline=sys.argv[4],
-        opponent_speed_scale=float(sys.argv[5]),
-        sim_duration=float(sys.argv[6]),
-        noise=float(sys.argv[7]),
-        seed=int(sys.argv[8]),
-        render=render_value == "true",
-    )
-    if (
-        not scenario.map_name
-        or not scenario.checkpoint_path
-        or scenario.ego_idx < 0
-        or scenario.opponent_speed_scale <= 0
-        or scenario.sim_duration <= 0
-        or not 0 <= scenario.noise <= 1
-    ):
-        raise ValueError(
-            "map_name and checkpoint_path must be nonempty, ego_idx must be "
-            "nonnegative, opponent_speed_scale and sim_duration must be positive, "
-            "and noise must be between 0 and 1"
-        )
-
     vehicle = load_racetrack_config().vehicle
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = End2Race().to(device)
     model.load_state_dict(
-        torch.load(scenario.checkpoint_path, map_location=device, weights_only=True)
+        torch.load(args.checkpoint_path, map_location=device, weights_only=True)
     )
     model.eval()
 
-    result = evaluate_segment(
-        model,
-        device,
-        vehicle,
-        scenario,
-    )
+    result = evaluate_segment(model, device, vehicle, args)
     print(f"STATE={result['state']}")
     print(f"AVG_SPEED={result['avg_speed']:.3f}")
     print(f"SPEED_VARIANCE={result['speed_variance']:.3f}")

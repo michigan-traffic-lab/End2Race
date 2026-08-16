@@ -1,44 +1,23 @@
 import argparse
-import subprocess
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import torch
-import torch.nn as nn
+import torch.nn.functional as F
 import torch.optim as optim
 from torch.utils.data import DataLoader, Dataset
 
-from eval_single import (
-    EVALUATION_NOISE,
-    EVALUATION_SEED,
-    LAP_COUNT,
-    MINIMUM_LAP_TIME,
-    START_INDEX,
-    EvaluationSettings,
-    evaluate_laps,
-)
 from model import End2Race
-from utils import load_racetrack_config, require_end2race_runtime
-
-DATASET_DIRECTORY = Path("dataset")
-EPOCH_INTERVAL = 500
-MAX_MODELS = 10
-SINGLE_AGENT_MAPS = (
-    "Austin",
-    "Hockenheim",
-    "MoscowRaceway",
-    "Nuerburgring",
-)
+from utils import require_end2race_runtime
 
 
 def parse_arguments():
-    parser = argparse.ArgumentParser(
-        description="Train End2Race speed-conditioned model"
-    )
-    parser.add_argument(
-        "--model_path", type=Path, default=Path("checkpoint/checkpoint.pt")
-    )
+    parser = argparse.ArgumentParser(description="Train End2Race speed-conditioned model")
+    parser.add_argument("--dataset_dir", type=Path, default=Path("dataset"))
+    parser.add_argument("--output_dir", type=Path, default=Path("checkpoint"))
+    parser.add_argument("--save_interval", type=int, default=500)
+
     parser.add_argument("--batch_size", type=int, default=1024)
     parser.add_argument("--learning_rate", type=float, default=0.001)
     parser.add_argument("--num_epochs", type=int, default=5000)
@@ -55,11 +34,7 @@ class SequenceDataset(Dataset):
         ]
         self.speed_column = "current_speed"
         self.action_columns = ["steer", "desired_speed"]
-        self.expected_columns = (
-            ["time", self.speed_column]
-            + self.action_columns
-            + self.lidar_columns
-        )
+        self.expected_columns = ["time", self.speed_column] + self.action_columns + self.lidar_columns
         self.sequence_length = self._determine_sequence_length(data_path)
         self.sequences = []
         self._load_episodes(data_path)
@@ -113,9 +88,7 @@ class SequenceDataset(Dataset):
     def __len__(self) -> int:
         return len(self.sequences)
 
-    def __getitem__(
-        self, index: int
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def __getitem__(self, index: int) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         sequence = self.sequences[index]
         return (
             torch.from_numpy(sequence["lidar"]),
@@ -127,7 +100,6 @@ class SequenceDataset(Dataset):
 def train_epoch(
     model,
     train_loader,
-    criterion,
     optimizer,
     speed_loss_weight,
     gradient_clip_norm,
@@ -142,71 +114,28 @@ def train_epoch(
         optimizer.zero_grad(set_to_none=True)
 
         predicted_actions, _ = model(lidar_seq, speed_seq)
-        predicted_actions_flat = predicted_actions.reshape(
-            -1, predicted_actions.shape[-1]
-        )
-        target_actions_flat = target_actions.reshape(
-            -1, target_actions.shape[-1]
-        )
-        steer_loss = criterion(
-            predicted_actions_flat[:, 0], target_actions_flat[:, 0]
-        )
-        speed_loss = criterion(
-            predicted_actions_flat[:, 1], target_actions_flat[:, 1]
-        )
+        predicted_actions_flat = predicted_actions.reshape(-1, predicted_actions.shape[-1])
+        target_actions_flat = target_actions.reshape(-1, target_actions.shape[-1])
+        steer_loss = F.mse_loss(predicted_actions_flat[:, 0], target_actions_flat[:, 0])
+        speed_loss = F.mse_loss(predicted_actions_flat[:, 1], target_actions_flat[:, 1])
         loss = steer_loss + speed_loss * speed_loss_weight
         loss.backward()
-        torch.nn.utils.clip_grad_norm_(
-            model.parameters(), max_norm=gradient_clip_norm
-        )
+        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=gradient_clip_norm)
         optimizer.step()
         total_loss += loss.item()
     return total_loss / len(train_loader)
 
 
-def evaluate_checkpoint(model, device, vehicle, checkpoint_path):
-    for map_name in SINGLE_AGENT_MAPS:
-        print(f"Single-agent evaluation: {map_name}")
-        settings = EvaluationSettings(
-            map_name=map_name,
-            checkpoint_path=checkpoint_path,
-            noise=EVALUATION_NOISE,
-            seed=EVALUATION_SEED,
-            render=False,
-            lap_num=LAP_COUNT,
-            start_idx=START_INDEX,
-            minimum_lap_time=MINIMUM_LAP_TIME,
-        )
-        if not evaluate_laps(model, device, vehicle, settings):
-            return False
-    print("Austin 720-scenario multi-agent evaluation")
-    return (
-        subprocess.run(["bash", "eval_multi.sh", str(checkpoint_path)]).returncode
-        == 0
-    )
-
-
-def save_training_state(path, model_number, epoch, model, optimizer):
-    torch.save(
-        {
-            "model_number": model_number,
-            "epoch": epoch,
-            "model_state_dict": model.state_dict(),
-            "optimizer_state_dict": optimizer.state_dict(),
-        },
-        path,
-    )
-
-
 def main():
     args = parse_arguments()
     require_end2race_runtime()
-    vehicle = load_racetrack_config().vehicle
+    if args.save_interval < 1:
+        raise SystemExit("--save_interval must be positive")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
     print(f"Training arguments: {vars(args)}")
 
-    dataset = SequenceDataset(DATASET_DIRECTORY / "success")
+    dataset = SequenceDataset(args.dataset_dir / "success")
 
     train_loader = DataLoader(
         dataset,
@@ -215,68 +144,27 @@ def main():
         pin_memory=device.type == "cuda",
     )
 
-    criterion = nn.MSELoss()
-    args.model_path.parent.mkdir(parents=True, exist_ok=True)
-    training_state_path = args.model_path.with_name("training_state.pt")
+    model = End2Race().to(device)
+    optimizer = optim.Adam(model.parameters(), lr=args.learning_rate)
+    args.output_dir.mkdir(parents=True, exist_ok=True)
     print(f"Train batches: {len(train_loader)}")
-    if training_state_path.is_file():
-        state = torch.load(training_state_path, map_location=device)
-        model_number = state["model_number"]
-        completed_epochs = state["epoch"]
-        if completed_epochs > args.num_epochs:
-            raise ValueError(
-                f"Training state epoch {completed_epochs} exceeds "
-                f"--num_epochs {args.num_epochs}"
-            )
-        model = End2Race().to(device)
-        model.load_state_dict(state["model_state_dict"])
-        optimizer = optim.Adam(model.parameters(), lr=args.learning_rate)
-        optimizer.load_state_dict(state["optimizer_state_dict"])
-        for parameter_group in optimizer.param_groups:
-            parameter_group["lr"] = args.learning_rate
-        print(
-            f"Resuming model {model_number}/{MAX_MODELS} at "
-            f"epoch {completed_epochs}"
-        )
-        if evaluate_checkpoint(model, device, vehicle, args.model_path):
-            print(f"Model {model_number} passed all evaluations")
-            return
-    else:
-        model_number = 1
-        completed_epochs = 0
-        model = None
 
-    while model_number <= MAX_MODELS:
-        print(f"\nStarting model {model_number}/{MAX_MODELS}")
-        if model is None:
-            model = End2Race().to(device)
-            optimizer = optim.Adam(model.parameters(), lr=args.learning_rate)
-        for epoch in range(completed_epochs + 1, args.num_epochs + 1):
-            loss = train_epoch(
-                model,
-                train_loader,
-                criterion,
-                optimizer,
-                args.speed_loss_weight,
-                args.gradient_clip_norm,
-            )
-            if epoch % EPOCH_INTERVAL and epoch != args.num_epochs:
-                continue
-            torch.save(model.state_dict(), args.model_path)
-            save_training_state(
-                training_state_path, model_number, epoch, model, optimizer
-            )
-            print(f"Epoch {epoch}/{args.num_epochs}, loss: {loss:.5f}")
-            if evaluate_checkpoint(model, device, vehicle, args.model_path):
-                print(f"Model {model_number} passed all evaluations")
-                return
-        print(f"Model {model_number} did not pass; removing saved model")
-        args.model_path.unlink(missing_ok=True)
-        training_state_path.unlink(missing_ok=True)
-        model_number += 1
-        completed_epochs = 0
-        model = None
-    raise RuntimeError(f"No usable model found after {MAX_MODELS} attempts")
+    for epoch in range(1, args.num_epochs + 1):
+        loss = train_epoch(
+            model,
+            train_loader,
+            optimizer,
+            args.speed_loss_weight,
+            args.gradient_clip_norm,
+        )
+        if epoch % args.save_interval and epoch != args.num_epochs:
+            continue
+        checkpoint_path = args.output_dir / f"epoch_{epoch:05d}.pt"
+        torch.save(model.state_dict(), checkpoint_path)
+        print(
+            f"Epoch {epoch}/{args.num_epochs}, loss: {loss:.5f}, "
+            f"saved {checkpoint_path}"
+        )
 
 
 if __name__ == "__main__":

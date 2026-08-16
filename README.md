@@ -25,8 +25,9 @@ end2race/
 │   ├── config.yaml            # Track and vehicle configuration
 │   └── generate_raceline.py   # Raceline generation tool
 ├── latticeplanner/
-│   ├── lattice_config.yaml    # Expert-planner configuration
+│   ├── lattice_config.yaml    # Expert-planner and simulation timing configuration
 │   └── lattice_planner.py     # PythonRobotics FOT expert and trajectory tracker
+├── install.sh                 # Dependency install into the activated environment
 ├── expert.py                  # One multi-agent expert collection scenario
 ├── model.py                   # GRU network architecture
 ├── train.py                   # Training script
@@ -34,6 +35,7 @@ end2race/
 ├── eval_single.py             # One single-agent lap evaluation
 ├── eval_multi.py              # One multi-agent racing evaluation
 ├── eval_multi.sh              # Parallel multi-agent orchestrator
+├── sweep.sh                   # Hyperparameter grid training and checkpoint screening
 └── utils.py                   # Shared utilities and configuration loading
 ```
 
@@ -41,13 +43,17 @@ end2race/
 
 Two YAML files hold planner and track-tool settings. Workflow settings stay with the scripts that own their execution:
 
-- `latticeplanner/lattice_config.yaml`: the `expert` section of planner and tracker settings
+- `latticeplanner/lattice_config.yaml`: an `expert` section of planner and tracker
+  settings, and a `simulation` section holding the timing contract and the ego's
+  initial speed fraction
 - `f1tenth_racetracks/config.yaml`: a `track` section for raceline generation and a
   `vehicle` section shared by the expert, the evaluators, and the raceline tool
 
 The model dimensions and preprocessing constants live with the model definition
-in `model.py`. Physics runs at 120 Hz, LiDAR-driven FOT replanning runs at
-10 Hz, and data collection runs at 40 Hz (25 ms).
+in `model.py`. The `simulation` section sets 120 Hz physics, 10 Hz LiDAR-driven FOT
+replanning, and a 40 Hz (25 ms) control rate that carries the expert labels during
+collection and the policy's decisions during evaluation. `expert.tracker_steps` must
+equal the resulting 12 physics steps per plan; collection fails fast when it does not.
 
 ## Environment Setup
 
@@ -62,23 +68,15 @@ git clone https://github.com/li1164733168/end2race.git
 cd end2race
 ```
 
-### Setup Virtual Environment
+### Install
 ```bash
-conda env create --file environment.yml
+conda create -y -n end2race python=3.11
 conda activate end2race
-```
-
-If the environment already exists, synchronize it with:
-
-```bash
-conda env update --name end2race --file environment.yml
-conda activate end2race
-```
-
-### Install Dependencies
-```bash
 bash install.sh
 ```
+
+`install.sh` installs every dependency into the currently activated environment, so
+activate `end2race` first and run the script from the repository root.
 
 ## Evaluation
 
@@ -88,10 +86,16 @@ The evaluation is conducted using the [F1Tenth Gym simulator](https://github.com
 Evaluates the model's lap completion ability across different track configurations, testing its robustness to varying track layouts and racing line complexities without opponent interaction.
 
 ```bash
-python eval_single.py Austin checkpoint/checkpoint.pt --render
+python eval_single.py \
+  --map_name Austin \
+  --checkpoint_path checkpoint/epoch_05000.pt \
+  --output_dir eval_results/epoch_05000 \
+  --render
 ```
 
-The track and checkpoint path are required arguments. Add `--render` to save a video, or omit it for evaluation without rendering. All other evaluation settings are internal constants.
+`--checkpoint_path` is required and `--map_name` defaults to `Austin`. `--output_dir`, `--noise`, `--seed`, `--lap_num`, `--start_idx`, and `--minimum_lap_time` default to `eval_results`, `0.0`, `42`, `1`, `0`, and `10.0`; [Hyperparameter Sweep](#hyperparameter-sweep) relies on those defaults. The run exits 0 when the checkpoint completes every lap without a collision and 1 otherwise, and prints `PASSED`, `COLLISION`, `LAPS_COMPLETED`, `LAP_PROGRESS`, `LAP_TIME`, `MEAN_LAP_TIME`, `AVG_SPEED`, `SPEED_VARIANCE`, and `TOTAL_DISTANCE` as `KEY=VALUE` lines. It writes no results file.
+
+With `--render` the video lands directly in `--output_dir`, and its name carries the outcome: `[c_]<map>_lap<progress>[_noiseNN].mp4`, where `c_` marks a collision, the progress is the completed laps plus the fraction of the current lap to one decimal with `.` written as `_`, and the noise suffix appears only for a nonzero `--noise` as the percentage. `Austin_lap1_0.mp4` completed the target lap; `c_Austin_lap0_5.mp4` collided halfway around; `c_Austin_lap0_5_noise10.mp4` did the same at `--noise 0.1`.
 
 ### Multi-Agent Evaluation
 
@@ -99,19 +103,44 @@ Evaluates the model in competitive racing scenarios against an expert opponent. 
 
 
 ```bash
-python eval_multi.py Austin checkpoint/checkpoint.pt 0 raceline1 0.8 8.0 0.0 42 false
+python eval_multi.py \
+  --map_name Austin \
+  --checkpoint_path checkpoint/epoch_05000.pt \
+  --output_dir eval_results/epoch_05000/Austin \
+  --ego_idx 0 \
+  --opponent_raceline raceline1 \
+  --opponent_speed_scale 0.8
 ```
 
-The required inputs are track, checkpoint, ego waypoint index, opponent raceline, opponent speed scale, evaluation duration, LiDAR noise ratio, seed, and rendering flag. `eval_multi.sh` owns these evaluation settings for batch runs.
+`--checkpoint_path` is required; `--map_name`, `--output_dir`, `--ego_raceline`, `--ego_idx`, `--opponent_raceline`, `--opponent_speed_scale`, `--interval_idx`, `--sim_duration`, `--noise`, and `--seed` default to `Austin`, `eval_results`, `raceline1`, `0`, `raceline1`, `0.8`, `15`, `8.0`, `0.0`, and `42`. The run prints `STATE`, `AVG_SPEED`, `SPEED_VARIANCE`, and `TOTAL_DISTANCE` as `KEY=VALUE` lines, where `STATE` is 1 for following, 2 for overtaking, and 3 for a collision. It writes no results file; `eval_multi.sh` owns the summary for a whole map.
+
+With `--render` the video lands directly in `--output_dir` as `<c|f|o>_ol<opponent raceline>_e<ego index>_o<opponent index>_s<speed scale>[_noiseNN].mp4`, with the noise suffix present only for a nonzero `--noise`. The name carries the scenario alone, so the checkpoint and map belong in `--output_dir`.
 
 ### Multi-Agent Parallel Evaluation (Optional)
 
 The batch evaluation runs hundreds of scenarios in parallel to comprehensively assess the model's performance across different starting positions, opponent strategies, and difficulty levels:
 
 ```bash
-bash eval_multi.sh
+bash eval_multi.sh checkpoint/epoch_05000.pt eval_results
 ```
 
+The checkpoint is required and the output root defaults to `eval_results`. The batch runs 80 start points against 3 opponent racelines and 3 opponent speed scales on Austin, 720 scenarios across 12 workers, and lays every artifact under `<output root>/<checkpoint stem>/<map>/`. It always completes at least 100 scenarios and stops early only if its aggregate collision rate then exceeds 20%.
+
+The batch renders no video, so `results.json` is its only artifact: the batch configuration, the following, overtaking, collision, and error counts, and their percentages. A collision-guard stop, a `Ctrl-C`, and a `SIGTERM` each still write it, so `planned_scenarios`, `completed_scenarios`, `complete`, and `stop_reason` say how much of the batch the numbers cover; percentages always use `completed_scenarios` as their denominator. The batch exits 0 when every scenario ran, 1 on worker errors, 2 on a collision-guard stop, and 130 or 143 when interrupted.
+
+### Hyperparameter Sweep
+
+Trains a grid of hyperparameters and screens the checkpoints each run produces:
+
+```bash
+bash sweep.sh checkpoint eval_results
+```
+
+The checkpoint root defaults to `checkpoint` and the output root to `eval_results`. The grid itself lives at the top of the script: `DATASET_DIR`, `BATCH_SIZES`, `LEARNING_RATES`, `REPEATS`, `NUM_EPOCHS`, and `SAVE_INTERVAL`. Every combination becomes one run named `bs<batch size>_lr<learning rate>_r<repeat>`, trained into `<checkpoint root>/<run>/`. Each invocation starts every run from a new random initialization; existing epoch files do not resume training.
+
+Each run's checkpoints are screened in ascending epoch order. A checkpoint must complete one collision-free lap on Austin, Hockenheim, MoscowRaceway, and Nuerburgring, then pass `eval_multi.sh` on Austin's 720 scenarios; the first checkpoint to clear both ends that run. The first failing map stops that checkpoint, so most checkpoints cost a single lap.
+
+The sweep writes `<output root>/sweep.json`: the grid configuration, and for every started run its completion state, hyperparameters, qualification, selected checkpoint, and recorded single-agent laps. Checkpoints that never reach the multi-agent stage still appear there with their per-map progress. A `Ctrl-C` or `SIGTERM` still writes the file; `started_runs`, `screened_runs`, and `planned_runs` distinguish a partially processed run from a completed one. Multi-agent results stay in each checkpoint's own `results.json`.
 
 ## Data Collection
 
@@ -131,9 +160,9 @@ Collection runs 120 Hz physics, replans the FOT trajectory every 12th physics st
 bash collect.sh
 ```
 
-`collect.sh` owns the output dataset directory and all batch collection settings. The current Austin batch runs 80 ego starting points against three opponent racelines at waypoint interval `15` and speed scales `0.4`, `0.6`, and `0.8`, with 8 seconds per scenario: 720 scenarios total.
+`collect.sh` owns the output dataset directory and all batch collection settings. It refuses to start when the dataset directory already holds collected episodes, so every collection begins from an empty one, and it stops the remaining scenarios once the collision rate exceeds 20% after 25 completed scenarios. The current Austin batch runs 80 ego starting points against three opponent racelines at waypoint interval `15` and speed scales `0.4`, `0.6`, and `0.8`, with 8 seconds per scenario: 720 scenarios total.
 
-After all collection workers finish, `collect.sh` prints the following, overtaking, collision, and worker-failure counts and writes `dataset/summary.json`. The summary snapshots the collection, vehicle, and expert configuration; reports collision-free, collision, overtaking, and following outcomes with their rates; counts training rows and saved videos; and provides a breakdown by opponent raceline and speed scale. It is generated from the saved CSV and collision metadata, so a partial collection also retains a summary before `collect.sh` reports a worker failure.
+When the workers finish, `collect.sh` prints the following, overtaking, collision, and worker-failure counts and writes `summary.json` into the dataset directory. It exits 0 when every scenario ran, 1 on worker failures, and 2 on a collision-guard stop. The summary snapshots the collection, vehicle, and expert configuration; reports collision-free, collision, overtaking, and following outcomes with their rates; counts training rows and saved videos; and provides a breakdown by opponent raceline and speed scale. It is generated from the saved CSV and collision metadata, so a collection cut short by the collision guard or by a worker failure still leaves a summary of what it collected.
 
 Each training row stores the measured ego speed, expert steering and desired-speed targets, and 180 LiDAR values from the same decision instant. Training keeps every 40 Hz row: the first row uses its measured speed as the initial speed input, and later rows use the measured speed from the preceding 25 ms step. The ego FOT expert replans every 12th physics step from the corresponding LiDAR scan, projects that scan into occupied points, and selects among dynamically feasible trajectories using mean velocity cost and worst-point clearance cost; its tracker supplies the 40 Hz labels while following that held trajectory. The non-reactive opponent tracks its assigned raceline. Every velocity choice produces a physically distinct trajectory over the candidate horizon, and generated speeds are bounded by 7.5 m/s.
 
@@ -150,7 +179,9 @@ The main training parameters are command-line options:
 
 ```bash
 python train.py \
-  --model_path checkpoint/checkpoint.pt \
+  --dataset_dir dataset \
+  --output_dir checkpoint \
+  --save_interval 500 \
   --batch_size 1024 \
   --learning_rate 0.001 \
   --num_epochs 5000 \
@@ -158,7 +189,7 @@ python train.py \
   --gradient_clip_norm 1.0
 ```
 
-These are the defaults, so the arguments may be omitted. Training reads successful demonstrations from `dataset/success/`. It trains one model for up to `--num_epochs`, overwriting `--model_path` with the current model every 500 epochs and at the final epoch. Each saved model must complete one collision-free lap on Austin, Hockenheim, MoscowRaceway, and Nuerburgring in that order, then evaluate Austin's 720 multi-agent scenarios. That evaluation always completes at least 100 scenarios and stops early only if its aggregate collision rate then exceeds 20%. The first failure stops that model's remaining evaluation. A model that never passes is removed after the final epoch; training tries at most 10 models. The model and `training_state.pt` remain together without nested directories; by default both are directly under `checkpoint/`. Rerunning `train.py` with an existing `training_state.pt` resumes that model at its recorded epoch.
+These are the defaults, so the arguments may be omitted. Training trains one model for `--num_epochs`. It reads episodes from `<--dataset_dir>/success/` and writes `epoch_<epoch>.pt` with a five-digit epoch, such as `epoch_05000.pt`, into `--output_dir` every `--save_interval` epochs and at the final epoch, so a run whose length is not a multiple of the interval still saves its last model. Training performs no evaluation and keeps no resume state; use [Hyperparameter Sweep](#hyperparameter-sweep) to train and screen a grid of runs.
 
 ## Model Architecture
 

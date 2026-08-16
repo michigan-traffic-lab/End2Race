@@ -9,18 +9,9 @@ import imageio
 import numpy as np
 from f110_gym.envs.base_classes import Integrator
 
-from latticeplanner.lattice_planner import (
-    create_expert_planner,
-    create_opponent,
-)
+from latticeplanner.lattice_planner import create_expert_planner, create_opponent
 from model import End2Race
 from utils import (
-    CONTROL_TIMESTEP,
-    EGO_INITIAL_SPEED_FRACTION,
-    SIMULATION_STEPS_PER_CONTROL,
-    SIMULATION_STEPS_PER_EXPERT_PLAN,
-    SIMULATION_TIMESTEP,
-    VIDEO_FPS,
     create_planner_render_callback,
     downsample_lidar,
     find_opponent_start_index,
@@ -28,6 +19,7 @@ from utils import (
     project_point_to_centerline,
     raceline_pose,
     require_end2race_runtime,
+    simulation_config,
     unwrap_progress,
 )
 
@@ -35,30 +27,32 @@ EGO_RACELINE = "raceline1"
 
 
 def parse_arguments():
-    parser = argparse.ArgumentParser(
-        description="Collect one multi-agent expert demonstration"
-    )
+    parser = argparse.ArgumentParser(description="Collect one multi-agent expert demonstration")
+
     parser.add_argument("--map_name", default="Austin")
     parser.add_argument("--dataset_dir", default="dataset")
+
     parser.add_argument("--ego_idx", type=int, default=0)
     parser.add_argument("--interval_idx", type=int, default=15)
     parser.add_argument("--opponent_raceline", default="raceline1")
     parser.add_argument("--opponent_speed_scale", type=float, default=0.8)
+
     parser.add_argument("--sim_duration", type=float, default=8.0)
     parser.add_argument("--render", action="store_true")
 
     return parser.parse_args()
 
 
+def total_simulation_steps(sim_duration, timestep):
+    step_count = round(sim_duration / timestep)
+    if not np.isclose(step_count * timestep, sim_duration, rtol=0.0, atol=1e-9):
+        raise SystemExit("sim_duration must be divisible by the simulation timestep")
+    return step_count
+
+
 def save_data(
-    args,
-    collected_data,
-    video_frames,
-    collision_occurred,
-    final_state,
-    base_filename,
-    elapsed_time,
-    opponent_idx,
+    args, collected_data, video_frames, collision_occurred,
+    final_state, base_filename, elapsed_time, opponent_idx, video_fps,
 ):
     dataset_dir = Path(args.dataset_dir)
     if collision_occurred:
@@ -77,18 +71,11 @@ def save_data(
         }
 
         metadata_path = collision_dir / f"{base_filename}.json"
-        metadata_path.write_text(
-            json.dumps(collision_metadata, indent=2), encoding="utf-8"
-        )
+        metadata_path.write_text(json.dumps(collision_metadata, indent=2), encoding="utf-8")
 
-        if args.render and video_frames:
+        if video_frames:
             video_path = collision_dir / f"{base_filename}.mp4"
-            imageio.mimwrite(
-                video_path,
-                video_frames,
-                fps=VIDEO_FPS,
-                macro_block_size=1,
-            )
+            imageio.mimwrite(video_path, video_frames, fps=video_fps, macro_block_size=1)
             print(f"Collision video saved to {video_path}")
 
         print(f"Collision metadata saved to {metadata_path}")
@@ -107,273 +94,197 @@ def save_data(
         writer.writerows(collected_data)
 
     print(f"Multi-agent data saved to {csv_path}")
-    if args.render and video_frames:
+    if video_frames:
         video_path = success_dir / f"{base_filename}.mp4"
-        imageio.mimwrite(
-            video_path, video_frames, fps=VIDEO_FPS, macro_block_size=1
-        )
+        imageio.mimwrite(video_path, video_frames, fps=video_fps, macro_block_size=1)
         print(f"Video saved to {video_path}")
 
 
 def collect_scenario(args):
     vehicle = load_racetrack_config().vehicle
-    ego_planner, config_directory = create_expert_planner(
-        args.map_name, EGO_RACELINE
-    )
-    opponent_planner, _ = create_opponent(
-        args.map_name, args.opponent_raceline
-    )
+    simulation = simulation_config()
+    simulation_steps = total_simulation_steps(args.sim_duration, simulation.timestep)
+
+    ego_planner = create_expert_planner(args.map_name, EGO_RACELINE)
+    opponent_planner = create_opponent(args.map_name, args.opponent_raceline)
+    planner_steps = ego_planner.conf.tracker_steps
+    if planner_steps != simulation.steps_per_expert_plan:
+        raise ValueError(
+            "expert.tracker_steps must match the number of simulation "
+            f"steps per expert plan ({simulation.steps_per_expert_plan})"
+        )
 
     env = gym.make(
         "f110-v0",
         map=ego_planner.map_path,
         map_ext=".png",
-        timestep=SIMULATION_TIMESTEP,
+        timestep=simulation.timestep,
         num_agents=2,
         integrator=Integrator.RK4,
     )
 
-    render_info = {
-        "ego_steer": 0.0,
-        "ego_speed": 0.0,
-        "opp_steer": 0.0,
-        "opp_speed": 0.0,
-    }
-    draw_traj_pts = []
-    try:
-        if args.render:
-            env.add_render_callback(
-                create_planner_render_callback(
-                    render_info, ego_planner, draw_traj_pts
-                )
-            )
-
-        ego_waypoints_xytheta = np.column_stack(
-            (ego_planner.waypoints[:, :2], ego_planner.waypoints[:, 3])
-        )
-        ego_position = raceline_pose(ego_waypoints_xytheta, args.ego_idx)
-        opponent_waypoints_xytheta = np.column_stack(
-            (
-                opponent_planner.waypoints[:, :2],
-                opponent_planner.waypoints[:, 3],
-            )
-        )
-        opponent_idx = find_opponent_start_index(
-            ego_waypoints_xytheta,
-            opponent_waypoints_xytheta,
-            args.ego_idx,
-            args.interval_idx,
-        )
-        opponent_position = raceline_pose(
-            opponent_waypoints_xytheta, opponent_idx
-        )
-        initial_velocities = np.asarray(
-            [
-                EGO_INITIAL_SPEED_FRACTION * vehicle.maximum_speed,
-                opponent_planner.waypoints[opponent_idx, 2]
-                * args.opponent_speed_scale,
-            ]
+    if args.render:
+        render_info = {"ego_steer": 0.0, "ego_speed": 0.0, "opp_steer": 0.0, "opp_speed": 0.0}
+        draw_traj_pts = []
+        env.add_render_callback(
+            create_planner_render_callback(render_info, ego_planner, draw_traj_pts)
         )
 
-        centerline_values = np.loadtxt(
-            Path(config_directory) / f"{EGO_RACELINE}.csv",
-            delimiter=";",
-            skiprows=1,
-        )
-        centerline = centerline_values[:, 1:3]
-        centerline_total_length = np.linalg.norm(
-            np.diff(centerline, axis=0), axis=1
-        ).sum()
+    ego_waypoints_xytheta = np.column_stack(
+        (ego_planner.waypoints[:, :2], ego_planner.waypoints[:, 3])
+    )
+    ego_position = raceline_pose(ego_waypoints_xytheta, args.ego_idx)
+    opponent_waypoints_xytheta = np.column_stack(
+        (opponent_planner.waypoints[:, :2], opponent_planner.waypoints[:, 3])
+    )
+    opponent_idx = find_opponent_start_index(
+        ego_waypoints_xytheta, opponent_waypoints_xytheta, args.ego_idx, args.interval_idx
+    )
+    opponent_position = raceline_pose(opponent_waypoints_xytheta, opponent_idx)
+    initial_velocities = np.asarray([
+        simulation.ego_initial_speed_fraction * vehicle.maximum_speed,
+        opponent_planner.waypoints[opponent_idx, 2] * args.opponent_speed_scale,
+    ])
 
-        obs, _, done, _ = env.reset(
-            poses=np.vstack([ego_position, opponent_position]),
-            velocities=initial_velocities,
-        )
-        if args.render:
-            env.render()
+    # Progress is measured against the ego raceline for both vehicles
+    centerline = ego_planner.waypoints[:, :2]
+    centerline_total_length = float(np.linalg.norm(np.diff(centerline, axis=0), axis=1).sum())
 
-        initial_ego_progress, _ = project_point_to_centerline(
-            np.asarray([obs["poses_x"][0], obs["poses_y"][0]]), centerline
+    obs, _, done, _ = env.reset(
+        poses=np.vstack([ego_position, opponent_position]), velocities=initial_velocities
+    )
+    if args.render:
+        env.render()
+
+    initial_ego_progress, _ = project_point_to_centerline(
+        np.asarray([obs["poses_x"][0], obs["poses_y"][0]]), centerline
+    )
+    initial_opponent_progress, _ = project_point_to_centerline(
+        np.asarray([obs["poses_x"][1], obs["poses_y"][1]]), centerline
+    )
+    final_state = (
+        "overtaking" if initial_ego_progress > initial_opponent_progress else "following"
+    )
+
+    simulation_step = 0
+    collision_occurred = False
+    collected_data = []
+    video_frames = []
+
+    while not done and simulation_step < simulation_steps:
+        ego_trajectory = ego_planner.plan(
+            obs["poses_x"][0],
+            obs["poses_y"][0],
+            obs["poses_theta"][0],
+            obs["scans"][0],
+            obs["linear_vels_x"][0],
         )
-        initial_opponent_progress, _ = project_point_to_centerline(
-            np.asarray([obs["poses_x"][1], obs["poses_y"][1]]), centerline
-        )
-        final_state = (
-            "overtaking"
-            if initial_ego_progress > initial_opponent_progress
-            else "following"
+        opponent_trajectory = opponent_planner.plan(
+            obs["poses_x"][1],
+            obs["poses_y"][1],
+            obs["poses_theta"][1],
+            obs["scans"][1],
+            obs["linear_vels_x"][1],
         )
 
-        total_simulation_steps = round(args.sim_duration / SIMULATION_TIMESTEP)
-        if not np.isclose(
-            total_simulation_steps * SIMULATION_TIMESTEP,
-            args.sim_duration,
-            rtol=0.0,
-            atol=1e-9,
-        ):
-            raise ValueError(
-                "sim_duration must be divisible by the simulation timestep"
-            )
-        planner_steps = ego_planner.conf.tracker_steps
-        if planner_steps != SIMULATION_STEPS_PER_EXPERT_PLAN:
-            raise ValueError(
-                "expert.tracker_steps must match the number of simulation "
-                f"steps per expert plan ({SIMULATION_STEPS_PER_EXPERT_PLAN})"
-            )
+        for _ in range(planner_steps):
+            if done or simulation_step >= simulation_steps:
+                break
 
-        simulation_step = 0
-        elapsed_time = 0.0
-        collision_occurred = False
-        collected_data = []
-        video_frames = []
-
-        while not done and simulation_step < total_simulation_steps:
-            ego_trajectory = ego_planner.plan(
+            ego_steer, ego_speed = ego_planner.tracker.plan(
                 obs["poses_x"][0],
                 obs["poses_y"][0],
                 obs["poses_theta"][0],
-                obs["scans"][0],
                 obs["linear_vels_x"][0],
+                ego_trajectory,
             )
-            opponent_trajectory = opponent_planner.plan(
+            ego_steer = np.clip(ego_steer, -vehicle.steering_limit, vehicle.steering_limit)
+            opponent_steer, opponent_speed = opponent_planner.tracker.plan(
                 obs["poses_x"][1],
                 obs["poses_y"][1],
                 obs["poses_theta"][1],
-                obs["scans"][1],
                 obs["linear_vels_x"][1],
+                opponent_trajectory,
+            )
+            opponent_steer = np.clip(
+                opponent_steer, -vehicle.steering_limit, vehicle.steering_limit
+            )
+            opponent_speed *= args.opponent_speed_scale
+            action = np.asarray([[ego_steer, ego_speed], [opponent_steer, opponent_speed]])
+
+            if args.render:
+                render_info.update({
+                    "ego_steer": ego_steer,
+                    "ego_speed": ego_speed,
+                    "opp_steer": opponent_steer,
+                    "opp_speed": opponent_speed,
+                })
+
+            if simulation_step % simulation.steps_per_control == 0:
+                lidar = downsample_lidar(
+                    obs["scans"][0], target_points=End2Race.NUM_LIDAR_FEATURES
+                )
+                collected_data.append(
+                    [
+                        round(len(collected_data) * simulation.control_timestep, 6),
+                        obs["linear_vels_x"][0],
+                        ego_steer,
+                        ego_speed,
+                    ]
+                    + lidar.tolist()
+                )
+
+            obs, _, done, _ = env.step(action)
+            simulation_step += 1
+
+            current_ego_progress = unwrap_progress(
+                project_point_to_centerline(
+                    np.asarray([obs["poses_x"][0], obs["poses_y"][0]]), centerline
+                )[0],
+                initial_ego_progress,
+                centerline_total_length,
+            )
+            current_opponent_progress = unwrap_progress(
+                project_point_to_centerline(
+                    np.asarray([obs["poses_x"][1], obs["poses_y"][1]]), centerline
+                )[0],
+                initial_opponent_progress,
+                centerline_total_length,
+            )
+            final_state = (
+                "overtaking" if current_ego_progress > current_opponent_progress else "following"
             )
 
-            for _ in range(planner_steps):
-                if done or simulation_step >= total_simulation_steps:
-                    break
+            if obs["collisions"][0]:
+                done = True
+                collision_occurred = True
 
-                ego_steer, ego_speed = ego_planner.tracker.plan(
-                    obs["poses_x"][0],
-                    obs["poses_y"][0],
-                    obs["poses_theta"][0],
-                    obs["linear_vels_x"][0],
-                    ego_trajectory,
-                )
-                ego_steer = np.clip(
-                    ego_steer,
-                    -vehicle.steering_limit,
-                    vehicle.steering_limit,
-                )
-                opponent_steer, opponent_speed = (
-                    opponent_planner.tracker.plan(
-                        obs["poses_x"][1],
-                        obs["poses_y"][1],
-                        obs["poses_theta"][1],
-                        obs["linear_vels_x"][1],
-                        opponent_trajectory,
-                    )
-                )
-                opponent_steer = np.clip(
-                    opponent_steer,
-                    -vehicle.steering_limit,
-                    vehicle.steering_limit,
-                )
-                opponent_speed *= args.opponent_speed_scale
-                action = np.asarray(
-                    [
-                        [ego_steer, ego_speed],
-                        [opponent_steer, opponent_speed],
-                    ]
-                )
+            if args.render:
+                video_frames.append(env.render(mode="rgb_array"))
 
-                if args.render:
-                    render_info.update(
-                        {
-                            "ego_steer": ego_steer,
-                            "ego_speed": ego_speed,
-                            "opp_steer": opponent_steer,
-                            "opp_speed": opponent_speed,
-                        }
-                    )
+    elapsed_time = simulation_step * simulation.timestep
+    print("Sim elapsed time:", elapsed_time)
 
-                if simulation_step % SIMULATION_STEPS_PER_CONTROL == 0:
-                    lidar = downsample_lidar(
-                        np.asarray(obs["scans"][0]).ravel(),
-                        target_points=End2Race.NUM_LIDAR_FEATURES,
-                    )
-                    collected_data.append(
-                        [
-                            round(len(collected_data) * CONTROL_TIMESTEP, 6),
-                            obs["linear_vels_x"][0],
-                            ego_steer,
-                            ego_speed,
-                        ]
-                        + lidar.tolist()
-                    )
+    state_prefix = final_state[0]
+    opponent_raceline_number = args.opponent_raceline.removeprefix("raceline")
+    base_filename = (
+        f"{state_prefix}_ol{opponent_raceline_number}_e{args.ego_idx}"
+        f"_i{args.interval_idx}_o{opponent_idx}"
+        f"_s{args.opponent_speed_scale}"
+    )
 
-                obs, timestep, done, _ = env.step(action)
-                simulation_step += 1
-
-                current_ego_progress = unwrap_progress(
-                    project_point_to_centerline(
-                        np.asarray([obs["poses_x"][0], obs["poses_y"][0]]),
-                        centerline,
-                    )[0],
-                    initial_ego_progress,
-                    centerline_total_length,
-                )
-                current_opponent_progress = unwrap_progress(
-                    project_point_to_centerline(
-                        np.asarray([obs["poses_x"][1], obs["poses_y"][1]]),
-                        centerline,
-                    )[0],
-                    initial_opponent_progress,
-                    centerline_total_length,
-                )
-                final_state = (
-                    "overtaking"
-                    if current_ego_progress > current_opponent_progress
-                    else "following"
-                )
-
-                if obs["collisions"][0]:
-                    done = True
-                    collision_occurred = True
-
-                elapsed_time = min(
-                    simulation_step * timestep, args.sim_duration
-                )
-
-                if args.render:
-                    frame = env.render(mode="rgb_array")
-                    if frame is not None:
-                        video_frames.append(frame)
-
-        print("Sim elapsed time:", elapsed_time)
-
-        state_prefix = "o" if final_state == "overtaking" else "f"
-        opponent_raceline_number = args.opponent_raceline.replace(
-            "raceline", ""
-        ).replace(".csv", "")
-        base_filename = (
-            f"{state_prefix}_ol{opponent_raceline_number}_e{args.ego_idx}"
-            f"_i{args.interval_idx}_o{opponent_idx}"
-            f"_s{args.opponent_speed_scale}"
-        )
-
-        save_data(
-            args,
-            collected_data,
-            video_frames,
-            collision_occurred,
-            final_state,
-            base_filename,
-            elapsed_time,
-            opponent_idx,
-        )
-    finally:
-        if args.render:
-            for item in draw_traj_pts:
-                item.delete()
-            draw_traj_pts.clear()
-            type(env.unwrapped).render_callbacks.clear()
-        env.close()
-        ego_planner.close()
+    save_data(
+        args,
+        collected_data,
+        video_frames,
+        collision_occurred,
+        final_state,
+        base_filename,
+        elapsed_time,
+        opponent_idx,
+        simulation.video_fps,
+    )
+    ego_planner.close()
 
 
 def main():

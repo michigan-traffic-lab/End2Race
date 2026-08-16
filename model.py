@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
 
-
 class End2Race(nn.Module):
     NUM_LIDAR_FEATURES = 180
     SPEED_EMBEDDING_DIM = 30

@@ -1,5 +1,7 @@
+import json
 import os
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -13,41 +15,45 @@ def load_yaml_config(path):
     with path.open(encoding="utf-8") as stream:
         values = yaml.safe_load(stream)
 
-    return SimpleNamespace(
-        **{
-            name: SimpleNamespace(**section)
-            for name, section in values.items()
-        }
-    )
+    return SimpleNamespace(**{name: SimpleNamespace(**section) for name, section in values.items()})
+
+
+def racetrack_path(*parts):
+    """Path to a file inside the bundled racetrack collection."""
+    return Path(__file__).resolve().parent / "f1tenth_racetracks" / Path(*parts)
 
 
 def load_racetrack_config():
-    return load_yaml_config(
-        Path(__file__).resolve().parent / "f1tenth_racetracks" / "config.yaml"
-    )
+    return load_yaml_config(racetrack_path("config.yaml"))
 
 
-SIMULATION_FREQUENCY_HZ = 120
-CONTROL_FREQUENCY_HZ = 40
-EXPERT_PLANNER_FREQUENCY_HZ = 10
-if (
-    SIMULATION_FREQUENCY_HZ % CONTROL_FREQUENCY_HZ
-    or SIMULATION_FREQUENCY_HZ % EXPERT_PLANNER_FREQUENCY_HZ
-):
-    raise ValueError(
-        "Simulation frequency must divide both control and expert planner "
-        "frequencies"
+def load_lattice_config():
+    return load_yaml_config(Path(__file__).resolve().parent / "latticeplanner" / "lattice_config.yaml")
+
+
+def simulation_config():
+    """Timing contract and initial ego speed derived from lattice_config.yaml."""
+    simulation = load_lattice_config().simulation
+    frequency = simulation.frequency_hz
+    control_frequency = simulation.control_frequency_hz
+    planner_frequency = simulation.expert_planner_frequency_hz
+    # Integer step counts truncate silently unless the frequencies divide evenly
+    if frequency % control_frequency or frequency % planner_frequency:
+        raise ValueError(
+            "simulation.frequency_hz must divide both simulation.control_frequency_hz "
+            "and simulation.expert_planner_frequency_hz"
+        )
+    return SimpleNamespace(
+        frequency_hz=frequency,
+        control_frequency_hz=control_frequency,
+        expert_planner_frequency_hz=planner_frequency,
+        steps_per_control=frequency // control_frequency,
+        steps_per_expert_plan=frequency // planner_frequency,
+        timestep=1.0 / frequency,
+        control_timestep=1.0 / control_frequency,
+        video_fps=frequency,
+        ego_initial_speed_fraction=simulation.ego_initial_speed_fraction,
     )
-SIMULATION_STEPS_PER_CONTROL = (
-    SIMULATION_FREQUENCY_HZ // CONTROL_FREQUENCY_HZ
-)
-SIMULATION_STEPS_PER_EXPERT_PLAN = (
-    SIMULATION_FREQUENCY_HZ // EXPERT_PLANNER_FREQUENCY_HZ
-)
-SIMULATION_TIMESTEP = 1.0 / SIMULATION_FREQUENCY_HZ
-CONTROL_TIMESTEP = 1.0 / CONTROL_FREQUENCY_HZ
-VIDEO_FPS = SIMULATION_FREQUENCY_HZ
-EGO_INITIAL_SPEED_FRACTION = 0.5
 
 
 @njit(cache=True)
@@ -106,29 +112,13 @@ def downsample_lidar(lidar_data, target_points):
     return scan[indices]
 
 
-def find_corresponding_waypoint(ego_waypoint, opponent_waypoints):
-    """Find the opponent-raceline waypoint nearest to an ego waypoint."""
-    distances = np.linalg.norm(
-        opponent_waypoints[:, :2] - ego_waypoint[:2], axis=1
-    )
-    return int(np.argmin(distances))
-
-
-def find_opponent_start_index(
-    ego_waypoints,
-    opponent_waypoints,
-    ego_idx,
-    interval_idx,
-):
+def find_opponent_start_index(ego_waypoints, opponent_waypoints, ego_idx, interval_idx):
     """Map an ego start onto another raceline and apply a waypoint gap."""
     ego_waypoints = ego_waypoints[:-1]
     opponent_waypoints = opponent_waypoints[:-1]
-    normalized_ego_idx = ego_idx % len(ego_waypoints)
-    mapped_idx = find_corresponding_waypoint(
-        ego_waypoints[normalized_ego_idx],
-        opponent_waypoints,
-    )
-    return (mapped_idx + interval_idx) % len(opponent_waypoints)
+    ego_waypoint = ego_waypoints[ego_idx % len(ego_waypoints)]
+    distances = np.linalg.norm(opponent_waypoints[:, :2] - ego_waypoint[:2], axis=1)
+    return (int(np.argmin(distances)) + interval_idx) % len(opponent_waypoints)
 
 
 def unwrap_progress(progress, initial_progress, track_length):
@@ -162,7 +152,7 @@ def require_end2race_runtime():
 
 def load_raceline(map_name, raceline_file):
     """Load x, y, heading, and speed columns from a raceline."""
-    raceline_path = os.path.join("f1tenth_racetracks", map_name, raceline_file)
+    raceline_path = racetrack_path(map_name, raceline_file)
     values = np.loadtxt(raceline_path, delimiter=";", skiprows=1, ndmin=2)
     if values.shape[1] < 6:
         raise ValueError(f"{raceline_path} must contain at least six columns")
@@ -268,7 +258,6 @@ def create_multiagent_render_callback(
 
 
 def create_planner_render_callback(render_info, planner, draw_traj_pts):
-
     def render_callback(event):
         follow_vehicle_camera(event)
         event.score_label.x = event.left + 800
@@ -322,9 +311,7 @@ def create_single_agent_render_callback(
 
 
 def get_ego_idx_range(map_name, ego_raceline, num_startpoints):
-    raceline_path = os.path.join(
-        "f1tenth_racetracks", map_name, f"{ego_raceline}.csv"
-    )
+    raceline_path = racetrack_path(map_name, f"{ego_raceline}.csv")
     waypoints = np.loadtxt(raceline_path, delimiter=";", skiprows=1, ndmin=2)
     if np.linalg.norm(waypoints[-1, 1:3] - waypoints[0, 1:3]) > 1e-9:
         raise ValueError(f"{raceline_path} must repeat its first waypoint at the end")
@@ -334,3 +321,297 @@ def get_ego_idx_range(map_name, ego_raceline, num_startpoints):
     progress_delta = np.abs(unique_waypoints[:, None, 0] - targets[None, :])
     progress_delta = np.minimum(progress_delta, track_length - progress_delta)
     return np.argmin(progress_delta, axis=0).astype(int).tolist()
+
+
+def collection_scenarios(map_name, ego_raceline, num_startpoints, opponent_racelines, opponent_speed_scales):
+    """Every (opponent raceline, speed scale, ego index) triple in one collection."""
+    ego_indices = get_ego_idx_range(map_name, ego_raceline, num_startpoints)
+    return [
+        (raceline, speed_scale, ego_idx)
+        for raceline in opponent_racelines
+        for speed_scale in opponent_speed_scales
+        for ego_idx in ego_indices
+    ]
+
+
+def _episode_record(path, outcome):
+    """Recover one scenario's parameters from its artifact filename."""
+    state, raceline, ego_idx, _, _, speed_scale = path.stem.split("_")
+    return {
+        "outcome": outcome,
+        "final_state": "overtaking" if state == "o" else "following",
+        "opponent_raceline": f"raceline{raceline[2:]}",
+        "ego_idx": int(ego_idx[1:]),
+        "speed_scale": float(speed_scale[1:]),
+    }
+
+
+def _percentage(numerator, denominator):
+    return round(100.0 * numerator / denominator, 4) if denominator else 0.0
+
+
+def _read_sweep_records(path):
+    float_keys = {
+        "LAP_PROGRESS",
+        "LAP_TIME",
+        "MEAN_LAP_TIME",
+        "AVG_SPEED",
+        "SPEED_VARIANCE",
+        "TOTAL_DISTANCE",
+        "LEARNING_RATE",
+    }
+    int_keys = {"PASSED", "COLLISION", "LAPS_COMPLETED", "BATCH_SIZE", "REPEAT"}
+    block = {}
+    with Path(path).open(encoding="utf-8") as stream:
+        for line in stream:
+            line = line.strip()
+            if line == "---":
+                if block:
+                    yield block
+                block = {}
+                continue
+            key, _, value = line.partition("=")
+            if key in float_keys:
+                block[key] = float(value)
+            elif key in int_keys:
+                block[key] = int(value)
+            else:
+                block[key] = value
+    if block:
+        yield block
+
+
+def write_sweep_summary(records_path, summary_path, dataset_dir, num_epochs, save_interval, batch_sizes, learning_rates, repeats):
+    batch_sizes = [int(value) for value in batch_sizes.split()]
+    learning_rates = [float(value) for value in learning_rates.split()]
+    repeats = int(repeats)
+    laps = {}
+    runs_by_name = {}
+    for block in _read_sweep_records(records_path):
+        run = block["RUN"]
+        if block["TYPE"] == "lap":
+            laps.setdefault((run, block["CHECKPOINT"]), []).append({
+                "map_name": block["MAP_NAME"],
+                "passed": bool(block["PASSED"]),
+                "collision": bool(block["COLLISION"]),
+                "laps_completed": block["LAPS_COMPLETED"],
+                "lap_progress": block["LAP_PROGRESS"],
+                "lap_time": block["LAP_TIME"],
+                "mean_lap_time": block["MEAN_LAP_TIME"],
+                "avg_speed": block["AVG_SPEED"],
+                "speed_variance": block["SPEED_VARIANCE"],
+                "total_distance": block["TOTAL_DISTANCE"],
+            })
+        else:
+            runs_by_name[run] = block
+
+    runs = []
+    for run, run_record in runs_by_name.items():
+        checkpoints = [
+            {
+                "checkpoint": checkpoint,
+                "single_agent_passed": all(lap["passed"] for lap in entries)
+                and len(entries) == len(run_record["MAPS"].split()),
+                "maps": entries,
+            }
+            for (record_run, checkpoint), entries in sorted(laps.items())
+            if record_run == run
+        ]
+        runs.append({
+            "run": run,
+            "batch_size": run_record["BATCH_SIZE"],
+            "learning_rate": run_record["LEARNING_RATE"],
+            "repeat": run_record["REPEAT"],
+            "completed": run_record["STATUS"] == "completed",
+            "qualified": run_record["QUALIFIED"] != "",
+            "qualified_checkpoint": run_record["QUALIFIED"] or None,
+            "screened_checkpoints": len(checkpoints),
+            "checkpoints": checkpoints,
+        })
+
+    summary = {
+        "generated_at_utc": datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
+        "dataset_dir": dataset_dir,
+        "num_epochs": int(num_epochs),
+        "save_interval": int(save_interval),
+        "batch_sizes": batch_sizes,
+        "learning_rates": learning_rates,
+        "repeats": repeats,
+        "planned_runs": len(batch_sizes) * len(learning_rates) * repeats,
+        "started_runs": len(runs),
+        "screened_runs": sum(entry["completed"] for entry in runs),
+        "qualified_runs": sum(entry["qualified"] for entry in runs),
+        "runs": sorted(runs, key=lambda entry: entry["run"]),
+    }
+    summary_path = Path(summary_path)
+    summary_path.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
+
+    print()
+    print(f"screened {summary['screened_runs']}/{summary['planned_runs']} runs, {summary['qualified_runs']} qualified")
+    for entry in summary["runs"]:
+        checkpoint = entry["qualified_checkpoint"] or "-"
+        print(f"  {entry['run']:24s} {checkpoint}")
+    print(f"Summary saved to {summary_path}")
+    return summary
+
+
+def write_multi_evaluation_summary(results_dir, summary_path, checkpoint_path, map_name, ego_raceline, num_startpoints, opponent_racelines, opponent_speed_scales, sim_duration, noise, seed, planned_scenarios, stop_reason):
+    results_dir = Path(results_dir)
+    following = 0
+    overtaking = 0
+    collisions = 0
+    errors = 0
+    completed = 0
+    for status_path in sorted(results_dir.glob("*.status")):
+        completed += 1
+        index = status_path.stem
+        if status_path.read_text(encoding="utf-8").strip() != "0":
+            errors += 1
+            sys.stderr.write((results_dir / f"{index}.err").read_text(encoding="utf-8"))
+            continue
+        state = None
+        for line in (results_dir / f"{index}.out").read_text(encoding="utf-8").splitlines():
+            if line.startswith("STATE="):
+                state = line.partition("=")[2]
+                break
+        if state == "1":
+            following += 1
+        elif state == "2":
+            overtaking += 1
+        elif state == "3":
+            collisions += 1
+        else:
+            errors += 1
+
+    planned_scenarios = int(planned_scenarios)
+    opponent_racelines = opponent_racelines.split()
+    opponent_speed_scales = [float(value) for value in opponent_speed_scales.split()]
+    summary = {
+        "generated_at_utc": datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
+        "checkpoint_path": checkpoint_path,
+        "map_name": map_name,
+        "ego_raceline": ego_raceline,
+        "num_startpoints": int(num_startpoints),
+        "opponent_racelines": opponent_racelines,
+        "opponent_speed_scales": opponent_speed_scales,
+        "sim_duration": float(sim_duration),
+        "noise": float(noise),
+        "seed": int(seed),
+        "planned_scenarios": planned_scenarios,
+        "completed_scenarios": completed,
+        "complete": completed == planned_scenarios and stop_reason == "completed",
+        "stop_reason": stop_reason,
+        "following": following,
+        "overtaking": overtaking,
+        "success": following + overtaking,
+        "collision": collisions,
+        "errors": errors,
+        "following_percent": _percentage(following, completed),
+        "overtaking_percent": _percentage(overtaking, completed),
+        "success_percent": _percentage(following + overtaking, completed),
+        "collision_percent": _percentage(collisions, completed),
+    }
+    summary_path = Path(summary_path)
+    summary_path.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
+
+    print(f"following: {following} ({summary['following_percent']}%)")
+    print(f"overtaking: {overtaking} ({summary['overtaking_percent']}%)")
+    print(f"success: {summary['success']} ({summary['success_percent']}%)")
+    print(f"collision: {collisions} ({summary['collision_percent']}%)")
+    print(f"errors: {errors}")
+    print(f"completed: {completed}/{planned_scenarios} ({stop_reason})")
+    print(f"Summary saved to {summary_path}")
+    return summary["complete"] and errors == 0
+
+
+def _tally(episodes):
+    collision_free = [item for item in episodes if item["outcome"] == "collision_free"]
+    overtakes = sum(item["final_state"] == "overtaking" for item in collision_free)
+    return {
+        "recorded_scenarios": len(episodes),
+        "collision_free_scenarios": len(collision_free),
+        "collision_scenarios": len(episodes) - len(collision_free),
+        "successful_overtakes": overtakes,
+        "collision_free_following": len(collision_free) - overtakes,
+        "collision_free_rate_percent": _percentage(len(collision_free), len(episodes)),
+        "successful_overtake_rate_percent": _percentage(overtakes, len(episodes)),
+    }
+
+
+def write_collection_summary(dataset_dir, collection_config, failures):
+    """Summarize a finished collection from the artifacts left in its dataset directory."""
+    # Imported here so that every utils consumer does not pay for torch
+    from model import End2Race
+
+    simulation = simulation_config()
+    dataset_dir = Path(dataset_dir)
+    success_dir = dataset_dir / "success"
+    collision_dir = dataset_dir / "collision"
+    success_paths = list(success_dir.glob("*.csv"))
+    collision_paths = list(collision_dir.glob("*.json"))
+
+    episodes = [_episode_record(path, "collision_free") for path in success_paths] + [
+        _episode_record(path, "collision") for path in collision_paths
+    ]
+    results = _tally(episodes)
+    opponent_racelines = collection_config["opponent_racelines"]
+    opponent_speed_scales = collection_config["opponent_speed_scales"]
+
+    summary = {
+        "generated_at_utc": datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
+        "collection_config": {
+            "mode": "multi_agent",
+            **collection_config,
+            "ego_indices": sorted({item["ego_idx"] for item in episodes}),
+            "simulation_frequency_hz": simulation.frequency_hz,
+            "control_frequency_hz": simulation.control_frequency_hz,
+            "expert_planner_frequency_hz": simulation.expert_planner_frequency_hz,
+        },
+        "data_config": {
+            "lidar_features": End2Race.NUM_LIDAR_FEATURES,
+            "csv_columns": 4 + End2Race.NUM_LIDAR_FEATURES,
+            "vehicle": vars(load_racetrack_config().vehicle),
+            "expert": vars(load_lattice_config().expert),
+        },
+        "results": {
+            "expected_scenarios": collection_config["num_startpoints"]
+            * len(opponent_racelines)
+            * len(opponent_speed_scales),
+            "collection_process_failures": failures,
+            **results,
+            "collisions_while_overtaking": sum(
+                item["final_state"] == "overtaking"
+                for item in episodes
+                if item["outcome"] == "collision"
+            ),
+            "training_rows": sum(
+                sum(1 for _ in path.open(encoding="utf-8")) - 1 for path in success_paths
+            ),
+            "success_videos": len(list(success_dir.glob("*.mp4"))),
+            "collision_videos": len(list(collision_dir.glob("*.mp4"))),
+            "breakdown": [
+                {
+                    "opponent_raceline": raceline,
+                    "opponent_speed_scale": speed_scale,
+                    **_tally([
+                        item
+                        for item in episodes
+                        if item["opponent_raceline"] == raceline and item["speed_scale"] == speed_scale
+                    ]),
+                }
+                for raceline in opponent_racelines
+                for speed_scale in opponent_speed_scales
+            ],
+        },
+    }
+
+    summary_path = dataset_dir / "summary.json"
+    summary_path.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
+
+    print("Collection finished")
+    print(f"following: {results['collision_free_following']}")
+    print(f"overtaking: {results['successful_overtakes']}")
+    print(f"collisions: {results['collision_scenarios']}")
+    print(f"failures: {failures}")
+    print(f"Dataset summary saved to {summary_path}")
+    return summary
