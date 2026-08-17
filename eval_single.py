@@ -1,9 +1,5 @@
 import argparse
 from pathlib import Path
-
-from gym_notices import notices as gym_notices
-
-gym_notices.notices.clear()
 import gym
 import imageio
 import numpy as np
@@ -25,12 +21,14 @@ from utils import (
     unwrap_progress,
 )
 
+MINIMUM_LAP_PROGRESS_FRACTION = 0.95
+
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Evaluate End2Race on single-agent laps")
     # Model and artifacts
     parser.add_argument("--map_name", default="Austin")
-    parser.add_argument("--checkpoint_path", type=Path, required=True)
+    parser.add_argument("--checkpoint_path", type=Path, default=Path("checkpoint/epoch_00500.pt"))
     parser.add_argument("--output_dir", type=Path, default=Path("eval_results"))
     parser.add_argument("--render", action="store_true")
 
@@ -78,7 +76,6 @@ def evaluate_laps(model, device, vehicle, args):
         args.map_name, raceline, args.start_idx
     )
     initial_speed = simulation.ego_initial_speed_fraction * vehicle.maximum_speed
-    start_position = start_pose[0, :2]
 
     centerline = waypoints[:, :2]
     centerline_total_length = np.linalg.norm(
@@ -106,9 +103,11 @@ def evaluate_laps(model, device, vehicle, args):
     trajectory = []
     speeds = []
     lap_count = 0
+    simulator_lap_count = 0
+    previous_progress = initial_progress
+    candidate_lap_progress = 0.0
     lap_times = []
     video_frames = []
-    near_start_flag = True
     lap_start_time = 0.0
 
     if args.render:
@@ -163,26 +162,36 @@ def evaluate_laps(model, device, vehicle, args):
             )
             visited_points.append(current_position)
 
-        distance_to_start = np.linalg.norm(current_position - start_position)
+        current_progress, _ = project_point_to_centerline(current_position, centerline)
+        progress_delta = current_progress - previous_progress
+        if progress_delta < -centerline_total_length / 2:
+            progress_delta += centerline_total_length
+        elif progress_delta > centerline_total_length / 2:
+            progress_delta -= centerline_total_length
+        candidate_lap_progress += progress_delta
+        previous_progress = current_progress
 
-        if distance_to_start < 0.5:
-            if (
-                not near_start_flag
-                and lap_time - lap_start_time > args.minimum_lap_time
-            ):
+        current_lap_count = int(env.unwrapped.lap_counts[0])
+        if current_lap_count > simulator_lap_count:
+            simulator_lap_count = current_lap_count
+            lap_duration = lap_time - lap_start_time
+            valid_lap = (
+                progress_delta > 0
+                and candidate_lap_progress
+                >= MINIMUM_LAP_PROGRESS_FRACTION * centerline_total_length
+                and lap_duration > args.minimum_lap_time
+            )
+            candidate_lap_progress = 0.0
+            lap_start_time = lap_time
+            if valid_lap:
                 lap_count += 1
-                lap_duration = lap_time - lap_start_time
                 lap_times.append(lap_duration)
-                lap_start_time = lap_time
                 print(
                     f"Lap {lap_count}/{args.lap_num} completed in "
                     f"{lap_duration:.2f}s"
                 )
                 if lap_count >= args.lap_num:
                     print(f"Successfully completed all {args.lap_num} laps!")
-            near_start_flag = True
-        else:
-            near_start_flag = False
 
         if args.render:
             render_info["laps"] = lap_count
