@@ -14,7 +14,7 @@
 - Each unbounded epoch shuffles all 720 scenarios into 45 batches of 16. Every worker collects one stochastic trajectory, and each batch produces one optimizer update.
 - The recurrent actor-value model loads the IL policy, adds a value head over the shared GRU output, and learns steering and speed standard deviations initialized to `0.05` and `0.50`.
 - PPO uses Adam learning rate `2e-5`, discount `0.999`, GAE factor `0.95`, clip range `0.2`, value weight `0.5`, and gradient norm limit `0.5`.
-- The reward is `0.015 * ego_progress_delta - 1.0 * ego_collision`. An overtake is classified when the ego center is at least one vehicle length (`0.58 m`) ahead in wrapped Frenet progress.
+- The reward is `0.01 * ego_progress_delta - 1.0 * ego_collision`. An overtake is classified when the ego center is at least one vehicle length (`0.58 m`) ahead in wrapped Frenet progress.
 - Episodes run for eight seconds by default or until ego collision. Time-limit trajectories bootstrap from the final value estimate.
 - Evaluation runs after epochs 10, 20, 30, and so on. It screens all 720 scenarios, then evaluates one lap on each of the four maps.
 - `checkpoint/ppo/ppo.pt` is promoted when all four laps pass and deterministic safety improves.

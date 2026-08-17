@@ -16,7 +16,7 @@ The simulator runs at 120 Hz and holds each actor action for three physics steps
 The environment reward is:
 
 ```text
-0.015 * ego_progress_delta
+0.01 * ego_progress_delta
 - 1.0 on ego collision
 ```
 

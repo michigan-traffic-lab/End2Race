@@ -50,7 +50,7 @@ def wrapped_progress_delta(current_progress, previous_progress, track_length):
 class RaceEnv:
     """Two-agent racing episode stepped at 40 Hz over 120 Hz physics."""
 
-    PROGRESS_REWARD_WEIGHT = 0.015
+    PROGRESS_REWARD_WEIGHT = 0.01
     OVERTAKE_REWARD = 0.0
     COLLISION_PENALTY = -1.0
 
