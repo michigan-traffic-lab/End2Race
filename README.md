@@ -33,12 +33,13 @@ end2race/
 ├── model.py                   # GRU network architecture
 ├── train.py                   # Training script
 ├── ppo/                       # PPO environment and actor-critic wrappers
-├── train_ppo.py               # PPO fine-tuning entry point
+├── run_ppo.py                 # PPO training/evaluation orchestrator
+├── train_ppo.py               # PPO rollout and optimizer updates
+├── eval_ppo.py                # PPO checkpoint evaluation
 ├── collect.sh                 # Parallel collection orchestrator and dataset summary
 ├── eval_single.py             # One single-agent lap evaluation
 ├── eval_multi.py              # One multi-agent racing evaluation
 ├── eval_multi.sh              # Parallel multi-agent orchestrator
-├── sweep.sh                   # Hyperparameter grid training and checkpoint screening
 └── utils.py                   # Shared utilities and configuration loading
 ```
 
@@ -91,12 +92,12 @@ Evaluates the model's lap completion ability across different track configuratio
 ```bash
 python eval_single.py \
   --map_name Austin \
-  --checkpoint_path checkpoint/epoch_05000.pt \
-  --output_dir eval_results/epoch_05000 \
+  --checkpoint_path checkpoint/epoch_00500.pt \
+  --output_dir eval_results/epoch_00500 \
   --render
 ```
 
-`--checkpoint_path` is required and `--map_name` defaults to `Austin`. `--output_dir`, `--noise`, `--seed`, `--lap_num`, `--start_idx`, and `--minimum_lap_time` default to `eval_results`, `0.0`, `42`, `1`, `0`, and `10.0`; [Hyperparameter Sweep](#hyperparameter-sweep) relies on those defaults. The run exits 0 when the checkpoint completes every lap without a collision and 1 otherwise, and prints `PASSED`, `COLLISION`, `LAPS_COMPLETED`, `LAP_PROGRESS`, `LAP_TIME`, `MEAN_LAP_TIME`, `AVG_SPEED`, `SPEED_VARIANCE`, and `TOTAL_DISTANCE` as `KEY=VALUE` lines. It writes no results file.
+`--checkpoint_path` is required and `--map_name` defaults to `Austin`. `--output_dir`, `--noise`, `--seed`, `--lap_num`, `--start_idx`, and `--minimum_lap_time` default to `eval_results`, `0.0`, `42`, `1`, `0`, and `10.0`. The run exits 0 when the checkpoint completes every lap without a collision and 1 otherwise, and prints `PASSED`, `COLLISION`, `LAPS_COMPLETED`, `LAP_PROGRESS`, `LAP_TIME`, `MEAN_LAP_TIME`, `AVG_SPEED`, `SPEED_VARIANCE`, and `TOTAL_DISTANCE` as `KEY=VALUE` lines. It writes no results file.
 
 With `--render` the video lands directly in `--output_dir`, and its name carries the outcome: `[c_]<map>_lap<progress>[_noiseNN].mp4`, where `c_` marks a collision, the progress is the completed laps plus the fraction of the current lap to one decimal with `.` written as `_`, and the noise suffix appears only for a nonzero `--noise` as the percentage. `Austin_lap1_0.mp4` completed the target lap; `c_Austin_lap0_5.mp4` collided halfway around; `c_Austin_lap0_5_noise10.mp4` did the same at `--noise 0.1`.
 
@@ -108,8 +109,8 @@ Evaluates the model in competitive racing scenarios against an expert opponent. 
 ```bash
 python eval_multi.py \
   --map_name Austin \
-  --checkpoint_path checkpoint/epoch_05000.pt \
-  --output_dir eval_results/epoch_05000/Austin \
+  --checkpoint_path checkpoint/epoch_00500.pt \
+  --output_dir eval_results/epoch_00500/Austin \
   --ego_idx 0 \
   --opponent_raceline raceline1 \
   --opponent_speed_scale 0.8
@@ -124,26 +125,22 @@ With `--render` the video lands directly in `--output_dir` as `<c|f|o>_ol<oppone
 The batch evaluation runs hundreds of scenarios in parallel to comprehensively assess the model's performance across different starting positions, opponent strategies, and difficulty levels:
 
 ```bash
-bash eval_multi.sh checkpoint/epoch_05000.pt eval_results
+bash eval_multi.sh checkpoint/epoch_00500.pt eval_results
 ```
 
 The checkpoint is required and the output root defaults to `eval_results`. The batch runs 80 start points against 3 opponent racelines and 3 opponent speed scales on Austin, 720 scenarios across 12 workers, and lays every artifact under `<output root>/<checkpoint stem>/<map>/`. It always completes at least 100 scenarios and stops early only if its aggregate collision rate then exceeds 20%.
 
 The batch renders no video, so `results.json` is its only artifact: the batch configuration, the following, overtaking, collision, and error counts, and their percentages. A collision-guard stop, a `Ctrl-C`, and a `SIGTERM` each still write it, so `planned_scenarios`, `completed_scenarios`, `complete`, and `stop_reason` say how much of the batch the numbers cover; percentages always use `completed_scenarios` as their denominator. The batch exits 0 when every scenario ran, 1 on worker errors, 2 on a collision-guard stop, and 130 or 143 when interrupted.
 
-### Hyperparameter Sweep
+### Checkpoint Qualification
 
-Trains a grid of hyperparameters and screens the checkpoints each run produces:
+Training has no hyperparameter sweep and performs no evaluation. Monitor the pipeline externally and evaluate each `epoch_00500.pt` checkpoint in this order:
 
-```bash
-bash sweep.sh checkpoint eval_results
-```
+1. Run `eval_single.py` for Austin, Hockenheim, MoscowRaceway, and Nuerburgring, stopping at the first failure. Enforce a 90-second wall-clock timeout externally for each map; exceeding it is a failed single-agent gate.
+2. After all four maps pass, run `eval_multi.sh` for Austin's 720 scenarios.
+3. Qualify the model only when all 720 scenarios complete without worker errors and `success_percent` in `results.json` is strictly greater than `80.0`.
 
-The checkpoint root defaults to `checkpoint` and the output root to `eval_results`. The grid itself lives at the top of the script: `DATASET_DIR`, `BATCH_SIZES`, `LEARNING_RATES`, `REPEATS`, `NUM_EPOCHS`, and `SAVE_INTERVAL`. Every combination becomes one run named `bs<batch size>_lr<learning rate>_r<repeat>`, trained into `<checkpoint root>/<run>/`. Each invocation starts every run from a new random initialization; existing epoch files do not resume training.
-
-Each run's checkpoints are screened in ascending epoch order. A checkpoint must complete one collision-free lap on Austin, Hockenheim, MoscowRaceway, and Nuerburgring, then pass `eval_multi.sh` on Austin's 720 scenarios; the first checkpoint to clear both ends that run. The first failing map stops that checkpoint, so most checkpoints cost a single lap.
-
-The sweep writes `<output root>/sweep.json`: the grid configuration, and for every started run its completion state, hyperparameters, qualification, selected checkpoint, and recorded single-agent laps. Checkpoints that never reach the multi-agent stage still appear there with their per-map progress. A `Ctrl-C` or `SIGTERM` still writes the file; `started_runs`, `screened_runs`, and `planned_runs` distinguish a partially processed run from a completed one. Multi-agent results stay in each checkpoint's own `results.json`.
+Retain a qualified checkpoint and record its four single-agent metric blocks plus the complete multi-agent `results.json` beside it. Delete a checkpoint that fails a single-agent map or the multi-agent safety requirement. An interrupted or errored evaluation is not a model result; resolve the runtime failure before deciding whether to retain the checkpoint.
 
 ## Data Collection
 
@@ -184,31 +181,26 @@ The main training parameters are command-line options:
 python train.py \
   --dataset_dir dataset \
   --output_dir checkpoint \
-  --save_interval 500 \
-  --batch_size 1024 \
-  --learning_rate 0.001 \
-  --num_epochs 5000 \
   --speed_loss_weight 0.05 \
   --gradient_clip_norm 1.0
 ```
 
-These are the defaults, so the arguments may be omitted. Training trains one model for `--num_epochs`. It reads episodes from `<--dataset_dir>/success/` and writes `epoch_<epoch>.pt` with a five-digit epoch, such as `epoch_05000.pt`, into `--output_dir` every `--save_interval` epochs and at the final epoch, so a run whose length is not a multiple of the interval still saves its last model. Training performs no evaluation and keeps no resume state; use [Hyperparameter Sweep](#hyperparameter-sweep) to train and screen a grid of runs.
+The training schedule is fixed: 500 epochs, a checkpoint at epoch 500, batch size 1024, and learning rate `1e-4`. Consequently, each run writes one weight-only `epoch_00500.pt` checkpoint to `--output_dir`. It contains only `model.state_dict()`—no optimizer state, training state, or resume metadata. These values are constants in `train.py`, not command-line options, and there is no hyperparameter sweep. Training reads collision-free episodes from `<--dataset_dir>/success/`, performs no evaluation, and keeps no resume state. Follow [Checkpoint Qualification](#checkpoint-qualification) externally after training.
 
 ## PPO Fine-Tuning
 
 Fine-tune a checkpoint produced by `train.py` with recurrent PPO:
 
 ```bash
-python train_ppo.py \
-  --checkpoint_path checkpoint/epoch_05000.pt \
-  --output_dir runs/ppo
+python run_ppo.py \
+  --checkpoint_path checkpoint/epoch_00500.pt
 ```
 
-Each PPO epoch runs all 720 Austin scenarios once. Every scenario is replicated across 16 environments under one stochastic policy, each trajectory receives GAE, and the collected groups are trained once with PPO-Clip. PPO uses the same 40 Hz End2Race control rate and the same latticeplanner opponent as multi-agent evaluation. See [ppo/README.md](ppo/README.md) for the pipeline, reward, and artifacts.
+`run_ppo.py` externally sequences the separate training and evaluation modules. Every epoch trains once through all 720 Austin scenarios. The full pool is randomly shuffled into 45 batches of 16 different scenarios, and the 16 workers collect one stochastic trajectory per scenario in parallel before each optimizer update. Evaluation runs after every tenth epoch: the updated policy is screened deterministically on all 720 scenarios and then runs one single-vehicle lap on Austin, Hockenheim, MoscowRaceway, and Nuerburgring. A single-vehicle failure stops the four-map gate, then the next epoch begins. Training continues epoch by epoch. The policy learns steering and speed log standard deviations initialized to `0.05` and `0.50`. A shared recurrent actor-value model carries over the IL policy and initializes its scalar value head. An evaluation epoch overwrites `checkpoint/ppo/ppo.pt` when all four single-vehicle laps pass and deterministic full-pool safety is strictly higher than the previous best. PPO artifacts live inside `checkpoint/ppo/`. See [ppo/README.md](ppo/README.md) for the reward, exploration behavior, and artifacts.
 
 ## Model Architecture
 
-The policy downsamples each full-circle simulator scan to 180 LiDAR values and applies one shared, fixed sigmoid normalization coefficient. The normalized LiDAR vector is concatenated with a 30-dimensional speed embedding, producing a 210-dimensional recurrent input. A single-layer GRU with 420 hidden units feeds an action head with dimensions `420 -> 128 -> 2`, which predicts steering and desired speed. During training, the speed embedding is replaced by a learned dummy embedding at 20% of timesteps. All of these dimensions live as class attributes on `End2Race` in `model.py`.
+The policy downsamples each full-circle simulator scan to 180 LiDAR values and applies one shared, fixed sigmoid normalization coefficient. The normalized LiDAR vector is concatenated with a 30-dimensional speed embedding, producing a 210-dimensional recurrent input. A single-layer GRU with 420 hidden units feeds an action head with dimensions `420 -> 128 -> 2`, which predicts steering and desired speed. During supervised training, the speed embedding is replaced by a learned dummy embedding at 20% of timesteps. PPO uses the measured previous speed at every timestep. All of these dimensions live as class attributes on `End2Race` in `model.py`.
 
 ## Raceline Generation (Optional)
 

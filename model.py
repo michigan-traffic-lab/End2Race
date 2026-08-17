@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 
+
 class End2Race(nn.Module):
     NUM_LIDAR_FEATURES = 180
     SPEED_EMBEDDING_DIM = 30
@@ -53,7 +54,7 @@ class End2Race(nn.Module):
 
         nn.init.xavier_normal_(self.dummy_embedding)
 
-    def forward(
+    def encode(
         self,
         x: torch.Tensor,
         speed_input: torch.Tensor,
@@ -77,7 +78,15 @@ class End2Race(nn.Module):
             )
 
         features = torch.cat([processed_lidar, speed_embedding], dim=2)
-        gru_out, last_hidden = self.gru(features, hidden)
+        return self.gru(features, hidden)
+
+    def forward(
+        self,
+        x: torch.Tensor,
+        speed_input: torch.Tensor,
+        hidden: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        gru_out, last_hidden = self.encode(x, speed_input, hidden)
         actions = self.output_layer(gru_out)
 
         return actions, last_hidden

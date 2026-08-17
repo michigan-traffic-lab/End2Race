@@ -17,6 +17,7 @@ track:
 vehicle:
   steering_limit: 0.4189
   maximum_speed: 7.5
+  length: 0.58
   width: 0.31
   mass: 3.362
   drag_coefficient: 0.0075

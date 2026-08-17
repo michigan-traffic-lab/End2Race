@@ -11,16 +11,17 @@ from torch.utils.data import DataLoader, Dataset
 from model import End2Race
 from utils import require_end2race_runtime
 
+NUM_EPOCHS = 500
+CHECKPOINT_INTERVAL = 500
+BATCH_SIZE = 1024
+LEARNING_RATE = 1e-4
+
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Train End2Race speed-conditioned model")
     parser.add_argument("--dataset_dir", type=Path, default=Path("dataset"))
     parser.add_argument("--output_dir", type=Path, default=Path("checkpoint"))
-    parser.add_argument("--save_interval", type=int, default=500)
 
-    parser.add_argument("--batch_size", type=int, default=1024)
-    parser.add_argument("--learning_rate", type=float, default=0.001)
-    parser.add_argument("--num_epochs", type=int, default=5000)
     parser.add_argument("--speed_loss_weight", type=float, default=0.05)
     parser.add_argument("--gradient_clip_norm", type=float, default=1.0)
 
@@ -129,27 +130,28 @@ def train_epoch(
 def main():
     args = parse_arguments()
     require_end2race_runtime()
-    if args.save_interval < 1:
-        raise SystemExit("--save_interval must be positive")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
-    print(f"Training arguments: {vars(args)}")
+    print(
+        f"Training settings: epochs={NUM_EPOCHS}, checkpoint_interval={CHECKPOINT_INTERVAL}, "
+        f"batch_size={BATCH_SIZE}, learning_rate={LEARNING_RATE}, arguments={vars(args)}"
+    )
 
     dataset = SequenceDataset(args.dataset_dir / "success")
 
     train_loader = DataLoader(
         dataset,
-        batch_size=args.batch_size,
+        batch_size=BATCH_SIZE,
         shuffle=True,
         pin_memory=device.type == "cuda",
     )
 
     model = End2Race().to(device)
-    optimizer = optim.Adam(model.parameters(), lr=args.learning_rate)
+    optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
     args.output_dir.mkdir(parents=True, exist_ok=True)
     print(f"Train batches: {len(train_loader)}")
 
-    for epoch in range(1, args.num_epochs + 1):
+    for epoch in range(1, NUM_EPOCHS + 1):
         loss = train_epoch(
             model,
             train_loader,
@@ -157,12 +159,12 @@ def main():
             args.speed_loss_weight,
             args.gradient_clip_norm,
         )
-        if epoch % args.save_interval and epoch != args.num_epochs:
+        if epoch % CHECKPOINT_INTERVAL:
             continue
         checkpoint_path = args.output_dir / f"epoch_{epoch:05d}.pt"
         torch.save(model.state_dict(), checkpoint_path)
         print(
-            f"Epoch {epoch}/{args.num_epochs}, loss: {loss:.5f}, "
+            f"Epoch {epoch}/{NUM_EPOCHS}, loss: {loss:.5f}, "
             f"saved {checkpoint_path}"
         )
 

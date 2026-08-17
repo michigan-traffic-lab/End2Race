@@ -2,7 +2,11 @@ from dataclasses import dataclass
 import multiprocessing as mp
 import os
 import traceback
+import warnings
 
+from gym_notices import notices as gym_notices
+
+gym_notices.notices.clear()
 import f110_gym  # Registers the F1TENTH Gym environment.
 import gym
 import numpy as np
@@ -19,6 +23,14 @@ from utils import (
     racetrack_path,
     simulation_config,
 )
+
+warnings.filterwarnings(
+    "ignore",
+    message="Chosen integrator is RK4.*",
+    category=UserWarning,
+    module="f110_gym.envs.base_classes",
+)
+
 
 @dataclass(frozen=True)
 class Scenario:
@@ -38,18 +50,24 @@ def wrapped_progress_delta(current_progress, previous_progress, track_length):
 class RaceEnv:
     """Two-agent racing episode stepped at 40 Hz over 120 Hz physics."""
 
-    PROGRESS_REWARD_WEIGHT = 0.01
-    RELATIVE_PROGRESS_REWARD_WEIGHT = 0.02
-    COLLISION_PENALTY = -2.0
+    PROGRESS_REWARD_WEIGHT = 0.015
+    OVERTAKE_REWARD = 0.0
+    COLLISION_PENALTY = -1.0
 
     def __init__(self, settings):
         self.map_name = settings.map_name
-        self.settings = settings
         self.vehicle = load_racetrack_config().vehicle
         self.simulation = simulation_config()
         self.control_steps = int(round(settings.episode_duration * self.simulation.control_frequency_hz))
 
-        self.env = gym.make("f110-v0", map=str(racetrack_path(self.map_name, f"{self.map_name}_map")), map_ext=".png", num_agents=2, timestep=self.simulation.timestep, integrator=Integrator.RK4)
+        self.env = gym.make(
+            "f110-v0",
+            map=str(racetrack_path(self.map_name, f"{self.map_name}_map")),
+            map_ext=".png",
+            num_agents=2,
+            timestep=self.simulation.timestep,
+            integrator=Integrator.RK4,
+        )
         self.ego_waypoints = load_raceline(self.map_name, f"{settings.ego_raceline}.csv")
         self.opponents = {}
 
@@ -100,6 +118,7 @@ class RaceEnv:
         self.ego_progress = self._progress(self.raw_observation, 0)
         self.opponent_progress = self._progress(self.raw_observation, 1)
         self.relative_position = wrapped_progress_delta(self.ego_progress, self.opponent_progress, self.track_length)
+        self.overtake_rewarded = self.relative_position >= self.vehicle.length
         return self._observation(self.raw_observation)
 
     def _opponent_action(self):
@@ -129,16 +148,18 @@ class RaceEnv:
         self.previous_speed = float(self.raw_observation["linear_vels_x"][0])
 
         ego_collision = False
-        base_done = False
         for _ in range(self.simulation.steps_per_control):
             opponent_steering, opponent_speed = self._opponent_action()
             joint_action = np.array([[ego_steering, ego_speed], [opponent_steering, opponent_speed]])
-            self.raw_observation, timestep, base_done, _ = self.env.step(joint_action)
+            self.raw_observation, timestep, _, _ = self.env.step(joint_action)
             self.elapsed_time += timestep
-            self.tracker_count = (self.tracker_count + 1) % self.opponents[self.scenario.opponent_raceline].conf.tracker_steps
+            tracker_steps = self.opponents[
+                self.scenario.opponent_raceline
+            ].conf.tracker_steps
+            self.tracker_count = (self.tracker_count + 1) % tracker_steps
             if self.raw_observation["collisions"][0]:
                 ego_collision = True
-            if ego_collision or base_done:
+            if ego_collision:
                 break
 
         # Score progress across the whole control interval
@@ -151,19 +172,21 @@ class RaceEnv:
         self.relative_position += ego_delta - opponent_delta
 
         reward = self.PROGRESS_REWARD_WEIGHT * ego_delta
-        reward += self.RELATIVE_PROGRESS_REWARD_WEIGHT * (ego_delta - opponent_delta)
+        if not self.overtake_rewarded and self.relative_position >= self.vehicle.length:
+            reward += self.OVERTAKE_REWARD
+            self.overtake_rewarded = True
         if ego_collision:
             reward += self.COLLISION_PENALTY
         self.episode_return += reward
         self.episode_steps += 1
 
         timeout = self.episode_steps >= self.control_steps
-        done = ego_collision or base_done or timeout
+        done = ego_collision or timeout
         info = {}
         if done:
             if ego_collision:
                 outcome = "ego_collision"
-            elif self.relative_position > 0.0:
+            elif self.overtake_rewarded:
                 outcome = "overtake"
             else:
                 outcome = "follow"
@@ -208,8 +231,8 @@ def _worker(remote, parent_remote, settings):
         remote.close()
 
 
-class GroupVecEnv:
-    """Run one scenario across every worker so trajectories differ only by action noise."""
+class VectorEnv:
+    """Run independent racing scenarios across a fixed worker pool."""
 
     def __init__(self, num_envs, settings, start_method="forkserver"):
         self.num_envs = num_envs
@@ -244,15 +267,17 @@ class GroupVecEnv:
             raise RuntimeError(f"environment worker {rank} failed:\n{payload}")
         return payload
 
-    def reset_group(self, scenario):
-        """Broadcast one scenario to every worker and return stacked observations."""
-        for remote in self.remotes:
-            remote.send(("reset", scenario))
-        return np.stack([self._receive(rank) for rank in range(self.num_envs)])
+    def reset_scenarios(self, scenarios):
+        """Assign one scenario to each participating worker."""
+        if len(scenarios) > self.num_envs:
+            raise ValueError(f"Cannot assign {len(scenarios)} scenarios to {self.num_envs} workers")
+        for rank, scenario in enumerate(scenarios):
+            self.remotes[rank].send(("reset", scenario))
+        return np.stack([self._receive(rank) for rank in range(len(scenarios))])
 
     def step(self, actions, active):
         """Step only the workers still running and return per-rank results."""
-        ranks = [rank for rank in range(self.num_envs) if active[rank]]
+        ranks = [rank for rank, is_active in enumerate(active) if is_active]
         for rank in ranks:
             self.remotes[rank].send(("step", actions[rank]))
         results = [None] * self.num_envs
@@ -276,32 +301,43 @@ class GroupVecEnv:
                 process.join(timeout=2.0)
 
 
-def collect_group(vector_env, actor, critic, scenario, device):
-    """Roll one scenario across every worker under a frozen policy and independent noise."""
-    observations = vector_env.reset_group(scenario)
-    actor_hidden = actor.initial_hidden(vector_env.num_envs, device)
-    critic_hidden = critic.initial_hidden(vector_env.num_envs, device)
-    active = [True] * vector_env.num_envs
-    trajectories = [{"observations": [], "actions": [], "log_probs": [], "values": [], "rewards": [], "bootstrap": 0.0} for _ in range(vector_env.num_envs)]
-    records = [None] * vector_env.num_envs
+def collect_batch(envs, model, scenarios, device):
+    """Roll one trajectory for each scenario under a frozen policy."""
+    observations = envs.reset_scenarios(scenarios)
+    hidden = model.initial_hidden(len(scenarios), device)
+    active = [True] * len(scenarios)
+    trajectories = [
+        {
+            "observations": [],
+            "actions": [],
+            "policy_means": [],
+            "log_probs": [],
+            "values": [],
+            "rewards": [],
+            "bootstrap": 0.0,
+        }
+        for _ in scenarios
+    ]
+    records = [None] * len(scenarios)
 
     while any(active):
         with torch.no_grad():
             observation_batch = torch.as_tensor(observations, device=device)
-            actions, log_probs, next_actor_hidden = actor.act(observation_batch, actor_hidden)
-            values, next_critic_hidden = critic.step_values(observation_batch, critic_hidden)
+            actions, policy_means, log_probs, values, next_hidden = model.act(observation_batch, hidden)
         actions = actions.cpu().numpy()
+        policy_means = policy_means.cpu().numpy()
         log_probs = log_probs.cpu().numpy()
         values = values.cpu().numpy()
 
         bootstrap_ranks = []
-        for rank, result in enumerate(vector_env.step(actions, active)):
+        for rank, result in enumerate(envs.step(actions, active)):
             if result is None:
                 continue
             next_observation, reward, done, info = result
             trajectory = trajectories[rank]
             trajectory["observations"].append(observations[rank].copy())
             trajectory["actions"].append(actions[rank])
+            trajectory["policy_means"].append(policy_means[rank])
             trajectory["log_probs"].append(log_probs[rank])
             trajectory["values"].append(values[rank])
             trajectory["rewards"].append(reward)
@@ -309,50 +345,54 @@ def collect_group(vector_env, actor, critic, scenario, device):
             if done:
                 active[rank] = False
                 records[rank] = info
-                # Only an ego collision is a true terminal state; every other ending is cut short
+                # Bootstrap the value at the time limit.
                 if not info["ego_collision"]:
                     bootstrap_ranks.append(rank)
 
         if bootstrap_ranks:
             with torch.no_grad():
                 tail_observations = torch.as_tensor(observations[bootstrap_ranks], device=device)
-                tail_hidden = next_critic_hidden[:, bootstrap_ranks].contiguous()
-                tail_values = critic.step_values(tail_observations, tail_hidden)[0].cpu().numpy()
+                tail_hidden = next_hidden[:, bootstrap_ranks].contiguous()
+                _, tail_values, _ = model.evaluate(
+                    tail_observations[:, None], hidden=tail_hidden
+                )
+                tail_values = tail_values[:, 0].cpu().numpy()
             for slot, rank in enumerate(bootstrap_ranks):
                 trajectories[rank]["bootstrap"] = float(tail_values[slot])
 
-        actor_hidden = next_actor_hidden
-        critic_hidden = next_critic_hidden
+        hidden = next_hidden
 
-    group = []
+    batch = []
     for trajectory, record in zip(trajectories, records):
-        group.append({
+        batch.append({
             "observations": np.asarray(trajectory["observations"], dtype=np.float32),
             "actions": np.asarray(trajectory["actions"], dtype=np.float32),
+            "policy_means": np.asarray(trajectory["policy_means"], dtype=np.float32),
             "log_probs": np.asarray(trajectory["log_probs"], dtype=np.float32),
             "values": np.asarray(trajectory["values"], dtype=np.float32),
             "rewards": np.asarray(trajectory["rewards"], dtype=np.float32),
             "bootstrap": trajectory["bootstrap"],
             "record": record,
         })
-    # cuDNN evaluates a 1-step GRU call differently from a full-sequence one, so restate pi_old on the training path
-    _refresh_old_estimates(group, actor, critic, device)
-    return group
+    # Match one-step rollout estimates to cuDNN's full-sequence training path.
+    _refresh_old_estimates(batch, model, device)
+    return batch
 
 
-def _refresh_old_estimates(group, actor, critic, device):
+def _refresh_old_estimates(batch, model, device):
     """Recompute log-probabilities and values on the batched training path."""
-    lengths = [len(trajectory["rewards"]) for trajectory in group]
-    observations = np.zeros((len(group), max(lengths), group[0]["observations"].shape[1]), dtype=np.float32)
-    actions = np.zeros((len(group), max(lengths), 2), dtype=np.float32)
-    for slot, trajectory in enumerate(group):
+    lengths = [len(trajectory["rewards"]) for trajectory in batch]
+    observations = np.zeros((len(batch), max(lengths), batch[0]["observations"].shape[1]), dtype=np.float32)
+    actions = np.zeros((len(batch), max(lengths), 2), dtype=np.float32)
+    for slot, trajectory in enumerate(batch):
         observations[slot, : lengths[slot]] = trajectory["observations"]
         actions[slot, : lengths[slot]] = trajectory["actions"]
 
     with torch.no_grad():
         observations = torch.as_tensor(observations, device=device)
-        log_probs = actor.evaluate(observations, torch.as_tensor(actions, device=device)).cpu().numpy()
-        values = critic.evaluate(observations).cpu().numpy()
-    for slot, trajectory in enumerate(group):
+        log_probs, values, _ = model.evaluate(observations, torch.as_tensor(actions, device=device))
+        log_probs = log_probs.cpu().numpy()
+        values = values.cpu().numpy()
+    for slot, trajectory in enumerate(batch):
         trajectory["log_probs"] = log_probs[slot, : lengths[slot]].astype(np.float32)
         trajectory["values"] = values[slot, : lengths[slot]].astype(np.float32)

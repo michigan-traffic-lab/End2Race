@@ -1,6 +1,9 @@
 import argparse
 from pathlib import Path
 
+from gym_notices import notices as gym_notices
+
+gym_notices.notices.clear()
 import gym
 import imageio
 import numpy as np
