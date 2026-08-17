@@ -4,9 +4,6 @@ import os
 import traceback
 import warnings
 
-from gym_notices import notices as gym_notices
-
-gym_notices.notices.clear()
 import f110_gym  # Registers the F1TENTH Gym environment.
 import gym
 import numpy as np
