@@ -7,6 +7,7 @@ from ppo.env import collect_batch
 
 INITIAL_STEERING_STD = 0.05
 INITIAL_SPEED_STD = 0.50
+UPDATE_EPOCHS = 4
 VALUE_LOSS_WEIGHT = 0.5
 
 
@@ -147,9 +148,10 @@ def train_epoch(model, optimizer, envs, scenarios, rng, args, device, epoch):
         score_batch(batch, args.gamma, args.gae_lambda)
         batches.append(batch)
         diagnostics = rollout_diagnostics(batch)
-        batch_statistics = train_batch(model, optimizer, batch, args, device)
-        for name, value in batch_statistics.items():
-            statistics[name].append(value)
+        for _ in range(UPDATE_EPOCHS):
+            batch_statistics = train_batch(model, optimizer, batch, args, device)
+            for name, value in batch_statistics.items():
+                statistics[name].append(value)
 
         elapsed = time.monotonic() - started_at
         completed = start + len(selected)

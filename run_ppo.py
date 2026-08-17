@@ -15,6 +15,7 @@ from ppo.policy import ActorCritic
 from train_ppo import (
     INITIAL_SPEED_STD,
     INITIAL_STEERING_STD,
+    UPDATE_EPOCHS,
     VALUE_LOSS_WEIGHT,
     explained_variance,
     train_epoch,
@@ -199,11 +200,11 @@ def resolved_config(args):
         "speed_std": INITIAL_SPEED_STD,
         "value_weight": VALUE_LOSS_WEIGHT,
         "progress_reward": RaceEnv.PROGRESS_REWARD_WEIGHT,
-        "overtake_reward": RaceEnv.OVERTAKE_REWARD,
         "overtake_distance": load_racetrack_config().vehicle.length,
         "collision_penalty": RaceEnv.COLLISION_PENALTY,
         "batch_size": args.num_envs,
         "trajectories": 1,
+        "update_epochs": UPDATE_EPOCHS,
         "eval_interval": EVAL_INTERVAL,
         "eval_maps": list(EVAL_MAPS),
     }

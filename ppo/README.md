@@ -8,7 +8,7 @@ This module fine-tunes a behavior-cloned End2Race checkpoint with recurrent PPO.
 - The default pool contains 720 scenarios: 80 ego starts, 3 opponent racelines, and 3 opponent speed scales.
 - Every epoch trains on the complete 720-scenario pool. The pool is randomly shuffled and split into 45 batches of 16 different scenarios. The 16 workers collect one stochastic trajectory per scenario in parallel, so every scenario contributes exactly one trajectory per epoch.
 - Training continues epoch by epoch. The policy owns trainable steering and speed log-standard-deviation parameters initialized to standard deviations `0.05` and `0.50`, and PPO learns both through the clipped policy objective.
-- Each trajectory receives per-step GAE. Each completed batch of up to 16 scenario trajectories immediately produces one PPO-Clip and value-regression update before the next batch is collected. The worker count is the training batch size, and the final batch may be smaller.
+- Each trajectory receives per-step GAE. Each completed batch of up to 16 scenario trajectories immediately receives four PPO-Clip and value-regression update passes before the next batch is collected. Old rollout log-probabilities remain fixed across all four passes. The worker count is the training batch size, and the final batch may be smaller.
 - Evaluation runs after every tenth epoch. The updated policy is deterministically screened on all 720 scenarios and then runs one single-vehicle lap on Austin, Hockenheim, MoscowRaceway, and Nuerburgring. The single-vehicle gate stops at its first failed map, then the next epoch begins.
 
 The simulator runs at 120 Hz and holds each actor action for three physics steps, matching the 40 Hz End2Race control rate. The latticeplanner `RacelineFollower` controls the opponent with a 120 Hz tracker and 10 Hz replanning.
@@ -16,7 +16,7 @@ The simulator runs at 120 Hz and holds each actor action for three physics steps
 The environment reward is:
 
 ```text
-0.01 * ego_progress_delta
+0.02 * ego_progress_delta
 - 1.0 on ego collision
 ```
 

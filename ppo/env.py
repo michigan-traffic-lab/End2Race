@@ -50,8 +50,7 @@ def wrapped_progress_delta(current_progress, previous_progress, track_length):
 class RaceEnv:
     """Two-agent racing episode stepped at 40 Hz over 120 Hz physics."""
 
-    PROGRESS_REWARD_WEIGHT = 0.01
-    OVERTAKE_REWARD = 0.0
+    PROGRESS_REWARD_WEIGHT = 0.02
     COLLISION_PENALTY = -1.0
 
     def __init__(self, settings):
@@ -118,7 +117,7 @@ class RaceEnv:
         self.ego_progress = self._progress(self.raw_observation, 0)
         self.opponent_progress = self._progress(self.raw_observation, 1)
         self.relative_position = wrapped_progress_delta(self.ego_progress, self.opponent_progress, self.track_length)
-        self.overtake_rewarded = self.relative_position >= self.vehicle.length
+        self.overtaken = self.relative_position >= self.vehicle.length
         return self._observation(self.raw_observation)
 
     def _opponent_action(self):
@@ -172,9 +171,7 @@ class RaceEnv:
         self.relative_position += ego_delta - opponent_delta
 
         reward = self.PROGRESS_REWARD_WEIGHT * ego_delta
-        if not self.overtake_rewarded and self.relative_position >= self.vehicle.length:
-            reward += self.OVERTAKE_REWARD
-            self.overtake_rewarded = True
+        self.overtaken = self.overtaken or self.relative_position >= self.vehicle.length
         if ego_collision:
             reward += self.COLLISION_PENALTY
         self.episode_return += reward
@@ -186,7 +183,7 @@ class RaceEnv:
         if done:
             if ego_collision:
                 outcome = "ego_collision"
-            elif self.overtake_rewarded:
+            elif self.overtaken:
                 outcome = "overtake"
             else:
                 outcome = "follow"
