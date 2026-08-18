@@ -5,6 +5,8 @@ dataset*/
 dataset*/**
 !dataset*/**/
 !dataset*/**/*.csv
+!dataset*/collision/*.json
+!dataset*/summary.json
 eval_results/
 verification_results/
 *.mp4
