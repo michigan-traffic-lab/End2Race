@@ -208,10 +208,14 @@ def update_full_pool(model, optimizer, batches, args, device, epoch, update):
         device,
     )
     if not dist.is_initialized() or dist.get_rank() == 0:
-        learning_rate = optimizer.param_groups[0]["lr"]
+        learning_rates = {
+            parameter_group["name"]: parameter_group["lr"]
+            for parameter_group in optimizer.param_groups
+        }
         print(
             f"Epoch {epoch} ppo update {update}/{UPDATE_EPOCHS} | "
-            f"transitions {total_transitions} | lr {learning_rate:.1e} | "
+            f"transitions {total_transitions} | "
+            f"lr policy {learning_rates['policy']:.1e} value {learning_rates['value']:.1e} | "
             f"value loss {value_loss:.4f} | "
             f"kl {approx_kl:.6f} clip {clip_fraction:.3f} | "
             f"grad preclip {grad_norm:.3f} applied {applied_grad_norm:.3f}",
@@ -266,26 +270,26 @@ def _gather_rollouts(batches):
 
 def _collect_shard(envs, model, scenarios, device, args, epoch, started_at):
     batches = []
-    batch_count = (len(scenarios) + envs.num_envs - 1) // envs.num_envs
+    report = not dist.is_initialized() or dist.get_rank() == 0
     for start in range(0, len(scenarios), envs.num_envs):
         selected = scenarios[start : start + envs.num_envs]
         batch = collect_batch(envs, model, selected, device)
         score_batch(batch, args.gamma, args.gae_lambda)
         batches.append(batch)
-        diagnostics = rollout_diagnostics(batch)
-        elapsed = time.monotonic() - started_at
-        completed = start + len(selected)
-        print(
-            f"Epoch {epoch} batch {len(batches)}/{batch_count} | "
-            f"scenarios {completed}/{len(scenarios)} | "
-            f"collision {diagnostics['collisions']} follow {diagnostics['follows']} "
-            f"overtake {diagnostics['overtakes']} | "
-            f"policy steer {diagnostics['steering_mean']:.3f}±{diagnostics['steering_std']:.3f} "
-            f"speed {diagnostics['speed_mean']:.3f}±{diagnostics['speed_std']:.3f} | "
-            f"value {diagnostics['value_mean']:.3f} return {diagnostics['episode_return_mean']:.3f} | "
-            f"elapsed {elapsed:.0f}s",
-            flush=True,
-        )
+        if report:
+            diagnostics = rollout_diagnostics(batch)
+            elapsed = time.monotonic() - started_at
+            completed = start + len(selected)
+            print(
+                f"Epoch {epoch} scenarios {completed}/{len(scenarios)} | "
+                f"collision {diagnostics['collisions']} follow {diagnostics['follows']} "
+                f"overtake {diagnostics['overtakes']} | "
+                f"policy steer {diagnostics['steering_mean']:.3f}±{diagnostics['steering_std']:.3f} "
+                f"speed {diagnostics['speed_mean']:.3f}±{diagnostics['speed_std']:.3f} | "
+                f"value {diagnostics['value_mean']:.3f} return {diagnostics['episode_return_mean']:.3f} | "
+                f"elapsed {elapsed:.0f}s",
+                flush=True,
+            )
     return batches
 
 

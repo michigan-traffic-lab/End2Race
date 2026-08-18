@@ -27,9 +27,10 @@ from utils import (
 
 ARTIFACT_DIR = Path("checkpoint/ppo")
 EVAL_INTERVAL = 1
-LEARNING_RATE_STEP = 1e-6
-MAX_LEARNING_RATE = 1e-5
-LEARNING_RATE_WARMUP_EPOCHS = 10
+POLICY_LEARNING_RATE_STEP = 1e-6
+POLICY_MAX_LEARNING_RATE = 1e-5
+POLICY_LEARNING_RATE_WARMUP_EPOCHS = 10
+VALUE_LEARNING_RATE = 1e-5
 MAX_EPOCHS = 100
 MINIMUM_SAFETY_RATE = 0.9
 MINIMUM_OVERTAKE_RATE = 0.6
@@ -117,7 +118,8 @@ def build_scenarios(settings):
 
 def summarize(
     epoch,
-    learning_rate,
+    policy_learning_rate,
+    value_learning_rate,
     scenarios,
     rollout_summary,
     statistics,
@@ -152,7 +154,8 @@ def summarize(
     )
     metrics = {
         "epoch": epoch,
-        "learning_rate": learning_rate,
+        "policy_learning_rate": policy_learning_rate,
+        "value_learning_rate": value_learning_rate,
         "evaluated": evaluated,
         "eval_count": len(eval_records) if evaluated else 0,
         "eval_failures": failures,
@@ -201,10 +204,11 @@ def resolved_config(args, scenario_count, world_size):
         "rollout_batch_size_per_gpu": args.num_envs,
         "trajectories": 1,
         "update_epochs": UPDATE_EPOCHS,
-        "learning_rate_start": LEARNING_RATE_STEP,
-        "learning_rate_step": LEARNING_RATE_STEP,
-        "learning_rate_cap": MAX_LEARNING_RATE,
-        "learning_rate_warmup_epochs": LEARNING_RATE_WARMUP_EPOCHS,
+        "policy_learning_rate_start": POLICY_LEARNING_RATE_STEP,
+        "policy_learning_rate_step": POLICY_LEARNING_RATE_STEP,
+        "policy_learning_rate_cap": POLICY_MAX_LEARNING_RATE,
+        "policy_learning_rate_warmup_epochs": POLICY_LEARNING_RATE_WARMUP_EPOCHS,
+        "value_learning_rate": VALUE_LEARNING_RATE,
         "max_epochs": MAX_EPOCHS,
         "minimum_safety_rate": MINIMUM_SAFETY_RATE,
         "minimum_overtake_rate": MINIMUM_OVERTAKE_RATE,
@@ -274,7 +278,18 @@ def main():
             FIXED_SPEED_STD,
         ).to(device)
         synchronize_model(model)
-        optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE_STEP)
+        optimizer = torch.optim.Adam([
+            {
+                "params": model.model.parameters(),
+                "lr": POLICY_LEARNING_RATE_STEP,
+                "name": "policy",
+            },
+            {
+                "params": model.value_head.parameters(),
+                "lr": VALUE_LEARNING_RATE,
+                "name": "value",
+            },
+        ])
         checkpoint_count = 0
         checkpoint_records = []
         if rank == 0:
@@ -297,13 +312,14 @@ def main():
 
         envs = VectorEnv(args.num_envs, args)
         for epoch in range(1, MAX_EPOCHS + 1):
-            learning_rate = (
-                epoch * LEARNING_RATE_STEP
-                if epoch < LEARNING_RATE_WARMUP_EPOCHS
-                else MAX_LEARNING_RATE
+            policy_learning_rate = (
+                epoch * POLICY_LEARNING_RATE_STEP
+                if epoch < POLICY_LEARNING_RATE_WARMUP_EPOCHS
+                else POLICY_MAX_LEARNING_RATE
             )
             for parameter_group in optimizer.param_groups:
-                parameter_group["lr"] = learning_rate
+                if parameter_group["name"] == "policy":
+                    parameter_group["lr"] = policy_learning_rate
             ordered, rollout_summary, statistics = train_epoch(
                 model,
                 optimizer,
@@ -337,7 +353,8 @@ def main():
 
                 metrics = summarize(
                     epoch,
-                    learning_rate,
+                    policy_learning_rate,
+                    VALUE_LEARNING_RATE,
                     ordered,
                     rollout_summary,
                     statistics,

@@ -30,19 +30,11 @@ def _evaluate_group(envs, model, scenarios, device):
     return records
 
 
-def _evaluate_shard(envs, model, scenarios, device, label, started_at):
+def _evaluate_shard(envs, model, scenarios, device):
     records = []
-    print(f"{label} screening: 0/{len(scenarios)}", flush=True)
     for start in range(0, len(scenarios), envs.num_envs):
         selected = scenarios[start : start + envs.num_envs]
         records.extend(_evaluate_group(envs, model, selected, device))
-        failures = sum(record["ego_collision"] for record in records)
-        elapsed = time.monotonic() - started_at
-        print(
-            f"{label} screening: {len(records)}/{len(scenarios)} | "
-            f"failed {failures} | elapsed {elapsed:.0f}s",
-            flush=True,
-        )
     return records
 
 
@@ -58,8 +50,6 @@ def evaluate_scenarios(envs, model, scenarios, device, label):
         model,
         shard,
         device,
-        label,
-        started_at,
     )
     if dist.is_initialized():
         gathered = [None] * world_size if rank == 0 else None

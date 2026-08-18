@@ -24,7 +24,7 @@ An overtake is classified when the ego center reaches at least one full vehicle 
 
 Value-head initialization, learned-policy action samples, and scenario ordering use fresh process randomness on every launch.
 
-The unified policy and value head use one Adam optimizer. Its learning rate starts at `1e-6`, increases by `1e-6` each epoch, reaches `1e-5` at epoch 10, and remains capped at `1e-5`.
+The policy and value head use separate parameter groups in one Adam optimizer. The policy learning rate starts at `1e-6`, increases by `1e-6` each epoch, reaches `1e-5` at epoch 10, and remains capped at `1e-5`. The value-head learning rate remains fixed at `1e-5` throughout training.
 
 ## Run
 
@@ -42,6 +42,6 @@ torchrun --standalone --nproc_per_node=4 run_ppo.py \
   --checkpoint_path checkpoint/epoch_00500.pt
 ```
 
-PPO saves `config.json`, `checkpoints.json`, `episodes.jsonl`, `metrics.jsonl`, and qualifying policy checkpoints inside `checkpoint/ppo/`. Every deterministic full-pool evaluation with safety above 90% and an overtake rate above 60% saves another checkpoint in qualification order: `ppo_001.pt`, `ppo_002.pt`, and so on. `checkpoints.json` is a JSON array updated after each save with the checkpoint's epoch, learning rate, screening results, rollout metrics, and PPO diagnostics. `episodes.jsonl` contains stochastic training and deterministic screening records after every update. `metrics.jsonl` contains training and evaluation metrics after every update. Each launch starts with a clean `checkpoint/ppo/` directory.
+PPO saves `config.json`, `checkpoints.json`, `episodes.jsonl`, `metrics.jsonl`, and qualifying policy checkpoints inside `checkpoint/ppo/`. Every deterministic full-pool evaluation with safety above 90% and an overtake rate above 60% saves another checkpoint in qualification order: `ppo_001.pt`, `ppo_002.pt`, and so on. `checkpoints.json` is a JSON array updated after each save with the checkpoint's epoch, policy and value learning rates, screening results, rollout metrics, and PPO diagnostics. `episodes.jsonl` contains stochastic training and deterministic screening records after every update. `metrics.jsonl` contains training and evaluation metrics after every update. Each launch starts with a clean `checkpoint/ppo/` directory.
 
-The terminal reports live deterministic-screening counts after every worker batch. Each completed stochastic training batch reports collision, following, and overtaking counts; policy steering and speed mean and standard deviation; mean value estimate, episode return, and elapsed phase time. Each PPO update reports its transition count, learning rate, value loss, approximate KL divergence, clip fraction, and gradient norms before and after clipping. Repeated Gym maintenance notices and the expected RK4 integrator warning are suppressed for PPO workers.
+The terminal reports one global start and completion line for each deterministic screening. Each completed stochastic training batch reports collision, following, and overtaking counts; policy steering and speed mean and standard deviation; mean value estimate, episode return, and elapsed phase time. Each PPO update reports its transition count, learning rate, value loss, approximate KL divergence, clip fraction, and gradient norms before and after clipping. Repeated Gym maintenance notices and the expected RK4 integrator warning are suppressed for PPO workers.
