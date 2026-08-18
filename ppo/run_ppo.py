@@ -28,7 +28,6 @@ from utils import (
 
 ARTIFACT_DIR = Path("checkpoint/ppo")
 LEARNING_RATE = 1e-5
-MAX_EPOCHS_PER_MODEL = 500
 MINIMUM_SAFETY_RATE = 0.9
 MINIMUM_OVERTAKE_RATE = 0.6
 
@@ -114,7 +113,6 @@ def _build_scenarios(settings):
 
 
 def _summarize(
-    model_index,
     epoch,
     scenarios,
     rollout_summary,
@@ -143,7 +141,6 @@ def _summarize(
     failures = sum(record["ego_collision"] for record in eval_records)
     eval_overtakes = sum(record["outcome"] == "overtake" for record in eval_records)
     metrics = {
-        "model": model_index,
         "epoch": epoch,
         "learning_rate": LEARNING_RATE,
         "eval_count": len(eval_records),
@@ -173,10 +170,11 @@ def _summarize(
     return metrics
 
 
-def _resolved_config(args, scenario_count, world_size):
+def _resolved_config(args, scenario_count, world_size, checkpoint_type):
     return {
         **vars(args),
         "checkpoint_path": str(args.checkpoint_path),
+        "checkpoint_type": checkpoint_type,
         "fixed_steering_std": FIXED_STEERING_STD,
         "fixed_speed_std": FIXED_SPEED_STD,
         "value_weight": VALUE_LOSS_WEIGHT,
@@ -191,8 +189,7 @@ def _resolved_config(args, scenario_count, world_size):
         "trajectories_per_scenario": 1,
         "update_epochs": UPDATE_EPOCHS,
         "learning_rate": LEARNING_RATE,
-        "max_epochs_per_model": MAX_EPOCHS_PER_MODEL,
-        "candidate_sequence": "until_stopped",
+        "training_duration": "until_stopped",
         "minimum_safety_rate": MINIMUM_SAFETY_RATE,
         "minimum_overtake_rate": MINIMUM_OVERTAKE_RATE,
     }
@@ -225,15 +222,14 @@ def main():
     try:
         artifact_dir = ARTIFACT_DIR
         config_path = artifact_dir / "config.json"
-        checkpoints_path = artifact_dir / "checkpoints.json"
         episodes_path = artifact_dir / "episodes.jsonl"
         metrics_path = artifact_dir / "metrics.jsonl"
-        artifacts = (config_path, checkpoints_path, episodes_path, metrics_path)
+        artifacts = (config_path, episodes_path, metrics_path)
         artifact_error = None
         if rank == 0:
             artifact_dir.mkdir(parents=True, exist_ok=True)
             existing = [path.name for path in artifacts if path.exists()]
-            existing.extend(path.name for path in artifact_dir.glob("ppo*.pt"))
+            existing.extend(path.name for path in artifact_dir.glob("*.pt"))
             existing.sort()
             if existing:
                 artifact_error = (
@@ -253,126 +249,111 @@ def main():
                 f"Cannot distribute {len(scenarios)} scenarios across "
                 f"{world_size} GPU processes"
             )
+        model = ActorCritic(
+            args.checkpoint_path,
+            FIXED_STEERING_STD,
+            FIXED_SPEED_STD,
+        ).to(device)
+        _synchronize_model(model)
+        optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
         checkpoint_count = 0
-        checkpoint_records = []
+
         if rank == 0:
             config_path.write_text(
                 json.dumps(
-                    _resolved_config(args, len(scenarios), world_size),
+                    _resolved_config(
+                        args,
+                        len(scenarios),
+                        world_size,
+                        model.checkpoint_type,
+                    ),
                     indent=2,
                 )
                 + "\n",
                 encoding="utf-8",
             )
-            checkpoints_path.write_text("[]\n", encoding="utf-8")
             episodes_path.touch(exist_ok=True)
             metrics_path.touch(exist_ok=True)
             print(
                 f"Scenario pool: {len(scenarios)} | GPU processes: {world_size} | "
                 f"workers/GPU: {args.num_envs} | "
-                f"total workers: {args.num_envs * world_size} | lr: {LEARNING_RATE:.1e}"
+                f"total workers: {args.num_envs * world_size} | "
+                f"checkpoint: {model.checkpoint_type} | lr: {LEARNING_RATE:.1e}"
             )
 
         envs = VectorEnv(args.num_envs, args)
-        for model_index in itertools.count(1):
-            rng = np.random.default_rng()
-            model = ActorCritic(
-                args.checkpoint_path,
-                FIXED_STEERING_STD,
-                FIXED_SPEED_STD,
-            ).to(device)
-            _synchronize_model(model)
-            optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
-            model_checkpoint_count = 0
+        rng = np.random.default_rng()
+        for epoch in itertools.count(1):
+            ordered, rollout_summary, statistics = train_epoch(
+                model,
+                optimizer,
+                envs,
+                scenarios,
+                rng,
+                args,
+                device,
+                epoch,
+            )
             if rank == 0:
-                print(f"Model {model_index} starting", flush=True)
+                for trajectory in rollout_summary["trajectories"]:
+                    _append_record(
+                        episodes_path,
+                        {
+                            "epoch": epoch,
+                            "phase": "training",
+                            **trajectory["record"],
+                        },
+                    )
 
-            for epoch in range(1, MAX_EPOCHS_PER_MODEL + 1):
-                ordered, rollout_summary, statistics = train_epoch(
-                    model,
-                    optimizer,
-                    envs,
-                    scenarios,
-                    rng,
-                    args,
-                    device,
+            label = f"Epoch {epoch}"
+            eval_records = evaluate_scenarios(envs, model, scenarios, device, label)
+            if rank == 0:
+                for record in eval_records:
+                    _append_record(
+                        episodes_path,
+                        {
+                            "epoch": epoch,
+                            "phase": "screening",
+                            **record,
+                        },
+                    )
+
+                metrics = _summarize(
                     epoch,
+                    ordered,
+                    rollout_summary,
+                    statistics,
+                    eval_records,
                 )
-                if rank == 0:
-                    for trajectory in rollout_summary["trajectories"]:
-                        _append_record(
-                            episodes_path,
-                            {
-                                "model": model_index,
-                                "epoch": epoch,
-                                "phase": "training",
-                                **trajectory["record"],
-                            },
-                        )
-
-                label = f"Model {model_index} epoch {epoch}"
-                eval_records = evaluate_scenarios(envs, model, scenarios, device, label)
-                if rank == 0:
-                    for record in eval_records:
-                        _append_record(
-                            episodes_path,
-                            {
-                                "model": model_index,
-                                "epoch": epoch,
-                                "phase": "screening",
-                                **record,
-                            },
-                        )
-
-                    metrics = _summarize(
-                        model_index,
-                        epoch,
-                        ordered,
-                        rollout_summary,
-                        statistics,
-                        eval_records,
-                    )
-                    saved_checkpoint = None
-                    if (
-                        metrics["safety"] > MINIMUM_SAFETY_RATE
-                        and metrics["overtake_rate"] > MINIMUM_OVERTAKE_RATE
-                    ):
-                        checkpoint_count += 1
-                        model_checkpoint_count += 1
-                        saved_checkpoint = f"ppo_{checkpoint_count:03d}.pt"
-                    metrics["saved"] = saved_checkpoint is not None
-                    metrics["saved_checkpoint"] = saved_checkpoint
-                    if saved_checkpoint is not None:
-                        torch.save(model.model.state_dict(), artifact_dir / saved_checkpoint)
-                        checkpoint_records.append(metrics)
-                        checkpoints_path.write_text(
-                            json.dumps(checkpoint_records, indent=2) + "\n",
-                            encoding="utf-8",
-                        )
-                        print(
-                            f"{label} saved {saved_checkpoint}: "
-                            f"safety {metrics['safety']:.2%} | "
-                            f"overtake {metrics['overtake_rate']:.2%}",
-                            flush=True,
-                        )
-                    _append_record(metrics_path, metrics)
-                    checkpoint = saved_checkpoint if saved_checkpoint is not None else "none"
+                saved_checkpoint = None
+                if (
+                    metrics["safety"] > MINIMUM_SAFETY_RATE
+                    and metrics["overtake_rate"] > MINIMUM_OVERTAKE_RATE
+                ):
+                    checkpoint_count += 1
+                    saved_checkpoint = f"ppo_{checkpoint_count:03d}.pt"
+                metrics["saved"] = saved_checkpoint is not None
+                metrics["saved_checkpoint"] = saved_checkpoint
+                if saved_checkpoint is not None:
+                    torch.save(model.state_dict(), artifact_dir / saved_checkpoint)
                     print(
-                        f"{label} | safety {metrics['safety']:.2%} | "
-                        f"overtake {metrics['overtake_rate']:.2%} | checkpoint {checkpoint} | "
-                        f"screened {metrics['eval_count']} | failed {metrics['eval_failures']} | "
-                        f"training scenarios {metrics['scenarios']} | "
-                        f"collisions {metrics['collisions']} | follow {metrics['follows']} | "
-                        f"overtakes {metrics['overtakes']} | return {metrics['mean_return']:.4f}"
+                        f"{label} saved {saved_checkpoint}: "
+                        f"safety {metrics['safety']:.2%} | "
+                        f"overtake {metrics['overtake_rate']:.2%}",
+                        flush=True,
                     )
-                if dist.is_initialized():
-                    dist.barrier()
-            if rank == 0:
+                _append_record(metrics_path, metrics)
+                checkpoint = saved_checkpoint if saved_checkpoint is not None else "none"
                 print(
-                    f"Model {model_index} complete: "
-                    f"{model_checkpoint_count} saved checkpoints",
-                    flush=True,
+                    f"{label} | safety {metrics['safety']:.2%} | "
+                    f"overtake {metrics['overtake_rate']:.2%} | checkpoint {checkpoint} | "
+                    f"screened {metrics['eval_count']} | failed {metrics['eval_failures']} | "
+                    f"training scenarios {metrics['scenarios']} | "
+                    f"collisions {metrics['collisions']} | follow {metrics['follows']} | "
+                    f"overtakes {metrics['overtakes']} | return {metrics['mean_return']:.4f}"
                 )
+            if dist.is_initialized():
+                dist.barrier()
     finally:
         if envs is not None:
             envs.close()

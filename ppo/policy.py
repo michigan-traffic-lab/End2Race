@@ -5,14 +5,11 @@ from model import End2Race
 
 
 class ActorCritic(nn.Module):
-    """IL-initialized recurrent policy with a shared scalar value head."""
+    """Recurrent policy and value head initialized from IL or PPO weights."""
 
     def __init__(self, checkpoint_path, steering_std, speed_std):
         super().__init__()
         self.model = End2Race()
-        self.model.load_state_dict(
-            torch.load(checkpoint_path, map_location="cpu", weights_only=True)
-        )
         self.value_head = nn.Sequential(
             nn.Linear(End2Race.GRU_HIDDEN_SIZE, End2Race.MLP_HIDDEN_SIZE),
             nn.ReLU(),
@@ -22,6 +19,17 @@ class ActorCritic(nn.Module):
             "action_std",
             torch.tensor([steering_std, speed_std], dtype=torch.float32),
         )
+        checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
+        if set(checkpoint) == set(self.model.state_dict()):
+            self.model.load_state_dict(checkpoint)
+            self.checkpoint_type = "IL"
+        elif set(checkpoint) == set(self.state_dict()):
+            self.load_state_dict(checkpoint)
+            self.checkpoint_type = "RL"
+        else:
+            raise ValueError(
+                f"{checkpoint_path} is not an End2Race IL or PPO RL checkpoint"
+            )
         self.train()
 
     def train(self, mode=True):

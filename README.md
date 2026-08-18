@@ -202,7 +202,7 @@ The training schedule is fixed: 500 epochs, a checkpoint at epoch 500, batch siz
 
 ## PPO Fine-Tuning
 
-Fine-tune a checkpoint produced by `train.py` with recurrent PPO:
+Train with recurrent PPO from either an IL checkpoint produced by `train.py` or a full actor-critic PPO checkpoint produced by an earlier run:
 
 ```bash
 python -m ppo.run_ppo \
@@ -216,7 +216,7 @@ torchrun --standalone --nproc_per_node=4 --module ppo.run_ppo \
   --checkpoint_path checkpoint/epoch_00500.pt
 ```
 
-`ppo.run_ppo` externally sequences the separate training and evaluation modules. A plain Python launch uses one GPU when available; `torchrun --nproc_per_node=N` gives each rank one GPU and its own `--num_envs` environment workers. Every epoch randomly shuffles the 720 Austin scenarios once, divides them evenly among ranks, and collects one stochastic trajectory per scenario while holding a synchronized policy fixed. Advantages are normalized across all ranks, gradients accumulate across each rank's worker-sized rollout chunks, and one globally summed PPO gradient is clipped before every replica takes the same optimizer step. The actor's desired speed is bounded to `[0, 20]` by the PPO environment. The actor and value head use a constant learning rate of `1e-5`. After every update, deterministic screening of all 720 scenarios is divided across ranks. Each independent model starts from the input checkpoint with fresh PPO state, trains for 500 epochs, and is followed by another model until the process is stopped. Stochastic collection uses fixed steering and speed standard deviations of `0.05` and `0.50`. Every evaluation with safety above 90% and an overtake rate above 60% saves another sequential checkpoint such as `checkpoint/ppo/ppo_001.pt`; `checkpoint/ppo/checkpoints.json` is updated with that checkpoint's model number and metrics after each save. PPO artifacts live inside `checkpoint/ppo/`. See [ppo/README.md](ppo/README.md) for the reward, exploration behavior, and artifacts.
+`ppo.run_ppo` externally sequences the separate training and evaluation modules. A plain Python launch uses one GPU when available; `torchrun --nproc_per_node=N` gives each rank one GPU and its own `--num_envs` environment workers. Every epoch randomly shuffles the 720 Austin scenarios once, divides them evenly among ranks, and collects one stochastic trajectory per scenario while holding a synchronized policy fixed. Advantages are normalized across all ranks, gradients accumulate across each rank's worker-sized rollout chunks, and one globally summed PPO gradient is clipped before every replica takes the same optimizer step. The actor's desired speed is bounded to `[0, 20]` by the PPO environment. The actor and value head use a constant learning rate of `1e-5`. After every update, deterministic screening of all 720 scenarios is divided across ranks. The same model trains for unlimited epochs until the process is stopped. An IL input checkpoint initializes a new value head; a PPO input checkpoint restores the policy and value-head weights. Optimizer and runtime training state always start fresh. Stochastic collection uses fixed steering and speed standard deviations of `0.05` and `0.50`. Every evaluation with safety above 90% and an overtake rate above 60% saves another sequential weight-only actor-critic checkpoint such as `checkpoint/ppo/ppo_001.pt`. PPO artifacts remain flat inside `checkpoint/ppo/`. See [ppo/README.md](ppo/README.md) for the reward, exploration behavior, and artifacts.
 
 ## Model Architecture
 
