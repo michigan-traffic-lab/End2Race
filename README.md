@@ -128,16 +128,29 @@ The batch evaluation runs hundreds of scenarios in parallel to comprehensively a
 bash eval_multi.sh checkpoint/epoch_00500.pt eval_results
 ```
 
-The checkpoint is required and the output root defaults to `eval_results`. The batch runs 80 start points against 3 opponent racelines and 3 opponent speed scales on Austin, 720 scenarios across 16 workers, and lays every artifact under `<output root>/<checkpoint stem>/<map>/`. It always completes at least 100 scenarios and stops early only if its aggregate collision rate then exceeds 20%.
+The checkpoint is required and the output root defaults to `eval_results`. With no
+map arguments, the batch evaluates Austin, Hockenheim, MoscowRaceway, and
+Nuerburgring in order. Pass any supported subset after the output root to select
+maps explicitly:
 
-The batch renders no video, so `results.json` is its only artifact: the batch configuration, the following, overtaking, collision, and error counts, and their percentages. A collision-guard stop, a `Ctrl-C`, and a `SIGTERM` each still write it, so `planned_scenarios`, `completed_scenarios`, `complete`, and `stop_reason` say how much of the batch the numbers cover; percentages always use `completed_scenarios` as their denominator. The batch exits 0 when every scenario ran, 1 on worker errors, 2 on a collision-guard stop, and 130 or 143 when interrupted.
+```bash
+bash eval_multi.sh checkpoint/epoch_00500.pt eval_results Austin Nuerburgring
+```
+
+Each selected map runs 80 start points against 3 opponent racelines and 3
+opponent speed scales: 720 scenarios across 16 workers. Artifacts land under
+`<output root>/<checkpoint stem>/<map>/`. Every selected map runs its complete
+720-scenario matrix.
+
+The batch renders no video, so `results.json` is its only artifact: the batch configuration, the following, overtaking, collision, and error counts, and their percentages. A `Ctrl-C` and a `SIGTERM` still write it, so `planned_scenarios`, `completed_scenarios`, `complete`, and `stop_reason` say how much of the batch the numbers cover; percentages always use `completed_scenarios` as their denominator. The batch exits 0 when every scenario ran, 1 on worker errors, and 130 or 143 when interrupted.
 
 ### Checkpoint Qualification
 
 Training has no hyperparameter sweep and performs no evaluation. Monitor the pipeline externally and evaluate each `epoch_00500.pt` checkpoint in this order:
 
 1. Run `eval_single.py` for Austin, Hockenheim, MoscowRaceway, and Nuerburgring, stopping at the first failure. Enforce a 90-second wall-clock timeout externally for each map; exceeding it is a failed single-agent gate.
-2. After all four maps pass, run `eval_multi.sh` for Austin's 720 scenarios.
+2. After all four maps pass, run `eval_multi.sh` for Austin's 720 scenarios by
+   passing `Austin` as the map argument.
 3. Qualify the model only when all 720 scenarios complete without worker errors and `success_percent` in `results.json` is strictly greater than `80.0`.
 
 Retain a qualified checkpoint and record its four single-agent metric blocks plus the complete multi-agent `results.json` beside it. Delete a checkpoint that fails a single-agent map or the multi-agent safety requirement. An interrupted or errored evaluation is not a model result; resolve the runtime failure before deciding whether to retain the checkpoint.
