@@ -18,13 +18,12 @@ from .train_ppo import (
     VALUE_LOSS_WEIGHT,
     train_epoch,
 )
-from utils import (
+from expert.utils import (
     find_opponent_start_index,
     get_ego_idx_range,
-    load_racetrack_config,
-    load_raceline,
     require_end2race_runtime,
 )
+from f1tenth_sim.utils import load_racetrack_config, load_raceline
 
 ARTIFACT_DIR = Path("checkpoint/ppo")
 LEARNING_RATE = 1e-5

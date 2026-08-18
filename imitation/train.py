@@ -8,8 +8,8 @@ import torch.nn.functional as F
 import torch.optim as optim
 from torch.utils.data import DataLoader, Dataset
 
-from model import End2Race
-from utils import require_end2race_runtime
+from expert.utils import require_end2race_runtime
+from imitation.model import End2Race
 
 NUM_EPOCHS = 500
 CHECKPOINT_INTERVAL = 500

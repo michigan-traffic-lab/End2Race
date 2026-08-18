@@ -37,7 +37,8 @@ import numpy as np
 from scipy.interpolate import CubicSpline
 from scipy.spatial import cKDTree
 
-from utils import load_lattice_config, load_racetrack_config, nearest_point, racetrack_path
+from expert.utils import load_expert_config, nearest_point
+from f1tenth_sim.utils import load_racetrack_config, racetrack_path
 
 
 LIDAR_FIELD_OF_VIEW = 6.28
@@ -45,7 +46,7 @@ LIDAR_FIELD_OF_VIEW = 6.28
 
 def _expert_configuration():
     return SimpleNamespace(
-        **vars(load_lattice_config().expert),
+        **vars(load_expert_config().expert),
         **vars(load_racetrack_config().vehicle),
     )
 

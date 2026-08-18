@@ -12,19 +12,18 @@ import imageio
 import numpy as np
 from f110_gym.envs.base_classes import Integrator
 
-from latticeplanner.lattice_planner import create_expert_planner, create_opponent
-from model import End2Race
-from utils import (
+from expert.lattice_planner import create_expert_planner, create_opponent
+from expert.utils import (
     create_planner_render_callback,
     downsample_lidar,
     find_opponent_start_index,
-    load_racetrack_config,
     project_point_to_centerline,
     raceline_pose,
     require_end2race_runtime,
-    simulation_config,
     unwrap_progress,
 )
+from f1tenth_sim.utils import load_racetrack_config, simulation_config
+from imitation.model import End2Race
 
 EGO_RACELINE = "raceline1"
 

@@ -1,6 +1,6 @@
 # Fixed Training and Qualification Procedure
 
-Train one model at a time with the fixed settings in `train.py`. Training and
+Train one model at a time with the fixed settings in `imitation/train.py`. Training and
 evaluation remain separate; monitor and sequence the pipeline externally.
 
 ## Prerequisite
@@ -19,7 +19,7 @@ Every model uses exactly:
 - learning rate `1e-4`.
 
 These settings are constants, not sweep dimensions. Do not run a hyperparameter
-sweep and do not add evaluation or qualification logic to `train.py`.
+sweep and do not add evaluation or qualification logic to `imitation/train.py`.
 
 ## Qualification Order
 

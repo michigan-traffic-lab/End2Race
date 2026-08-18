@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-from model import End2Race
+from imitation.model import End2Race
 
 
 class ActorCritic(nn.Module):

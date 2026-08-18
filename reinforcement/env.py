@@ -13,16 +13,18 @@ import numpy as np
 import torch
 from f110_gym.envs.base_classes import Integrator
 
-from latticeplanner.lattice_planner import create_opponent
-from model import End2Race
-from utils import (
+from expert.lattice_planner import create_opponent
+from expert.utils import (
     downsample_lidar,
+    project_point_to_centerline,
+)
+from f1tenth_sim.utils import (
     load_raceline,
     load_racetrack_config,
-    project_point_to_centerline,
     racetrack_path,
     simulation_config,
 )
+from imitation.model import End2Race
 
 warnings.filterwarnings(
     "ignore",

@@ -10,22 +10,24 @@ import numpy as np
 import torch
 from f110_gym.envs.base_classes import Integrator
 
-from latticeplanner.lattice_planner import create_opponent
-from utils import (
+from expert.lattice_planner import create_opponent
+from expert.utils import (
     calculate_metrics,
     create_multiagent_render_callback,
     downsample_lidar,
     find_opponent_start_index,
-    load_racetrack_config,
-    load_raceline,
     mask_lidar_points,
     project_point_to_centerline,
-    racetrack_path,
     require_end2race_runtime,
-    simulation_config,
     unwrap_progress,
 )
-from model import End2Race
+from f1tenth_sim.utils import (
+    load_racetrack_config,
+    load_raceline,
+    racetrack_path,
+    simulation_config,
+)
+from imitation.model import End2Race
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Evaluate End2Race in one multi-agent scenario")

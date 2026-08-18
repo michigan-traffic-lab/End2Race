@@ -4,14 +4,14 @@ This package trains an End2Race policy with recurrent PPO. `train_ppo.py` contai
 
 ## Pipeline
 
-- One shared recurrent actor-value model loads either an IL checkpoint from `train.py` or a full PPO checkpoint from an earlier run. An IL checkpoint initializes the policy weights and starts a new value head. A PPO checkpoint restores both policy and value-head weights. The optimizer, epoch counter, recurrent hidden state, and rollout state always start fresh.
+- One shared recurrent actor-value model loads either an IL checkpoint from `imitation/train.py` or a full PPO checkpoint from an earlier run. An IL checkpoint initializes the policy weights and starts a new value head. A PPO checkpoint restores both policy and value-head weights. The optimizer, epoch counter, recurrent hidden state, and rollout state always start fresh.
 - The default pool contains 720 scenarios: 80 ego starts, 3 opponent racelines, and 3 opponent speed scales.
 - Launch with `torchrun --nproc_per_node=N` to give each rank one GPU and `--num_envs` environment workers. A plain Python launch remains the single-device form. Every epoch trains on the complete 720-scenario pool: one shuffled order is synchronized across ranks, divided evenly, and collected concurrently while the policy remains fixed. Every scenario contributes exactly one trajectory per epoch.
 - A launch trains one model for an unlimited number of epochs until the process is stopped. Stochastic collection uses fixed steering and speed standard deviations of `0.05` and `0.50`.
 - Each trajectory receives per-step GAE. After all 720 trajectories are collected, one PPO-Clip and value-regression update uses advantage statistics reduced across every rank. Gradients accumulate across local worker-sized rollout chunks, are summed across ranks, and are globally clipped before one identical optimizer step on every replica.
 - Evaluation runs after every update. Deterministic screening of all 720 scenarios is divided across ranks and gathered by rank 0.
 
-The simulator runs at 120 Hz and holds each actor action for three physics steps, matching the 40 Hz End2Race control rate. PPO bounds the actor's desired speed to `[0, 20]`. The latticeplanner `RacelineFollower` controls the opponent with a 120 Hz tracker and 10 Hz replanning.
+The simulator runs at 120 Hz and holds each actor action for three physics steps, matching the 40 Hz End2Race control rate. PPO bounds the actor's desired speed to `[0, 20]`. The expert `RacelineFollower` controls the opponent with a 120 Hz tracker and 10 Hz replanning.
 
 The environment reward is:
 
@@ -28,17 +28,17 @@ The actor and value head use one Adam optimizer with a constant learning rate of
 
 ## Run
 
-Pass either an IL checkpoint produced by `train.py` or a PPO checkpoint produced by an earlier run:
+Pass either an IL checkpoint produced by `imitation/train.py` or a PPO checkpoint produced by an earlier run:
 
 ```bash
-python -m ppo.run_ppo \
+python -m reinforcement.run_ppo \
   --checkpoint_path checkpoint/epoch_00500.pt
 ```
 
 For four GPUs:
 
 ```bash
-torchrun --standalone --nproc_per_node=4 --module ppo.run_ppo \
+torchrun --standalone --nproc_per_node=4 --module reinforcement.run_ppo \
   --checkpoint_path checkpoint/epoch_00500.pt
 ```
 

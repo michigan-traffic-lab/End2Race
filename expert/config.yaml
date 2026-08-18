@@ -18,9 +18,3 @@ expert:
   steering_gain: 0.8
   interpolation_points: 10
   parallel_workers: 4
-
-simulation:
-  frequency_hz: 120
-  control_frequency_hz: 40
-  expert_planner_frequency_hz: 10
-  ego_initial_speed_fraction: 0.5

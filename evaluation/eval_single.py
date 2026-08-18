@@ -10,20 +10,22 @@ import numpy as np
 import torch
 from f110_gym.envs.base_classes import Integrator
 
-from model import End2Race
-from utils import (
+from expert.utils import (
     calculate_metrics,
     create_single_agent_render_callback,
     downsample_lidar,
-    load_racetrack_config,
-    load_raceline_start,
     mask_lidar_points,
     project_point_to_centerline,
-    racetrack_path,
     require_end2race_runtime,
-    simulation_config,
     unwrap_progress,
 )
+from f1tenth_sim.utils import (
+    load_racetrack_config,
+    load_raceline_start,
+    racetrack_path,
+    simulation_config,
+)
+from imitation.model import End2Race
 
 MINIMUM_LAP_PROGRESS_FRACTION = 0.95
 

@@ -54,7 +54,7 @@ evaluate_map() (
     mkdir -p "$output_dir" || exit 1
 
     mapfile -t ego_indices < <(
-        python -c 'import sys; from utils import get_ego_idx_range; print(*get_ego_idx_range(sys.argv[1], sys.argv[2], int(sys.argv[3])), sep="\n")' \
+        python -c 'import sys; from expert.utils import get_ego_idx_range; print(*get_ego_idx_range(sys.argv[1], sys.argv[2], int(sys.argv[3])), sep="\n")' \
             "$map_name" "$EGO_RACELINE" "$NUM_STARTPOINTS"
     )
     if (( ${#ego_indices[@]} == 0 )); then
@@ -72,7 +72,7 @@ evaluate_map() (
     write_summary() {
         (( summary_written )) && return 0
         summary_written=1
-        python -c 'import sys; from utils import write_multi_evaluation_summary; raise SystemExit(not write_multi_evaluation_summary(*sys.argv[1:]))' \
+        python -c 'import sys; from expert.utils import write_multi_evaluation_summary; raise SystemExit(not write_multi_evaluation_summary(*sys.argv[1:]))' \
             "$results_dir" "$output_dir/results.json" "$CHECKPOINT_PATH" \
             "$map_name" "$EGO_RACELINE" "$NUM_STARTPOINTS" \
             "${OPPONENT_RACELINES[*]}" "${OPPONENT_SPEED_SCALES[*]}" \
@@ -109,7 +109,7 @@ evaluate_map() (
                     sleep 0.1
                 done
                 (
-                    python eval_multi.py \
+                    python -m evaluation.eval_multi \
                         --map_name "$map_name" \
                         --checkpoint_path "$CHECKPOINT_PATH" \
                         --output_dir "$output_dir" \

@@ -3,57 +3,20 @@ import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from types import SimpleNamespace
 
 import numpy as np
-import yaml
 from numba import njit
 
-
-def load_yaml_config(path):
-    """Load a config whose sections become nested namespaces."""
-    with path.open(encoding="utf-8") as stream:
-        values = yaml.safe_load(stream)
-
-    return SimpleNamespace(**{name: SimpleNamespace(**section) for name, section in values.items()})
-
-
-def racetrack_path(*parts):
-    """Path to a file inside the bundled racetrack collection."""
-    return Path(__file__).resolve().parent / "f1tenth_racetracks" / Path(*parts)
+from f1tenth_sim.utils import (
+    load_racetrack_config,
+    load_yaml_config,
+    racetrack_path,
+    simulation_config,
+)
 
 
-def load_racetrack_config():
-    return load_yaml_config(racetrack_path("config.yaml"))
-
-
-def load_lattice_config():
-    return load_yaml_config(Path(__file__).resolve().parent / "latticeplanner" / "lattice_config.yaml")
-
-
-def simulation_config():
-    """Timing contract and initial ego speed derived from lattice_config.yaml."""
-    simulation = load_lattice_config().simulation
-    frequency = simulation.frequency_hz
-    control_frequency = simulation.control_frequency_hz
-    planner_frequency = simulation.expert_planner_frequency_hz
-    # Integer step counts truncate silently unless the frequencies divide evenly
-    if frequency % control_frequency or frequency % planner_frequency:
-        raise ValueError(
-            "simulation.frequency_hz must divide both simulation.control_frequency_hz "
-            "and simulation.expert_planner_frequency_hz"
-        )
-    return SimpleNamespace(
-        frequency_hz=frequency,
-        control_frequency_hz=control_frequency,
-        expert_planner_frequency_hz=planner_frequency,
-        steps_per_control=frequency // control_frequency,
-        steps_per_expert_plan=frequency // planner_frequency,
-        timestep=1.0 / frequency,
-        control_timestep=1.0 / control_frequency,
-        video_fps=frequency,
-        ego_initial_speed_fraction=simulation.ego_initial_speed_fraction,
-    )
+def load_expert_config():
+    return load_yaml_config(Path(__file__).resolve().parent / "config.yaml")
 
 
 @njit(cache=True)
@@ -148,24 +111,6 @@ def require_end2race_runtime():
             "Activate the Python 3.11 end2race environment before running this "
             "workflow: conda activate end2race"
         )
-
-
-def load_raceline(map_name, raceline_file):
-    """Load x, y, heading, and speed columns from a raceline."""
-    raceline_path = racetrack_path(map_name, raceline_file)
-    values = np.loadtxt(raceline_path, delimiter=";", skiprows=1, ndmin=2)
-    if values.shape[1] < 6:
-        raise ValueError(f"{raceline_path} must contain at least six columns")
-    return values[:, [1, 2, 3, 5]]
-
-
-def load_raceline_start(map_name, raceline_file, start_idx):
-    waypoints = load_raceline(map_name, raceline_file)
-    idx = start_idx % len(waypoints)
-    start_pose = np.array(
-        [[waypoints[idx, 0], waypoints[idx, 1], waypoints[idx, 2]]]
-    )
-    return start_pose, waypoints
 
 
 def calculate_metrics(trajectory, speeds):
@@ -436,7 +381,7 @@ def _tally(episodes):
 def write_collection_summary(dataset_dir, collection_config, failures):
     """Summarize a finished collection from the artifacts left in its dataset directory."""
     # Imported here so that every utils consumer does not pay for torch
-    from model import End2Race
+    from imitation.model import End2Race
 
     simulation = simulation_config()
     dataset_dir = Path(dataset_dir)
@@ -466,7 +411,7 @@ def write_collection_summary(dataset_dir, collection_config, failures):
             "lidar_features": End2Race.NUM_LIDAR_FEATURES,
             "csv_columns": 4 + End2Race.NUM_LIDAR_FEATURES,
             "vehicle": vars(load_racetrack_config().vehicle),
-            "expert": vars(load_lattice_config().expert),
+            "expert": vars(load_expert_config().expert),
         },
         "results": {
             "expected_scenarios": collection_config["num_startpoints"]

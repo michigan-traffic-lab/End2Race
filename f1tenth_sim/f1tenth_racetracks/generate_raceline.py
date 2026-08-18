@@ -10,7 +10,7 @@ import trajectory_planning_helpers as tph
 import yaml
 from scipy import interpolate
 
-from utils import load_racetrack_config
+from f1tenth_sim.utils import load_racetrack_config
 
 
 def spline_distance(t_glob, path, point):

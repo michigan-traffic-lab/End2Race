@@ -28,7 +28,7 @@ mapfile -t scenarios < <(
         "${OPPONENT_RACELINES[*]}" "${OPPONENT_SPEED_SCALES[*]}" <<'PY'
 import sys
 
-from utils import collection_scenarios
+from expert.utils import collection_scenarios
 
 for scenario in collection_scenarios(
     sys.argv[1], sys.argv[2], int(sys.argv[3]), sys.argv[4].split(), sys.argv[5].split()
@@ -85,7 +85,7 @@ for scenario in "${scenarios[@]}"; do
         fi
         sleep 0.1
     done
-    python expert.py \
+    python -m expert.collect \
         --map_name "$MAP_NAME" --dataset_dir "$DATASET_DIR" \
         --ego_idx "$ego_idx" --interval_idx "$INTERVAL_INDEX" \
         --opponent_raceline "$opponent_raceline" \
@@ -112,7 +112,7 @@ done
 
 python - "$DATASET_DIR" "$failures" <<PY || exit 1
 import sys
-from utils import write_collection_summary
+from expert.utils import write_collection_summary
 
 write_collection_summary(
     sys.argv[1],
