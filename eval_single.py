@@ -1,6 +1,10 @@
 import argparse
+from contextlib import redirect_stderr
+from io import StringIO
 from pathlib import Path
-import gym
+
+with redirect_stderr(StringIO()):
+    import gym
 import imageio
 import numpy as np
 import torch

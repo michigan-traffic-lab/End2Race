@@ -1,11 +1,14 @@
+from contextlib import redirect_stderr
 from dataclasses import dataclass
+from io import StringIO
 import multiprocessing as mp
 import os
 import traceback
 import warnings
 
-import f110_gym  # Registers the F1TENTH Gym environment.
-import gym
+with redirect_stderr(StringIO()):
+    import f110_gym  # Registers the F1TENTH Gym environment.
+    import gym
 import numpy as np
 import torch
 from f110_gym.envs.base_classes import Integrator
@@ -38,6 +41,17 @@ class Scenario:
     opponent_speed_scale: float
 
 
+def shard_scenarios(scenarios, shard_count):
+    shard_size, remainder = divmod(len(scenarios), shard_count)
+    shards = []
+    start = 0
+    for index in range(shard_count):
+        end = start + shard_size + int(index < remainder)
+        shards.append(tuple(scenarios[start:end]))
+        start = end
+    return tuple(shards)
+
+
 def wrapped_progress_delta(current_progress, previous_progress, track_length):
     """Measure signed progress across the cyclic lap boundary."""
     offset = current_progress - previous_progress + 0.5 * track_length
@@ -49,6 +63,7 @@ class RaceEnv:
 
     PROGRESS_REWARD_WEIGHT = 0.02
     COLLISION_PENALTY = -1.0
+    MAXIMUM_EGO_SPEED = 20.0
 
     def __init__(self, settings):
         self.map_name = settings.map_name
@@ -113,7 +128,11 @@ class RaceEnv:
         self.opponent_trajectory = None
         self.ego_progress = self._progress(self.raw_observation, 0)
         self.opponent_progress = self._progress(self.raw_observation, 1)
-        self.relative_position = wrapped_progress_delta(self.ego_progress, self.opponent_progress, self.track_length)
+        self.relative_position = wrapped_progress_delta(
+            self.ego_progress,
+            self.opponent_progress,
+            self.track_length,
+        )
         self.overtaken = self.relative_position >= self.vehicle.length
         return self._observation(self.raw_observation)
 
@@ -140,7 +159,7 @@ class RaceEnv:
     def step(self, action):
         """Hold one 40 Hz action across three physics steps and score the interval."""
         ego_steering = float(np.clip(action[0], -self.vehicle.steering_limit, self.vehicle.steering_limit))
-        ego_speed = float(np.clip(action[1], 0.0, self.vehicle.maximum_speed))
+        ego_speed = float(np.clip(action[1], 0.0, self.MAXIMUM_EGO_SPEED))
         self.previous_speed = float(self.raw_observation["linear_vels_x"][0])
 
         ego_collision = False
@@ -235,7 +254,14 @@ class VectorEnv:
         self.remotes, work_remotes = zip(*[context.Pipe() for _ in range(num_envs)])
         self.processes = []
 
-        previous_threads = {name: os.environ.get(name) for name in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS")}
+        previous_threads = {
+            name: os.environ.get(name)
+            for name in (
+                "OMP_NUM_THREADS",
+                "MKL_NUM_THREADS",
+                "OPENBLAS_NUM_THREADS",
+            )
+        }
         for name in previous_threads:
             os.environ[name] = "1"
         try:

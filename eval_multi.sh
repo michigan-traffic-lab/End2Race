@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-WORKERS=12
+WORKERS=16
 MAP_NAME="Austin"
 CHECKPOINT_PATH="${1:-}"
 OUTPUT_ROOT="${2:-eval_results}"

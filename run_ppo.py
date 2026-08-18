@@ -1,23 +1,20 @@
 import argparse
-from contextlib import redirect_stdout
-import io
 import json
+import os
 from pathlib import Path
-from types import SimpleNamespace
 
 import numpy as np
 import torch
+import torch.distributed as dist
 
 from ppo.env import RaceEnv, Scenario, VectorEnv
 from eval_ppo import evaluate_scenarios
-from eval_single import evaluate_laps
 from ppo.policy import ActorCritic
 from train_ppo import (
-    INITIAL_SPEED_STD,
-    INITIAL_STEERING_STD,
+    FIXED_SPEED_STD,
+    FIXED_STEERING_STD,
     UPDATE_EPOCHS,
     VALUE_LOSS_WEIGHT,
-    explained_variance,
     train_epoch,
 )
 from utils import (
@@ -29,8 +26,13 @@ from utils import (
 )
 
 ARTIFACT_DIR = Path("checkpoint/ppo")
-EVAL_MAPS = ("Austin", "Hockenheim", "MoscowRaceway", "Nuerburgring")
-EVAL_INTERVAL = 5
+EVAL_INTERVAL = 1
+LEARNING_RATE_STEP = 1e-6
+MAX_LEARNING_RATE = 1e-5
+LEARNING_RATE_WARMUP_EPOCHS = 10
+MAX_EPOCHS = 100
+MINIMUM_SAFETY_RATE = 0.9
+MINIMUM_OVERTAKE_RATE = 0.6
 
 
 def parse_arguments():
@@ -47,11 +49,10 @@ def parse_arguments():
     parser.add_argument("--episode_duration", type=float, default=8.0)
     parser.add_argument("--num_envs", type=int, default=16)
 
-    parser.add_argument("--learning_rate", type=float, default=2e-5)
     parser.add_argument("--max_grad_norm", type=float, default=0.5)
 
     parser.add_argument("--gamma", type=float, default=0.999)
-    parser.add_argument("--gae_lambda", type=float, default=0.95)
+    parser.add_argument("--gae_lambda", type=float, default=0.99)
     parser.add_argument("--clip_range", type=float, default=0.2)
 
     args = parser.parse_args()
@@ -59,7 +60,6 @@ def parse_arguments():
         "--num_startpoints": args.num_startpoints,
         "--episode_duration": args.episode_duration,
         "--num_envs": args.num_envs,
-        "--learning_rate": args.learning_rate,
         "--max_grad_norm": args.max_grad_norm,
         "--clip_range": args.clip_range,
     }
@@ -115,76 +115,67 @@ def build_scenarios(settings):
     return tuple(scenarios)
 
 
-def evaluate_single(model, device, vehicle, epoch):
-    results = {}
-    model.model.eval()
-    try:
-        for map_name in EVAL_MAPS:
-            print(f"Epoch {epoch} single vehicle: {map_name} running", flush=True)
-            settings = SimpleNamespace(
-                map_name=map_name,
-                noise=0.0,
-                seed=None,
-                lap_num=1,
-                start_idx=0,
-                minimum_lap_time=10.0,
-                render=False,
-            )
-            with redirect_stdout(io.StringIO()):
-                result = evaluate_laps(model.model, device, vehicle, settings)
-            results[map_name] = result
-            status = "passed" if result["passed"] else "failed"
-            print(
-                f"Epoch {epoch} single vehicle: {map_name} {status} | "
-                f"laps {result['laps_completed']} | progress {result['lap_progress']:.3f} | "
-                f"time {result['lap_time']:.3f}s",
-                flush=True,
-            )
-            if not result["passed"]:
-                return results, False
-    finally:
-        model.train()
-    return results, True
-
-
 def summarize(
     epoch,
+    learning_rate,
     scenarios,
-    batches,
+    rollout_summary,
     statistics,
-    action_std,
     eval_records,
-    single_results,
-    single_passed,
-    best_safety,
-    saved,
+    saved_checkpoint,
 ):
-    records = [trajectory["record"] for batch in batches for trajectory in batch]
+    trajectories = rollout_summary["trajectories"]
+    records = [trajectory["record"] for trajectory in trajectories]
+    transition_count = sum(record["episode_steps"] for record in records)
+    return_sum = sum(trajectory["return_sum"] for trajectory in trajectories)
+    return_square_sum = sum(
+        trajectory["return_square_sum"] for trajectory in trajectories
+    )
+    error_sum = sum(trajectory["error_sum"] for trajectory in trajectories)
+    error_square_sum = sum(
+        trajectory["error_square_sum"] for trajectory in trajectories
+    )
+    return_variance = max(
+        return_square_sum / transition_count - (return_sum / transition_count) ** 2,
+        0.0,
+    )
+    error_variance = max(
+        error_square_sum / transition_count - (error_sum / transition_count) ** 2,
+        0.0,
+    )
     evaluated = eval_records is not None
     failures = sum(record["ego_collision"] for record in eval_records) if evaluated else None
+    eval_overtakes = (
+        sum(record["outcome"] == "overtake" for record in eval_records)
+        if evaluated
+        else None
+    )
     metrics = {
         "epoch": epoch,
+        "learning_rate": learning_rate,
         "evaluated": evaluated,
         "eval_count": len(eval_records) if evaluated else 0,
         "eval_failures": failures,
         "eval_passes": len(eval_records) - failures if evaluated else None,
         "safety": 1.0 - failures / len(eval_records) if evaluated else None,
-        "single_passed": single_passed,
-        "single": single_results,
-        "best_safety": best_safety,
-        "saved": saved,
+        "eval_overtakes": eval_overtakes,
+        "overtake_rate": eval_overtakes / len(eval_records) if evaluated else None,
+        "saved": saved_checkpoint is not None,
+        "saved_checkpoint": saved_checkpoint,
         "scenarios": len(scenarios),
-        "batches": len(batches),
-        "steering_std": action_std[0],
-        "speed_std": action_std[1],
+        "batches": rollout_summary["batch_count"],
         "trajectories": len(records),
-        "transitions": int(sum(record["episode_steps"] for record in records)),
+        "transitions": int(transition_count),
         "collisions": sum(record["outcome"] == "ego_collision" for record in records),
         "overtakes": sum(record["outcome"] == "overtake" for record in records),
         "follows": sum(record["outcome"] == "follow" for record in records),
         "mean_steps": float(np.mean([record["episode_steps"] for record in records])) if records else 0.0,
-        "mean_return": float(np.mean([trajectory["episode_return"] for batch in batches for trajectory in batch])) if records else 0.0,
-        "explained_variance": explained_variance(batches) if batches else 0.0,
+        "mean_return": (
+            float(np.mean([trajectory["episode_return"] for trajectory in trajectories]))
+            if records
+            else 0.0
+        ),
+        "explained_variance": 1.0 - error_variance / return_variance if return_variance >= 1e-6 else 0.0,
     }
     for name, values in statistics.items():
         metrics[f"{name}_mean"] = float(np.mean(values))
@@ -192,56 +183,128 @@ def summarize(
     return metrics
 
 
-def resolved_config(args):
+def resolved_config(args, scenario_count, world_size):
     return {
         **vars(args),
         "checkpoint_path": str(args.checkpoint_path),
-        "steering_std": INITIAL_STEERING_STD,
-        "speed_std": INITIAL_SPEED_STD,
+        "fixed_steering_std": FIXED_STEERING_STD,
+        "fixed_speed_std": FIXED_SPEED_STD,
         "value_weight": VALUE_LOSS_WEIGHT,
         "progress_reward": RaceEnv.PROGRESS_REWARD_WEIGHT,
         "overtake_distance": load_racetrack_config().vehicle.length,
         "collision_penalty": RaceEnv.COLLISION_PENALTY,
-        "batch_size": args.num_envs,
+        "maximum_ego_speed": RaceEnv.MAXIMUM_EGO_SPEED,
+        "batch_size": scenario_count,
+        "gpu_processes": world_size,
+        "workers_per_gpu": args.num_envs,
+        "total_env_workers": args.num_envs * world_size,
+        "rollout_batch_size_per_gpu": args.num_envs,
         "trajectories": 1,
         "update_epochs": UPDATE_EPOCHS,
+        "learning_rate_start": LEARNING_RATE_STEP,
+        "learning_rate_step": LEARNING_RATE_STEP,
+        "learning_rate_cap": MAX_LEARNING_RATE,
+        "learning_rate_warmup_epochs": LEARNING_RATE_WARMUP_EPOCHS,
+        "max_epochs": MAX_EPOCHS,
+        "minimum_safety_rate": MINIMUM_SAFETY_RATE,
+        "minimum_overtake_rate": MINIMUM_OVERTAKE_RATE,
         "eval_interval": EVAL_INTERVAL,
-        "eval_maps": list(EVAL_MAPS),
     }
+
+
+def initialize_process_group():
+    if "RANK" not in os.environ:
+        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        return 0, 1, device
+    if not torch.cuda.is_available():
+        raise RuntimeError("torchrun PPO requires CUDA")
+    local_rank = int(os.environ["LOCAL_RANK"])
+    torch.cuda.set_device(local_rank)
+    dist.init_process_group("nccl")
+    return dist.get_rank(), dist.get_world_size(), torch.device(f"cuda:{local_rank}")
+
+
+def synchronize_model(model):
+    if not dist.is_initialized():
+        return
+    for tensor in model.state_dict().values():
+        dist.broadcast(tensor, src=0)
 
 
 def main():
     args = parse_arguments()
     require_end2race_runtime()
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-    artifact_dir = ARTIFACT_DIR
-    artifact_dir.mkdir(parents=True, exist_ok=True)
-    ppo_path = artifact_dir / "ppo.pt"
-    config_path = artifact_dir / "config.json"
-    episodes_path = artifact_dir / "episodes.jsonl"
-    metrics_path = artifact_dir / "metrics.jsonl"
-    artifacts = (ppo_path, config_path, episodes_path, metrics_path)
-    existing = [path.name for path in artifacts if path.exists()]
-    if existing:
-        raise FileExistsError(f"Cannot start PPO in {artifact_dir}: existing {', '.join(existing)}")
-
-    scenarios = build_scenarios(args)
-    vehicle = load_racetrack_config().vehicle
-    rng = np.random.default_rng()
-    model = ActorCritic(args.checkpoint_path, INITIAL_STEERING_STD, INITIAL_SPEED_STD).to(device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate)
-    best_safety = None
-    config_path.write_text(json.dumps(resolved_config(args), indent=2) + "\n", encoding="utf-8")
-    episodes_path.touch(exist_ok=True)
-    metrics_path.touch(exist_ok=True)
-
-    print(f"Scenario pool: {len(scenarios)} | workers: {args.num_envs} | epochs: unbounded | eval every {EVAL_INTERVAL} | device: {device}")
-    envs = VectorEnv(args.num_envs, args)
+    rank, world_size, device = initialize_process_group()
+    envs = None
     try:
-        epoch = 1
-        while True:
-            ordered, batches, statistics = train_epoch(
+        artifact_dir = ARTIFACT_DIR
+        config_path = artifact_dir / "config.json"
+        checkpoints_path = artifact_dir / "checkpoints.json"
+        episodes_path = artifact_dir / "episodes.jsonl"
+        metrics_path = artifact_dir / "metrics.jsonl"
+        artifacts = (config_path, checkpoints_path, episodes_path, metrics_path)
+        artifact_error = None
+        if rank == 0:
+            artifact_dir.mkdir(parents=True, exist_ok=True)
+            existing = [path.name for path in artifacts if path.exists()]
+            existing.extend(path.name for path in artifact_dir.glob("ppo*.pt"))
+            existing.sort()
+            if existing:
+                artifact_error = (
+                    f"Cannot start PPO in {artifact_dir}: existing "
+                    f"{', '.join(existing)}"
+                )
+        if dist.is_initialized():
+            errors = [artifact_error]
+            dist.broadcast_object_list(errors, src=0)
+            artifact_error = errors[0]
+        if artifact_error:
+            raise FileExistsError(artifact_error)
+
+        scenarios = build_scenarios(args)
+        if world_size > len(scenarios):
+            raise ValueError(
+                f"Cannot distribute {len(scenarios)} scenarios across "
+                f"{world_size} GPU processes"
+            )
+        rng = np.random.default_rng()
+        model = ActorCritic(
+            args.checkpoint_path,
+            FIXED_STEERING_STD,
+            FIXED_SPEED_STD,
+        ).to(device)
+        synchronize_model(model)
+        optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE_STEP)
+        checkpoint_count = 0
+        checkpoint_records = []
+        if rank == 0:
+            config_path.write_text(
+                json.dumps(
+                    resolved_config(args, len(scenarios), world_size),
+                    indent=2,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            checkpoints_path.write_text("[]\n", encoding="utf-8")
+            episodes_path.touch(exist_ok=True)
+            metrics_path.touch(exist_ok=True)
+            print(
+                f"Scenario pool: {len(scenarios)} | GPU processes: {world_size} | "
+                f"workers/GPU: {args.num_envs} | "
+                f"total workers: {args.num_envs * world_size}"
+            )
+
+        envs = VectorEnv(args.num_envs, args)
+        for epoch in range(1, MAX_EPOCHS + 1):
+            learning_rate = (
+                epoch * LEARNING_RATE_STEP
+                if epoch < LEARNING_RATE_WARMUP_EPOCHS
+                else MAX_LEARNING_RATE
+            )
+            for parameter_group in optimizer.param_groups:
+                parameter_group["lr"] = learning_rate
+            ordered, rollout_summary, statistics = train_epoch(
                 model,
                 optimizer,
                 envs,
@@ -251,65 +314,65 @@ def main():
                 device,
                 epoch,
             )
-            for batch in batches:
-                for trajectory in batch:
-                    append_record(episodes_path, {"epoch": epoch, "phase": "training", **trajectory["record"]})
+            if rank == 0:
+                for trajectory in rollout_summary["trajectories"]:
+                    append_record(
+                        episodes_path,
+                        {"epoch": epoch, "phase": "training", **trajectory["record"]},
+                    )
 
-            eval_records = None
-            single_results = None
-            single_passed = None
-            saved = False
-            if epoch % EVAL_INTERVAL == 0:
-                eval_records = evaluate_scenarios(envs, model, scenarios, device, f"Epoch {epoch}")
+            eval_records = evaluate_scenarios(envs, model, scenarios, device, f"Epoch {epoch}")
+            if rank == 0:
                 for record in eval_records:
                     append_record(episodes_path, {"epoch": epoch, "phase": "screening", **record})
 
                 failures = sum(record["ego_collision"] for record in eval_records)
                 safety = 1.0 - failures / len(eval_records)
-                single_results, single_passed = evaluate_single(model, device, vehicle, epoch)
-                saved = single_passed and (best_safety is None or safety > best_safety)
-                if saved:
-                    best_safety = safety
-                    torch.save(model.model.state_dict(), ppo_path)
-                    print(f"Epoch {epoch} best checkpoint: safety {safety:.2%} | single vehicle passed", flush=True)
-                elif not single_passed:
-                    failed_map = next(map_name for map_name, result in single_results.items() if not result["passed"])
-                    print(f"Epoch {epoch} checkpoint skipped: single vehicle failed on {failed_map}", flush=True)
+                eval_overtakes = sum(record["outcome"] == "overtake" for record in eval_records)
+                overtake_rate = eval_overtakes / len(eval_records)
+                saved_checkpoint = None
+                if safety > MINIMUM_SAFETY_RATE and overtake_rate > MINIMUM_OVERTAKE_RATE:
+                    checkpoint_count += 1
+                    saved_checkpoint = f"ppo_{checkpoint_count:03d}.pt"
 
-            action_std = model.action_std.detach().cpu().tolist()
-            metrics = summarize(
-                epoch,
-                ordered,
-                batches,
-                statistics,
-                action_std,
-                eval_records,
-                single_results,
-                single_passed,
-                best_safety,
-                saved,
-            )
-            append_record(metrics_path, metrics)
-            if metrics["evaluated"]:
-                best = f"{best_safety:.2%}" if best_safety is not None else "none"
+                metrics = summarize(
+                    epoch,
+                    learning_rate,
+                    ordered,
+                    rollout_summary,
+                    statistics,
+                    eval_records,
+                    saved_checkpoint,
+                )
+                if saved_checkpoint is not None:
+                    torch.save(model.model.state_dict(), artifact_dir / saved_checkpoint)
+                    checkpoint_records.append(metrics)
+                    checkpoints_path.write_text(
+                        json.dumps(checkpoint_records, indent=2) + "\n",
+                        encoding="utf-8",
+                    )
+                    print(
+                        f"Epoch {epoch} saved {saved_checkpoint}: safety {safety:.2%} | "
+                        f"overtake {overtake_rate:.2%}",
+                        flush=True,
+                    )
+                append_record(metrics_path, metrics)
+                checkpoint = saved_checkpoint if saved_checkpoint is not None else "none"
                 print(
-                    f"Epoch {epoch} | safety {metrics['safety']:.2%} | best {best} | "
-                    f"single vehicle {'passed' if single_passed else 'failed'} | "
+                    f"Epoch {epoch} | safety {metrics['safety']:.2%} | "
+                    f"overtake {metrics['overtake_rate']:.2%} | checkpoint {checkpoint} | "
                     f"screened {metrics['eval_count']} | failed {metrics['eval_failures']} | "
                     f"training scenarios {metrics['scenarios']} | collisions {metrics['collisions']} | "
                     f"follow {metrics['follows']} | overtakes {metrics['overtakes']} | "
-                    f"return {metrics['mean_return']:.4f} | std ({action_std[0]:.3f}, {action_std[1]:.3f})"
+                    f"return {metrics['mean_return']:.4f}"
                 )
-            else:
-                print(
-                    f"Epoch {epoch} | training scenarios {metrics['scenarios']} | batches {metrics['batches']} | "
-                    f"collisions {metrics['collisions']} | follow {metrics['follows']} | "
-                    f"overtakes {metrics['overtakes']} | return {metrics['mean_return']:.4f} | "
-                    f"std ({action_std[0]:.3f}, {action_std[1]:.3f})"
-                )
-            epoch += 1
+            if dist.is_initialized():
+                dist.barrier()
     finally:
-        envs.close()
+        if envs is not None:
+            envs.close()
+        if dist.is_initialized():
+            dist.destroy_process_group()
 
 
 if __name__ == "__main__":

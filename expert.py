@@ -1,10 +1,13 @@
 import argparse
+from contextlib import redirect_stderr
 import csv
+from io import StringIO
 import json
 from pathlib import Path
 
-import f110_gym  # Registers the F1TENTH Gym environment.
-import gym
+with redirect_stderr(StringIO()):
+    import f110_gym  # Registers the F1TENTH Gym environment.
+    import gym
 import imageio
 import numpy as np
 from f110_gym.envs.base_classes import Integrator

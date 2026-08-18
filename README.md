@@ -128,7 +128,7 @@ The batch evaluation runs hundreds of scenarios in parallel to comprehensively a
 bash eval_multi.sh checkpoint/epoch_00500.pt eval_results
 ```
 
-The checkpoint is required and the output root defaults to `eval_results`. The batch runs 80 start points against 3 opponent racelines and 3 opponent speed scales on Austin, 720 scenarios across 12 workers, and lays every artifact under `<output root>/<checkpoint stem>/<map>/`. It always completes at least 100 scenarios and stops early only if its aggregate collision rate then exceeds 20%.
+The checkpoint is required and the output root defaults to `eval_results`. The batch runs 80 start points against 3 opponent racelines and 3 opponent speed scales on Austin, 720 scenarios across 16 workers, and lays every artifact under `<output root>/<checkpoint stem>/<map>/`. It always completes at least 100 scenarios and stops early only if its aggregate collision rate then exceeds 20%.
 
 The batch renders no video, so `results.json` is its only artifact: the batch configuration, the following, overtaking, collision, and error counts, and their percentages. A collision-guard stop, a `Ctrl-C`, and a `SIGTERM` each still write it, so `planned_scenarios`, `completed_scenarios`, `complete`, and `stop_reason` say how much of the batch the numbers cover; percentages always use `completed_scenarios` as their denominator. The batch exits 0 when every scenario ran, 1 on worker errors, 2 on a collision-guard stop, and 130 or 143 when interrupted.
 
@@ -196,7 +196,14 @@ python run_ppo.py \
   --checkpoint_path checkpoint/epoch_00500.pt
 ```
 
-`run_ppo.py` externally sequences the separate training and evaluation modules. Every epoch trains once through all 720 Austin scenarios. The full pool is randomly shuffled into 45 batches of 16 different scenarios, and the 16 workers collect one stochastic trajectory per scenario in parallel before four optimizer passes over the completed rollout batch. Evaluation runs after every tenth epoch: the updated policy is screened deterministically on all 720 scenarios and then runs one single-vehicle lap on Austin, Hockenheim, MoscowRaceway, and Nuerburgring. A single-vehicle failure stops the four-map gate, then the next epoch begins. Training continues epoch by epoch. The policy learns steering and speed log standard deviations initialized to `0.05` and `0.50`. A shared recurrent actor-value model carries over the IL policy and initializes its scalar value head. An evaluation epoch overwrites `checkpoint/ppo/ppo.pt` when all four single-vehicle laps pass and deterministic full-pool safety is strictly higher than the previous best. PPO artifacts live inside `checkpoint/ppo/`. See [ppo/README.md](ppo/README.md) for the reward, exploration behavior, and artifacts.
+Use `torchrun` to divide collection, optimization, and screening across multiple GPUs:
+
+```bash
+torchrun --standalone --nproc_per_node=4 run_ppo.py \
+  --checkpoint_path checkpoint/epoch_00500.pt
+```
+
+`run_ppo.py` externally sequences the separate training and evaluation modules. A plain Python launch uses one GPU when available; `torchrun --nproc_per_node=N` gives each rank one GPU and its own `--num_envs` environment workers. Every epoch randomly shuffles the 720 Austin scenarios once, divides them evenly among ranks, and collects one stochastic trajectory per scenario while holding a synchronized policy fixed. Advantages are normalized across all ranks, gradients accumulate across each rank's worker-sized rollout chunks, and one globally summed PPO gradient is clipped before every replica takes the same optimizer step. The actor's desired speed is bounded to `[0, 20]` by the PPO environment. The Adam learning rate increases by `1e-6` per epoch from `1e-6` through `1e-5`, then remains at `1e-5`. After every update, deterministic screening of all 720 scenarios is divided across ranks. Training stops after 100 epochs. Stochastic collection uses fixed steering and speed standard deviations of `0.05` and `0.50`. A shared recurrent actor-value model carries over the IL policy and initializes its scalar value head. Every evaluation with safety above 90% and an overtake rate above 60% saves another sequential checkpoint such as `checkpoint/ppo/ppo_001.pt`; `checkpoint/ppo/checkpoints.json` is updated with that checkpoint's metrics after each save. PPO artifacts live inside `checkpoint/ppo/`. See [ppo/README.md](ppo/README.md) for the reward, exploration behavior, and artifacts.
 
 ## Model Architecture
 

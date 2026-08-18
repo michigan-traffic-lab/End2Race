@@ -18,8 +18,9 @@ class ActorCritic(nn.Module):
             nn.ReLU(),
             nn.Linear(End2Race.MLP_HIDDEN_SIZE, 1),
         )
-        self.log_action_std = nn.Parameter(
-            torch.log(torch.tensor([steering_std, speed_std], dtype=torch.float32))
+        self.register_buffer(
+            "action_std",
+            torch.tensor([steering_std, speed_std], dtype=torch.float32),
         )
         self.train()
 
@@ -28,10 +29,6 @@ class ActorCritic(nn.Module):
         super().train(False)
         self.model.gru.train(True)
         return self
-
-    @property
-    def action_std(self):
-        return self.log_action_std.exp()
 
     def initial_hidden(self, batch_size, device):
         return torch.zeros(
