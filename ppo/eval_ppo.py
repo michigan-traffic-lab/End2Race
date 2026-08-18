@@ -3,7 +3,7 @@ import time
 import torch
 import torch.distributed as dist
 
-from ppo.env import shard_scenarios
+from .env import shard_scenarios
 
 
 def _evaluate_group(envs, model, scenarios, device):
@@ -45,12 +45,7 @@ def evaluate_scenarios(envs, model, scenarios, device, label):
     started_at = time.monotonic()
     if rank == 0:
         print(f"{label} screening: 0/{len(scenarios)}", flush=True)
-    local_records = _evaluate_shard(
-        envs,
-        model,
-        shard,
-        device,
-    )
+    local_records = _evaluate_shard(envs, model, shard, device)
     if dist.is_initialized():
         gathered = [None] * world_size if rank == 0 else None
         dist.gather_object(local_records, gathered, dst=0)

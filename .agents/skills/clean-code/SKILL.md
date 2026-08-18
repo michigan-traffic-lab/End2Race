@@ -32,7 +32,7 @@ Scope: what should exist, and where its output lands. Necessity, lifecycle, arti
 
 ## Name and Save Artifacts Simply
 
-Every training entry point saves the same way. The external `run_ppo.py` orchestrator owns PPO artifact persistence.
+Every training entry point saves the same way. The `ppo/run_ppo.py` orchestrator owns PPO artifact persistence.
 
 - Keep the model, training state, metrics, and resolved configuration together in one flat artifact directory.
 - Keep PPO artifacts flat inside the fixed `checkpoint/ppo/` directory. Do not expose another PPO artifact-directory path.

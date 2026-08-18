@@ -52,7 +52,7 @@ def shard_scenarios(scenarios, shard_count):
     return tuple(shards)
 
 
-def wrapped_progress_delta(current_progress, previous_progress, track_length):
+def _wrapped_progress_delta(current_progress, previous_progress, track_length):
     """Measure signed progress across the cyclic lap boundary."""
     offset = current_progress - previous_progress + 0.5 * track_length
     return float(offset % track_length - 0.5 * track_length)
@@ -61,7 +61,7 @@ def wrapped_progress_delta(current_progress, previous_progress, track_length):
 class RaceEnv:
     """Two-agent racing episode stepped at 40 Hz over 120 Hz physics."""
 
-    PROGRESS_REWARD_WEIGHT = 0.02
+    PROGRESS_REWARD_WEIGHT = 0.025
     COLLISION_PENALTY = -1.0
     MAXIMUM_EGO_SPEED = 20.0
 
@@ -128,7 +128,7 @@ class RaceEnv:
         self.opponent_trajectory = None
         self.ego_progress = self._progress(self.raw_observation, 0)
         self.opponent_progress = self._progress(self.raw_observation, 1)
-        self.relative_position = wrapped_progress_delta(
+        self.relative_position = _wrapped_progress_delta(
             self.ego_progress,
             self.opponent_progress,
             self.track_length,
@@ -180,8 +180,12 @@ class RaceEnv:
         # Score progress across the whole control interval
         ego_progress = self._progress(self.raw_observation, 0)
         opponent_progress = self._progress(self.raw_observation, 1)
-        ego_delta = wrapped_progress_delta(ego_progress, self.ego_progress, self.track_length)
-        opponent_delta = wrapped_progress_delta(opponent_progress, self.opponent_progress, self.track_length)
+        ego_delta = _wrapped_progress_delta(ego_progress, self.ego_progress, self.track_length)
+        opponent_delta = _wrapped_progress_delta(
+            opponent_progress,
+            self.opponent_progress,
+            self.track_length,
+        )
         self.ego_progress = ego_progress
         self.opponent_progress = opponent_progress
         self.relative_position += ego_delta - opponent_delta

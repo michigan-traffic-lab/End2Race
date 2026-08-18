@@ -37,14 +37,9 @@ class ActorCritic(nn.Module):
             device=device,
         )
 
-    def _split(self, observations):
-        return (
-            observations[..., :End2Race.NUM_LIDAR_FEATURES],
-            observations[..., End2Race.NUM_LIDAR_FEATURES:],
-        )
-
     def _outputs(self, observations, hidden=None):
-        lidar, speed = self._split(observations)
+        lidar = observations[..., :End2Race.NUM_LIDAR_FEATURES]
+        speed = observations[..., End2Race.NUM_LIDAR_FEATURES:]
         features, hidden = self.model.encode(lidar, speed, hidden)
         return self.model.output_layer(features), self.value_head(features)[..., 0], hidden
 

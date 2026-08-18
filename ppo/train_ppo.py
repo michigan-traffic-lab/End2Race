@@ -4,7 +4,7 @@ import numpy as np
 import torch
 import torch.distributed as dist
 
-from ppo.env import collect_batch, shard_scenarios
+from .env import collect_batch, shard_scenarios
 
 FIXED_STEERING_STD = 0.05
 FIXED_SPEED_STD = 0.50
@@ -12,13 +12,13 @@ UPDATE_EPOCHS = 1
 VALUE_LOSS_WEIGHT = 0.5
 
 
-def discounted_return(rewards, gamma):
+def _discounted_return(rewards, gamma):
     if gamma == 1.0:
         return float(rewards.sum())
     return float((gamma ** np.arange(len(rewards), dtype=np.float64) * rewards).sum())
 
 
-def generalized_advantages(trajectory, gamma, gae_lambda):
+def _generalized_advantages(trajectory, gamma, gae_lambda):
     """Accumulate the GAE recursion backwards over one trajectory."""
     rewards = trajectory["rewards"].astype(np.float64)
     values = trajectory["values"].astype(np.float64)
@@ -34,20 +34,19 @@ def generalized_advantages(trajectory, gamma, gae_lambda):
     trajectory["returns"] = (advantages + values).astype(np.float32)
 
 
-def score_batch(batch, gamma, gae_lambda):
+def _score_batch(batch, gamma, gae_lambda):
     """Attach per-step GAE advantages and returns."""
     for trajectory in batch:
-        generalized_advantages(trajectory, gamma, gae_lambda)
-        trajectory["episode_return"] = discounted_return(trajectory["rewards"], gamma)
+        _generalized_advantages(trajectory, gamma, gae_lambda)
+        trajectory["episode_return"] = _discounted_return(trajectory["rewards"], gamma)
 
 
-def rollout_diagnostics(batch):
+def _rollout_diagnostics(batch):
     records = [trajectory["record"] for trajectory in batch]
     policy_means = np.concatenate([trajectory["policy_means"] for trajectory in batch])
     values = np.concatenate([trajectory["values"] for trajectory in batch])
-    collisions = sum(record["ego_collision"] for record in records)
     return {
-        "collisions": collisions,
+        "collisions": sum(record["ego_collision"] for record in records),
         "follows": sum(record["outcome"] == "follow" for record in records),
         "overtakes": sum(record["outcome"] == "overtake" for record in records),
         "steering_mean": float(policy_means[:, 0].mean()),
@@ -59,7 +58,7 @@ def rollout_diagnostics(batch):
     }
 
 
-def pad_batch(trajectories, device):
+def _pad_batch(trajectories, device):
     """Pad a set of variable-length trajectories into one padded tensor batch."""
     lengths = [len(trajectory["rewards"]) for trajectory in trajectories]
     max_length = max(lengths)
@@ -94,7 +93,7 @@ def pad_batch(trajectories, device):
     )
 
 
-def accumulate_batch_gradients(
+def _accumulate_batch_gradients(
     model,
     trajectories,
     args,
@@ -104,7 +103,7 @@ def accumulate_batch_gradients(
     total_transitions,
 ):
     """Accumulate one rollout chunk's contribution to a full-pool update."""
-    observations, actions, old_log_probs, advantages, returns, valid = pad_batch(trajectories, device)
+    observations, actions, old_log_probs, advantages, returns, valid = _pad_batch(trajectories, device)
     mask = valid > 0
 
     normalized = torch.zeros_like(advantages)
@@ -141,7 +140,7 @@ def _synchronize_gradients(model):
             dist.all_reduce(parameter.grad)
 
 
-def update_full_pool(model, optimizer, batches, args, device, epoch, update):
+def _update_full_pool(model, optimizer, batches, args, device, epoch, update):
     """Take one optimizer step from every trajectory in the scenario pool."""
     advantage_values = np.concatenate([
         trajectory["advantages"]
@@ -168,7 +167,7 @@ def update_full_pool(model, optimizer, batches, args, device, epoch, update):
     policy_loss = 0.0
     value_loss = 0.0
     for batch in batches:
-        batch_policy_loss, batch_value_loss = accumulate_batch_gradients(
+        batch_policy_loss, batch_value_loss = _accumulate_batch_gradients(
             model,
             batch,
             args,
@@ -189,7 +188,7 @@ def update_full_pool(model, optimizer, batches, args, device, epoch, update):
     clip_fraction = 0.0
     with torch.no_grad():
         for batch in batches:
-            observations, actions, old_log_probs, _, _, valid = pad_batch(batch, device)
+            observations, actions, old_log_probs, _, _, valid = _pad_batch(batch, device)
             mask = valid > 0
             new_log_probs, _, _ = model.evaluate(observations, actions)
             new_log_ratio = new_log_probs - old_log_probs
@@ -208,14 +207,8 @@ def update_full_pool(model, optimizer, batches, args, device, epoch, update):
         device,
     )
     if not dist.is_initialized() or dist.get_rank() == 0:
-        learning_rates = {
-            parameter_group["name"]: parameter_group["lr"]
-            for parameter_group in optimizer.param_groups
-        }
         print(
             f"Epoch {epoch} ppo update {update}/{UPDATE_EPOCHS} | "
-            f"transitions {total_transitions} | "
-            f"lr policy {learning_rates['policy']:.1e} value {learning_rates['value']:.1e} | "
             f"value loss {value_loss:.4f} | "
             f"kl {approx_kl:.6f} clip {clip_fraction:.3f} | "
             f"grad preclip {grad_norm:.3f} applied {applied_grad_norm:.3f}",
@@ -274,10 +267,10 @@ def _collect_shard(envs, model, scenarios, device, args, epoch, started_at):
     for start in range(0, len(scenarios), envs.num_envs):
         selected = scenarios[start : start + envs.num_envs]
         batch = collect_batch(envs, model, selected, device)
-        score_batch(batch, args.gamma, args.gae_lambda)
+        _score_batch(batch, args.gamma, args.gae_lambda)
         batches.append(batch)
         if report:
-            diagnostics = rollout_diagnostics(batch)
+            diagnostics = _rollout_diagnostics(batch)
             elapsed = time.monotonic() - started_at
             completed = start + len(selected)
             print(
@@ -340,7 +333,7 @@ def train_epoch(model, optimizer, envs, scenarios, rng, args, device, epoch):
         )
 
     for update in range(1, UPDATE_EPOCHS + 1):
-        update_statistics = update_full_pool(
+        update_statistics = _update_full_pool(
             model,
             optimizer,
             batches,

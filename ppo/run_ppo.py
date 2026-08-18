@@ -7,10 +7,10 @@ import numpy as np
 import torch
 import torch.distributed as dist
 
-from ppo.env import RaceEnv, Scenario, VectorEnv
-from eval_ppo import evaluate_scenarios
-from ppo.policy import ActorCritic
-from train_ppo import (
+from .env import RaceEnv, Scenario, VectorEnv
+from .eval_ppo import evaluate_scenarios
+from .policy import ActorCritic
+from .train_ppo import (
     FIXED_SPEED_STD,
     FIXED_STEERING_STD,
     UPDATE_EPOCHS,
@@ -26,11 +26,7 @@ from utils import (
 )
 
 ARTIFACT_DIR = Path("checkpoint/ppo")
-EVAL_INTERVAL = 1
-POLICY_LEARNING_RATE_STEP = 1e-6
-POLICY_MAX_LEARNING_RATE = 1e-5
-POLICY_LEARNING_RATE_WARMUP_EPOCHS = 10
-VALUE_LEARNING_RATE = 1e-5
+LEARNING_RATE = 1e-5
 MAX_EPOCHS = 100
 MINIMUM_SAFETY_RATE = 0.9
 MINIMUM_OVERTAKE_RATE = 0.6
@@ -81,12 +77,12 @@ def parse_arguments():
     return args
 
 
-def append_record(path, record):
+def _append_record(path, record):
     with path.open("a", encoding="utf-8") as stream:
         stream.write(json.dumps(record) + "\n")
 
 
-def build_scenarios(settings):
+def _build_scenarios(settings):
     ego_waypoints = load_raceline(settings.map_name, f"{settings.ego_raceline}.csv")
     ego_indices = get_ego_idx_range(settings.map_name, settings.ego_raceline, settings.num_startpoints)
 
@@ -116,15 +112,12 @@ def build_scenarios(settings):
     return tuple(scenarios)
 
 
-def summarize(
+def _summarize(
     epoch,
-    policy_learning_rate,
-    value_learning_rate,
     scenarios,
     rollout_summary,
     statistics,
     eval_records,
-    saved_checkpoint,
 ):
     trajectories = rollout_summary["trajectories"]
     records = [trajectory["record"] for trajectory in trajectories]
@@ -145,26 +138,17 @@ def summarize(
         error_square_sum / transition_count - (error_sum / transition_count) ** 2,
         0.0,
     )
-    evaluated = eval_records is not None
-    failures = sum(record["ego_collision"] for record in eval_records) if evaluated else None
-    eval_overtakes = (
-        sum(record["outcome"] == "overtake" for record in eval_records)
-        if evaluated
-        else None
-    )
+    failures = sum(record["ego_collision"] for record in eval_records)
+    eval_overtakes = sum(record["outcome"] == "overtake" for record in eval_records)
     metrics = {
         "epoch": epoch,
-        "policy_learning_rate": policy_learning_rate,
-        "value_learning_rate": value_learning_rate,
-        "evaluated": evaluated,
-        "eval_count": len(eval_records) if evaluated else 0,
+        "learning_rate": LEARNING_RATE,
+        "eval_count": len(eval_records),
         "eval_failures": failures,
-        "eval_passes": len(eval_records) - failures if evaluated else None,
-        "safety": 1.0 - failures / len(eval_records) if evaluated else None,
+        "eval_passes": len(eval_records) - failures,
+        "safety": 1.0 - failures / len(eval_records),
         "eval_overtakes": eval_overtakes,
-        "overtake_rate": eval_overtakes / len(eval_records) if evaluated else None,
-        "saved": saved_checkpoint is not None,
-        "saved_checkpoint": saved_checkpoint,
+        "overtake_rate": eval_overtakes / len(eval_records),
         "scenarios": len(scenarios),
         "batches": rollout_summary["batch_count"],
         "trajectories": len(records),
@@ -186,7 +170,7 @@ def summarize(
     return metrics
 
 
-def resolved_config(args, scenario_count, world_size):
+def _resolved_config(args, scenario_count, world_size):
     return {
         **vars(args),
         "checkpoint_path": str(args.checkpoint_path),
@@ -201,22 +185,16 @@ def resolved_config(args, scenario_count, world_size):
         "gpu_processes": world_size,
         "workers_per_gpu": args.num_envs,
         "total_env_workers": args.num_envs * world_size,
-        "rollout_batch_size_per_gpu": args.num_envs,
-        "trajectories": 1,
+        "trajectories_per_scenario": 1,
         "update_epochs": UPDATE_EPOCHS,
-        "policy_learning_rate_start": POLICY_LEARNING_RATE_STEP,
-        "policy_learning_rate_step": POLICY_LEARNING_RATE_STEP,
-        "policy_learning_rate_cap": POLICY_MAX_LEARNING_RATE,
-        "policy_learning_rate_warmup_epochs": POLICY_LEARNING_RATE_WARMUP_EPOCHS,
-        "value_learning_rate": VALUE_LEARNING_RATE,
+        "learning_rate": LEARNING_RATE,
         "max_epochs": MAX_EPOCHS,
         "minimum_safety_rate": MINIMUM_SAFETY_RATE,
         "minimum_overtake_rate": MINIMUM_OVERTAKE_RATE,
-        "eval_interval": EVAL_INTERVAL,
     }
 
 
-def initialize_process_group():
+def _initialize_process_group():
     if "RANK" not in os.environ:
         device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         return 0, 1, device
@@ -228,7 +206,7 @@ def initialize_process_group():
     return dist.get_rank(), dist.get_world_size(), torch.device(f"cuda:{local_rank}")
 
 
-def synchronize_model(model):
+def _synchronize_model(model):
     if not dist.is_initialized():
         return
     for tensor in model.state_dict().values():
@@ -238,7 +216,7 @@ def synchronize_model(model):
 def main():
     args = parse_arguments()
     require_end2race_runtime()
-    rank, world_size, device = initialize_process_group()
+    rank, world_size, device = _initialize_process_group()
     envs = None
     try:
         artifact_dir = ARTIFACT_DIR
@@ -265,7 +243,7 @@ def main():
         if artifact_error:
             raise FileExistsError(artifact_error)
 
-        scenarios = build_scenarios(args)
+        scenarios = _build_scenarios(args)
         if world_size > len(scenarios):
             raise ValueError(
                 f"Cannot distribute {len(scenarios)} scenarios across "
@@ -277,25 +255,14 @@ def main():
             FIXED_STEERING_STD,
             FIXED_SPEED_STD,
         ).to(device)
-        synchronize_model(model)
-        optimizer = torch.optim.Adam([
-            {
-                "params": model.model.parameters(),
-                "lr": POLICY_LEARNING_RATE_STEP,
-                "name": "policy",
-            },
-            {
-                "params": model.value_head.parameters(),
-                "lr": VALUE_LEARNING_RATE,
-                "name": "value",
-            },
-        ])
+        _synchronize_model(model)
+        optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
         checkpoint_count = 0
         checkpoint_records = []
         if rank == 0:
             config_path.write_text(
                 json.dumps(
-                    resolved_config(args, len(scenarios), world_size),
+                    _resolved_config(args, len(scenarios), world_size),
                     indent=2,
                 )
                 + "\n",
@@ -307,19 +274,11 @@ def main():
             print(
                 f"Scenario pool: {len(scenarios)} | GPU processes: {world_size} | "
                 f"workers/GPU: {args.num_envs} | "
-                f"total workers: {args.num_envs * world_size}"
+                f"total workers: {args.num_envs * world_size} | lr: {LEARNING_RATE:.1e}"
             )
 
         envs = VectorEnv(args.num_envs, args)
         for epoch in range(1, MAX_EPOCHS + 1):
-            policy_learning_rate = (
-                epoch * POLICY_LEARNING_RATE_STEP
-                if epoch < POLICY_LEARNING_RATE_WARMUP_EPOCHS
-                else POLICY_MAX_LEARNING_RATE
-            )
-            for parameter_group in optimizer.param_groups:
-                if parameter_group["name"] == "policy":
-                    parameter_group["lr"] = policy_learning_rate
             ordered, rollout_summary, statistics = train_epoch(
                 model,
                 optimizer,
@@ -332,7 +291,7 @@ def main():
             )
             if rank == 0:
                 for trajectory in rollout_summary["trajectories"]:
-                    append_record(
+                    _append_record(
                         episodes_path,
                         {"epoch": epoch, "phase": "training", **trajectory["record"]},
                     )
@@ -340,27 +299,18 @@ def main():
             eval_records = evaluate_scenarios(envs, model, scenarios, device, f"Epoch {epoch}")
             if rank == 0:
                 for record in eval_records:
-                    append_record(episodes_path, {"epoch": epoch, "phase": "screening", **record})
+                    _append_record(episodes_path, {"epoch": epoch, "phase": "screening", **record})
 
-                failures = sum(record["ego_collision"] for record in eval_records)
-                safety = 1.0 - failures / len(eval_records)
-                eval_overtakes = sum(record["outcome"] == "overtake" for record in eval_records)
-                overtake_rate = eval_overtakes / len(eval_records)
+                metrics = _summarize(epoch, ordered, rollout_summary, statistics, eval_records)
                 saved_checkpoint = None
-                if safety > MINIMUM_SAFETY_RATE and overtake_rate > MINIMUM_OVERTAKE_RATE:
+                if (
+                    metrics["safety"] > MINIMUM_SAFETY_RATE
+                    and metrics["overtake_rate"] > MINIMUM_OVERTAKE_RATE
+                ):
                     checkpoint_count += 1
                     saved_checkpoint = f"ppo_{checkpoint_count:03d}.pt"
-
-                metrics = summarize(
-                    epoch,
-                    policy_learning_rate,
-                    VALUE_LEARNING_RATE,
-                    ordered,
-                    rollout_summary,
-                    statistics,
-                    eval_records,
-                    saved_checkpoint,
-                )
+                metrics["saved"] = saved_checkpoint is not None
+                metrics["saved_checkpoint"] = saved_checkpoint
                 if saved_checkpoint is not None:
                     torch.save(model.model.state_dict(), artifact_dir / saved_checkpoint)
                     checkpoint_records.append(metrics)
@@ -369,11 +319,11 @@ def main():
                         encoding="utf-8",
                     )
                     print(
-                        f"Epoch {epoch} saved {saved_checkpoint}: safety {safety:.2%} | "
-                        f"overtake {overtake_rate:.2%}",
+                        f"Epoch {epoch} saved {saved_checkpoint}: safety {metrics['safety']:.2%} | "
+                        f"overtake {metrics['overtake_rate']:.2%}",
                         flush=True,
                     )
-                append_record(metrics_path, metrics)
+                _append_record(metrics_path, metrics)
                 checkpoint = saved_checkpoint if saved_checkpoint is not None else "none"
                 print(
                     f"Epoch {epoch} | safety {metrics['safety']:.2%} | "

@@ -32,10 +32,10 @@ end2race/
 ├── expert.py                  # One multi-agent expert collection scenario
 ├── model.py                   # GRU network architecture
 ├── train.py                   # Training script
-├── ppo/                       # PPO environment and actor-critic wrappers
-├── run_ppo.py                 # PPO training/evaluation orchestrator
-├── train_ppo.py               # PPO rollout and optimizer updates
-├── eval_ppo.py                # PPO checkpoint evaluation
+├── ppo/                       # PPO training, evaluation, environment, and policy
+│   ├── run_ppo.py             # Training/evaluation orchestrator
+│   ├── train_ppo.py           # Rollout and optimizer updates
+│   └── eval_ppo.py            # Deterministic policy screening
 ├── collect.sh                 # Parallel collection orchestrator and dataset summary
 ├── eval_single.py             # One single-agent lap evaluation
 ├── eval_multi.py              # One multi-agent racing evaluation
@@ -192,18 +192,18 @@ The training schedule is fixed: 500 epochs, a checkpoint at epoch 500, batch siz
 Fine-tune a checkpoint produced by `train.py` with recurrent PPO:
 
 ```bash
-python run_ppo.py \
+python -m ppo.run_ppo \
   --checkpoint_path checkpoint/epoch_00500.pt
 ```
 
 Use `torchrun` to divide collection, optimization, and screening across multiple GPUs:
 
 ```bash
-torchrun --standalone --nproc_per_node=4 run_ppo.py \
+torchrun --standalone --nproc_per_node=4 --module ppo.run_ppo \
   --checkpoint_path checkpoint/epoch_00500.pt
 ```
 
-`run_ppo.py` externally sequences the separate training and evaluation modules. A plain Python launch uses one GPU when available; `torchrun --nproc_per_node=N` gives each rank one GPU and its own `--num_envs` environment workers. Every epoch randomly shuffles the 720 Austin scenarios once, divides them evenly among ranks, and collects one stochastic trajectory per scenario while holding a synchronized policy fixed. Advantages are normalized across all ranks, gradients accumulate across each rank's worker-sized rollout chunks, and one globally summed PPO gradient is clipped before every replica takes the same optimizer step. The actor's desired speed is bounded to `[0, 20]` by the PPO environment. The policy learning rate increases by `1e-6` per epoch from `1e-6` through `1e-5`, then remains at `1e-5`; the value-head learning rate stays at `1e-5` throughout. After every update, deterministic screening of all 720 scenarios is divided across ranks. Training stops after 100 epochs. Stochastic collection uses fixed steering and speed standard deviations of `0.05` and `0.50`. A shared recurrent actor-value model carries over the IL policy and initializes its scalar value head. Every evaluation with safety above 90% and an overtake rate above 60% saves another sequential checkpoint such as `checkpoint/ppo/ppo_001.pt`; `checkpoint/ppo/checkpoints.json` is updated with that checkpoint's metrics after each save. PPO artifacts live inside `checkpoint/ppo/`. See [ppo/README.md](ppo/README.md) for the reward, exploration behavior, and artifacts.
+`ppo.run_ppo` externally sequences the separate training and evaluation modules. A plain Python launch uses one GPU when available; `torchrun --nproc_per_node=N` gives each rank one GPU and its own `--num_envs` environment workers. Every epoch randomly shuffles the 720 Austin scenarios once, divides them evenly among ranks, and collects one stochastic trajectory per scenario while holding a synchronized policy fixed. Advantages are normalized across all ranks, gradients accumulate across each rank's worker-sized rollout chunks, and one globally summed PPO gradient is clipped before every replica takes the same optimizer step. The actor's desired speed is bounded to `[0, 20]` by the PPO environment. The actor and value head use a constant learning rate of `1e-5`. After every update, deterministic screening of all 720 scenarios is divided across ranks. Training stops after 100 epochs. Stochastic collection uses fixed steering and speed standard deviations of `0.05` and `0.50`. A shared recurrent actor-value model carries over the IL policy and initializes its scalar value head. Every evaluation with safety above 90% and an overtake rate above 60% saves another sequential checkpoint such as `checkpoint/ppo/ppo_001.pt`; `checkpoint/ppo/checkpoints.json` is updated with that checkpoint's metrics after each save. PPO artifacts live inside `checkpoint/ppo/`. See [ppo/README.md](ppo/README.md) for the reward, exploration behavior, and artifacts.
 
 ## Model Architecture
 
