@@ -1,6 +1,5 @@
 __pycache__
 *.egg-info/
-checkpoint/
 dataset*/
 !dataset*/
 dataset*/**

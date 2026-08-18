@@ -7,7 +7,7 @@ from ppo.env import collect_batch
 
 INITIAL_STEERING_STD = 0.05
 INITIAL_SPEED_STD = 0.50
-UPDATE_EPOCHS = 4
+UPDATE_EPOCHS = 2
 VALUE_LOSS_WEIGHT = 0.5
 
 

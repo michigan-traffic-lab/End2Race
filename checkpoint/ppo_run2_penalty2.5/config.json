@@ -1,0 +1,40 @@
+{
+  "checkpoint_path": "checkpoint/epoch_00500.pt",
+  "map_name": "Austin",
+  "ego_raceline": "raceline1",
+  "opponent_racelines": [
+    "raceline0",
+    "raceline1",
+    "raceline2"
+  ],
+  "opponent_speed_scales": [
+    0.4,
+    0.6,
+    0.8
+  ],
+  "num_startpoints": 80,
+  "interval_index": 15,
+  "episode_duration": 8.0,
+  "num_envs": 48,
+  "learning_rate": 1e-05,
+  "max_grad_norm": 0.5,
+  "gamma": 0.999,
+  "gae_lambda": 0.99,
+  "clip_range": 0.1,
+  "steering_std": 0.05,
+  "speed_std": 0.5,
+  "value_weight": 0.5,
+  "progress_reward": 0.02,
+  "overtake_distance": 0.58,
+  "collision_penalty": -2.5,
+  "batch_size": 48,
+  "trajectories": 1,
+  "update_epochs": 2,
+  "eval_interval": 5,
+  "eval_maps": [
+    "Austin",
+    "Hockenheim",
+    "MoscowRaceway",
+    "Nuerburgring"
+  ]
+}

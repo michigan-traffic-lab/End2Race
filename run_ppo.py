@@ -30,7 +30,7 @@ from utils import (
 
 ARTIFACT_DIR = Path("checkpoint/ppo")
 EVAL_MAPS = ("Austin", "Hockenheim", "MoscowRaceway", "Nuerburgring")
-EVAL_INTERVAL = 10
+EVAL_INTERVAL = 5
 
 
 def parse_arguments():
