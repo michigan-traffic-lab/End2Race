@@ -45,14 +45,14 @@ def parse_arguments():
     parser.add_argument("--num_startpoints", type=int, default=80)
     parser.add_argument("--interval_index", type=int, default=15)
     parser.add_argument("--episode_duration", type=float, default=8.0)
-    parser.add_argument("--num_envs", type=int, default=16)
+    parser.add_argument("--num_envs", type=int, default=48)
 
-    parser.add_argument("--learning_rate", type=float, default=2e-5)
+    parser.add_argument("--learning_rate", type=float, default=1e-5)
     parser.add_argument("--max_grad_norm", type=float, default=0.5)
 
     parser.add_argument("--gamma", type=float, default=0.999)
-    parser.add_argument("--gae_lambda", type=float, default=0.95)
-    parser.add_argument("--clip_range", type=float, default=0.2)
+    parser.add_argument("--gae_lambda", type=float, default=0.99)
+    parser.add_argument("--clip_range", type=float, default=0.1)
 
     args = parser.parse_args()
     positive_values = {

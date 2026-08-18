@@ -24,7 +24,7 @@ An overtake is classified when the ego center reaches at least one full vehicle 
 
 Value-head initialization, learned-policy action samples, and scenario ordering use fresh process randomness on every launch.
 
-The unified policy, value head, and learned action standard deviations use one Adam optimizer with learning rate `2e-5`.
+The unified policy, value head, and learned action standard deviations use one Adam optimizer with learning rate `1e-5`.
 
 ## Run
 
