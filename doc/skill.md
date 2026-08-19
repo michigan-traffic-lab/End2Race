@@ -8,6 +8,7 @@ current, and consistent with the repository's concise script-oriented style.
 - Write the simplest implementation that expresses the current design.
 - Remove stale code, documentation, configuration keys, metrics, and scripts in the same change that makes them obsolete.
 - Preserve backward compatibility only when explicitly requested. Do not add compatibility aliases, migration branches, deprecated names, or fallback paths for removed behavior.
+- Do not stack names for document, classes, saved file. A bad example would be model_A_B_B_C_E_F.pt.
 - Do not add dummy wrappers or pass-through helpers. Inline one-use helpers unless the helper names a real domain step.
 - Create a class for real state, model, dataset, or configuration contracts, not to namespace functions.
 - Validate real external inputs and fail fast on broken invariants. Do not guard against impossible internal states.

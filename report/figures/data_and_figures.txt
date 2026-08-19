@@ -1,0 +1,17 @@
+1. Main architecture diagram (1*4 panels)
+
+2. 1*3 figure illustration failure modes of lattice planner
+
+3. IL learning loss curve and RL reward/safety rate/ovetake rate plot side by side
+
+4. Two overtaking examples + two collision examples + two following examples (TBD)
+
+4. Noise analysis: gaussian noise + hard noise
+
+5. Abalation Study
+* Replace GRU with MLP
+* Replace GRU with transformer
+* Replace sigmoid with linear normalization
+* replace sigmoid with no normalization
+
+6. Revised supplementray video

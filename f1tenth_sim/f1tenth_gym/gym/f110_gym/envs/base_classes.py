@@ -241,12 +241,16 @@ class RaceCar(object):
 
         # if in collision stop vehicle
         if in_collision:
-            self.state[3:] = 0.
+            if self.is_ego:
+                self.state[3:] = 0.
+            else:
+                self.state[3] = 0.
+                self.state[5:] = 0.
             self.accel = 0.0
             self.steer_angle_vel = 0.0
 
         # update state
-        self.in_collision = in_collision
+        self.in_collision = in_collision or (self.in_collision and not self.is_ego)
 
         return in_collision
 
@@ -263,6 +267,11 @@ class RaceCar(object):
         """
 
         # state is [x, y, steer_angle, vel, yaw_angle, yaw_rate, slip_angle]
+
+        if self.in_collision and not self.is_ego:
+            return RaceCar.scan_simulator.scan(
+                np.append(self.state[0:2], self.state[4]), self.scan_rng
+            )
 
         # steering delay
         steer = 0.

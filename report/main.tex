@@ -145,18 +145,32 @@ It combines perception, planning, and control under high-speed, interactive, and
 Enhancing algorithmic capabilities in this domain is therefore relevant to the broader development of autonomous driving technologies.
 F1Tenth~\cite{o2020f1tenth}, a 1/10-scale vehicular platform, provides an accessible testbed for autonomus racing education and research.
 Equipped with a 2D LiDAR~\cite{hokuyoUST10LX} or RGB-D camera~\cite{intelRealSenseD435i} for perception, the vehicle can reach speeds of up to 17.9~m/s, equivalent to approximately 400~mph at full scale~\cite{o2019f1}.
-Each year, F1Tenth competitions are held at venues worldwide and attract broad participation from the community.
+Each year, competitions are held at venues worldwide and attract broad participation from the community.
 
 \begin{figure}[!t]
     \centering
     \vspace{0.15cm}
-    \includegraphics[width=0.6\linewidth]{scenario.pdf}
+    \includegraphics[width=0.6\linewidth]{figures/scenario.pdf}
     \caption{Simple overtake scenario illustration.}
     \label{fig:example}
     \vspace{-0.6cm}
 \end{figure}
 
-Existing methods for F1Tenth autonomous racing can be broadly grouped into map-based, reactive, and learning-based approaches. Of these, map-based methods are the most commonly used in F1Tenth competitions. They rely on a pre-constructed map to follow a globally optimized raceline while adapting to local conditions. During a dedicated mapping phase, the vehicle is manually controlled along the track to construct the map using SLAM~\cite{Macenski2021}. Raceline optimization~\cite{Heilmeier02102020} then uses the mapped geometry to derive a global reference path. During racing, particle-filter localization~\cite{walsh2017cddt} combines odometry and LiDAR measurements to estimate the vehicle pose within the map. Using this estimate, a lattice planner~\cite{Pivtoraiko-2009-10176} generates candidate trajectories that progress along the raceline while satisfying dynamic and collision constraints. Once a trajectory is selected, its velocity profile provides the speed command, while Pure Pursuit~\cite{coulter1992implementation} generates the steering command for path tracking. This design enables the planner to anticipate upcoming curves and maintain a consistent reference. Yet map-based methods have two principal limitations. First, they require sophisticated preprocessing and cannot operate on previously unseen tracks. Second, their sophisticated runtime pipeline incurs a systematic delay of approximately 30~milliseconds from localization and planning. With additional sensor latency, the vehicle can travel up to a full vehicle length before updated control commands take effect. This delay is non-critical under most operating conditions, but becomes consequential when a high-speed straight segment is directly followed by a sharp curve, leaving the vehicle particularly susceptible to collisions with the track boundaries. Such collisions are widely observed in F1Tenth competitions, including during semifinal and final rounds.
+Existing methods for autonomous racing can be broadly grouped into map-based, reactive, and learning-based approaches.
+Of these, map-based methods are the most commonly used in F1Tenth competitions.
+They rely on a pre-constructed map to follow a globally optimized raceline while adapting to local conditions.
+In the mapping phase, the vehicle is manually controlled along the track to construct the map using SLAM~\cite{Macenski2021}.
+Raceline optimization~\cite{Heilmeier02102020} then uses the mapped geometry to derive a global reference path.
+During racing, particle-filter localization~\cite{walsh2017cddt} combines odometry and LiDAR measurements to estimate the vehicle pose within the map.
+Using this estimate, a lattice planner~\cite{Pivtoraiko-2009-10176} generates candidate trajectories that progress along the raceline while satisfying dynamic and collision constraints.
+Once a trajectory is selected, its velocity profile provides the speed command, while Pure Pursuit~\cite{coulter1992implementation} generates the steering command for path tracking.
+This design enables the planner to anticipate upcoming curves and maintain a consistent reference.
+Yet map-based methods have two principal limitations.
+First, they require sophisticated preprocessing and cannot operate on previously unseen tracks.
+Second, their sophisticated runtime pipeline incurs a systematic delay of approximately 30~milliseconds from localization and planning.
+With additional sensor latency, the vehicle can travel up to a full vehicle length before updated control commands take effect.
+This delay is non-critical under most operating conditions, but becomes consequential when a high-speed straight segment is directly followed by a sharp curve, leaving the vehicle particularly susceptible to collisions with the track boundaries.
+Such collisions are widely observed in F1Tenth competitions, including during semifinal and final rounds.
 
 Reactive methods provide a simpler, rule-based alternative by acting directly on current sensor measurements. Their map-free design avoids localization and planning, reducing computational cost while allowing operation on unknown tracks. The Follow-the-Gap algorithm~\cite{SEZER20121123}, for example, identifies the largest free region and steers toward its midpoint. However, these methods operate over an inherently short horizon because each decision is based on an isolated observation with limited temporal context. This can lead to planning inconsistencies and control instability~\cite{hossain2022local}.
 
@@ -186,8 +200,11 @@ The main contributions of this work are as follows:
 \begin{figure*}[!t]
     \centering
     \vspace{0.15cm}
-    \includegraphics[width=\textwidth]{architecture.pdf}
-    \caption{System overview.}
+    \includegraphics[width=0.247\textwidth]{figures/architecture-scenarios.pdf}\hfill
+    \includegraphics[width=0.247\textwidth]{figures/architecture-expert.pdf}\hfill
+    \includegraphics[width=0.247\textwidth]{figures/architecture-imitation.pdf}\hfill
+    \includegraphics[width=0.247\textwidth]{figures/architecture-reinforcement.pdf}
+    \caption{System overview. The F1TENTH vehicle photograph in panel 1 is adapted from the official F1TENTH documentation under CC BY-NC-SA 4.0.}
     \label{fig:overview}
     \vspace{-0.26cm}
 \end{figure*}
@@ -371,14 +388,14 @@ Note that due to the time constraint in each scenario, overtaking opportunities 
 \begin{figure*}[!ht]
     \vspace{0.15cm}
     \centering
-    \includegraphics[width=\textwidth]{overtake.pdf}
+    \includegraphics[width=\textwidth]{figures/overtake.pdf}
     \caption{Overtaking example.}
     \label{fig:overtake}
 \end{figure*}
 
 \begin{figure*}[!ht]
     \centering
-    \includegraphics[width=\textwidth]{follow.pdf}
+    \includegraphics[width=\textwidth]{figures/follow.pdf}
     \caption{Car-following example.}
     \label{fig:follow}
     \vspace{-0.2cm}

@@ -5,7 +5,7 @@ from imitation.model import End2Race
 
 
 class ActorCritic(nn.Module):
-    """Recurrent policy and value head initialized from IL or PPO weights."""
+    """Recurrent policy and value head initialized from IL policy weights."""
 
     def __init__(self, checkpoint_path, steering_std, speed_std):
         super().__init__()
@@ -20,16 +20,7 @@ class ActorCritic(nn.Module):
             torch.tensor([steering_std, speed_std], dtype=torch.float32),
         )
         checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
-        if set(checkpoint) == set(self.model.state_dict()):
-            self.model.load_state_dict(checkpoint)
-            self.checkpoint_type = "IL"
-        elif set(checkpoint) == set(self.state_dict()):
-            self.load_state_dict(checkpoint)
-            self.checkpoint_type = "RL"
-        else:
-            raise ValueError(
-                f"{checkpoint_path} is not an End2Race IL or PPO RL checkpoint"
-            )
+        self.model.load_state_dict(checkpoint)
         self.train()
 
     def train(self, mode=True):

@@ -6,9 +6,10 @@ import torch.distributed as dist
 
 from .env import collect_batch, shard_scenarios
 
-FIXED_STEERING_STD = 0.05
-FIXED_SPEED_STD = 0.50
-UPDATE_EPOCHS = 1
+INITIAL_STEERING_STD = 0.05
+INITIAL_SPEED_STD = 0.50
+ACTION_STD_DECAY = 0.999
+UPDATE_EPOCHS = 2
 VALUE_LOSS_WEIGHT = 0.5
 
 
