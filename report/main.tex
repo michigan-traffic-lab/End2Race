@@ -140,66 +140,47 @@ F1Tenth is a widely adopted reduced-scale platform for developing and testing au
 
 \section{Introduction}
 
-Autonomous racing has emerged as a compelling testbed for advancing autonomous vehicle technologies. One notable example is F1Tenth \cite{o2020f1tenth}—a widely adopted 1/10-scale racing car that offers a simplified, accessible platform supporting both university courses and practical research. Annual head-to-head competitions held worldwide further promote community collaboration and innovation.
-Enhancing algorithmic capabilities in this domain is therefore of interest for advancing autonomous driving technologies broadly, particularly in high-speed and interactive environments.
-
-Current racing methods in F1Tenth are generally grouped into three types: map-based, reactive, and learning-based, with each category reflecting distinct trade-offs among global optimality, computational cost, and adaptability~\cite{evans2024unifyingf1tenthautonomousracing}.
-
-Map-based strategies typically start with Simultaneous Localization and Mapping (SLAM)\cite{Macenski2021} to build a representation of the environment, followed by trajectory optimization techniques to generate a globally optimal raceline\cite{Heilmeier02102020}. Execution is accomplished using a lattice planner~\cite{Pivtoraiko-2009-10176} to generate a set of feasible paths, followed by a Pure Pursuit controller~\cite{coulter1992implementation}. While these methods offer strong performance, they require heavy preprocessing and highly accurate sensor input for real-time scan matching and localization.
+Autonomous racing has emerged as a compelling testbed for advancing autonomous vehicle technologies.
+It combines perception, planning, and control under high-speed, interactive, and computationally constrained conditions.
+Enhancing algorithmic capabilities in this domain is therefore relevant to the broader development of autonomous driving technologies.
+F1Tenth~\cite{o2020f1tenth}, a 1/10-scale vehicular platform, provides an accessible testbed for autonomus racing education and research.
+Equipped with a 2D LiDAR~\cite{hokuyoUST10LX} or RGB-D camera~\cite{intelRealSenseD435i} for perception, the vehicle can reach speeds of up to 17.9~m/s, equivalent to approximately 400~mph at full scale~\cite{o2019f1}.
+Each year, F1Tenth competitions are held at venues worldwide and attract broad participation from the community.
 
 \begin{figure}[!t]
     \centering
     \vspace{0.15cm}
-    \includegraphics[width=0.85\linewidth]{scenario.pdf}
+    \includegraphics[width=0.6\linewidth]{scenario.pdf}
     \caption{Simple overtake scenario illustration.}
     \label{fig:example}
     \vspace{-0.6cm}
 \end{figure}
 
-Reactive methods avoid map construction and act directly on sensor data. The Follow-the-Gap method \cite{SEZER20121123}, for instance, identifies the largest free space and steers toward its midpoint. While computationally lightweight and straightforward to implement, this approach often lacks consistency and can lead to unstable maneuvers.
+Existing methods for F1Tenth autonomous racing can be broadly grouped into map-based, reactive, and learning-based approaches. Of these, map-based methods are the most commonly used in F1Tenth competitions. They rely on a pre-constructed map to follow a globally optimized raceline while adapting to local conditions. During a dedicated mapping phase, the vehicle is manually controlled along the track to construct the map using SLAM~\cite{Macenski2021}. Raceline optimization~\cite{Heilmeier02102020} then uses the mapped geometry to derive a global reference path. During racing, particle-filter localization~\cite{walsh2017cddt} combines odometry and LiDAR measurements to estimate the vehicle pose within the map. Using this estimate, a lattice planner~\cite{Pivtoraiko-2009-10176} generates candidate trajectories that progress along the raceline while satisfying dynamic and collision constraints. Once a trajectory is selected, its velocity profile provides the speed command, while Pure Pursuit~\cite{coulter1992implementation} generates the steering command for path tracking. This design enables the planner to anticipate upcoming curves and maintain a consistent reference. Yet map-based methods have two principal limitations. First, they require sophisticated preprocessing and cannot operate on previously unseen tracks. Second, their sophisticated runtime pipeline incurs a systematic delay of approximately 30~milliseconds from localization and planning. With additional sensor latency, the vehicle can travel up to a full vehicle length before updated control commands take effect. This delay is non-critical under most operating conditions, but becomes consequential when a high-speed straight segment is directly followed by a sharp curve, leaving the vehicle particularly susceptible to collisions with the track boundaries. Such collisions are widely observed in F1Tenth competitions, including during semifinal and final rounds.
 
-Learning-based methods have been widely explored over the years, with reinforcement learning (RL) and imitation learning (IL) being the most commonly adopted. However, the majority of work remains \textit{confined to single-agent settings, limiting their use in head-to-head racing}. Few studies have investigated head-to-head racing scenarios, but achieved limited success (Table~\ref{tab:comparison}), leaving an open field for learning-based approaches within the F1Tenth domain.
+Reactive methods provide a simpler, rule-based alternative by acting directly on current sensor measurements. Their map-free design avoids localization and planning, reducing computational cost while allowing operation on unknown tracks. The Follow-the-Gap algorithm~\cite{SEZER20121123}, for example, identifies the largest free region and steers toward its midpoint. However, these methods operate over an inherently short horizon because each decision is based on an isolated observation with limited temporal context. This can lead to planning inconsistencies and control instability~\cite{hossain2022local}.
 
-Overtaking is one of the most challenging tasks in head-to-head, high-speed autonomous racing, as it depends on a sequence of informed decisions and precise maneuvers. We illustrate a simple scenario in Fig.~\ref{fig:example}. The process begins with the ego vehicle identifying a suitable opening ahead, which is rare given the close spacing and high speed of both vehicles. Once an opportunity appears, the ego must quickly change lanes to align with the gap, a maneuver that increases the risk of losing control from sharp steering. Next, the vehicle must accelerate rapidly to pass the opponent. The overtaking itself is particularly risky, as both vehicles travel side by side for an extended period with minimal space between them and the track boundaries. After successfully passing the opponent, the ego must return to the center as quickly as possible to avoid potential collision with the track. The entire process is typically completed within just 3 to 6 seconds.
+Learning-based methods have also been widely proposed for F1Tenth.
+Earlier approaches focused primarily on single-vehicle racing~\cite{10186780,9811650} and static-obstacle avoidance~\cite{zarrar2024tinylidarnet}. More recent studies have extended learning-based racing to overtaking and head-to-head competition, but remain constrained by limited data~\cite{10275226} or low-speed operation~\cite{steiner2025overtaking}.
+In head-to-head scenarios, overtaking is a key determinant of the race outcome and presents a substantially more complex decision problem than single-vehicle driving.
+Figure~\ref{fig:example} illustrates a simplified five-stage overtaking process. 
+The ego vehicle must first identify a suitable opening despite the close spacing and high speeds of both vehicles.
+It then executes a sharp lane change to align with the opening and accelerates rapidly to pass, increasing the risk of losing control. Throughout the pass, the vehicles remain side by side for an extended period, with little clearance between them or from the track boundaries. Finally, the ego vehicle must quickly return to the track center to avoid a boundary collision. Successful overtaking therefore requires continuous decision-making, precise maneuver execution, rapid adaptation to the opponent's motion, and minimal sensing-to-control latency. Meeting these demands requires sufficient model capacity to represent complex conditions while minimizing inference latency, a requirement not yet achieved by existing approaches.
 
-\begin{table*}[!t]
-\vspace{0.15cm}
-\caption{F1Tenth End-to-End Learning Methods Comparison}
-\centering
-\begin{tabular}{p{4.0cm}|>{\centering\arraybackslash}p{1.5cm}|>{\centering\arraybackslash}p{2.0cm}|>{\centering\arraybackslash}p{2.5cm}|>{\centering\arraybackslash}p{2.0cm}|>{\centering\arraybackslash}p{2.5cm}}
-
-\hline
-\textbf{Reference} & \textbf{Method} & \textbf{Single-Agent} & \textbf{Complete 10 Laps} & \textbf{Head-to-Head} & \textbf{Overtake Collision} \\
-\hline
-Sun et al. (2022)~\cite{10186780} & IL & \cmark & \xmark & \xmark & No head-to-head \\
-Brunnbauer et al. (2022)~\cite{9811650} & RL & \cmark & \xmark & \xmark & No head-to-head \\
-Dwivedi et al. (2022)~\cite{10003698} & RL & \cmark & \xmark & \xmark & No head-to-head \\
-Trumpp et al. (2023)~\cite{10186744} & RL & \cmark & \cmark & \xmark & No head-to-head \\
-Evans et al. (2023)~\cite{evans2023comparing} & RL & \cmark & \cmark & \xmark & No head-to-head \\
-Sun et al. (2024)~\cite{sun2024megadagger} & IL & \cmark & \cmark & \cmark & 21.2\% \\
-\hline
-End2Race (ours) & IL & \cmark & \cmark & \cmark & \textbf{5.8\%} \\
-\hline
-\end{tabular}
-\label{tab:comparison}
-\end{table*}
-
-Successfully executing such a task requires rapid sensing and decision making, typically at update rates of 50–100Hz, with zero tolerance for delay. This, in turn, imposes strict constraints on model complexity and capacity. Moreover, the 1/10th-scale F1Tenth platform faces severe power and size limitations, as it typically relies on embedded hardware such as the NVIDIA Jetson NX~\cite{nvidia_jetson}, which are far less capable than datacenter GPUs like the H100~\cite{nvidia_h100}. As a result, deploying large-scale models, including transformer-based~\cite{vaswani2017attention} architectures or vision-language models (VLMs)~\cite{radford2021learning}, is practically infeasible.
-
-To address the limitations of existing learning paradigms, particularly for head-to-head autonomous racing scenarios, we introduce \textbf{End2Race}, a novel end-to-end imitation learning algorithm. End2Race is extremely lightweight and efficient, achieving an inference time of less than 0.5 milliseconds on a consumer-class GPU, which is more than sufficient for the update frequency of real-time, high-speed autonomous racing. Rather than storing extended sequences of past observations, which would impose excessive processing delays, our approach employs a Gated Recurrent Unit (GRU) architecture~\cite{cho2014learning} to maintain a compact hidden state, updated continuously with new observations. This design efficiently captures temporal dependencies between the ego vehicle and its opponent, enabling both short-term responsiveness and long-term strategic planning. In addition, we adopt a sigmoid-based normalization function that transforms raw LiDAR scans into a latent representation as spatial pressure tokens, which naturally aligns with human cognition and facilitates effective model training and convergence.
-
-The model is trained on a single Austin track and evaluated on three previously unseen tracks (Fig.~\ref{fig:overview}) in the F1Tenth Simulator~\cite{f1tenth_gym_repo}. These tracks are intentionally selected to reflect the challenging conditions of autonomous racing, featuring narrow corridors, sharp turns, and continuous sweeping curves. 
-In the single-vehicle setting, our model demonstrates safe and efficient navigation across all tracks. From 2,400 overtaking scenarios, each with an 8-second time limit, the model achieves a \textbf{94.2\%} safety rate, overtakes successfully in \textbf{59.2\%} of cases, and reliably transitions to car-following maneuvers when overtaking is not feasible. In addition, the model demonstrates strong robustness to sensor noise, which is essential for reliable operation in real-world autonomous racing applications. 
-\pagebreak
-
+To address these limitations, we propose \textbf{End2Race}, an end-to-end learning framework for challenging head-to-head autonomous racing that enables systematic training and evaluation of overtaking policies at scale.
+End2Race takes a 360-degree 2D LiDAR observation and the current vehicle state as inputs and directly produces control actions, including vehicle speed and steering commands.
+To efficiently encode temporal dependencies, we adopt a Gated Recurrent Unit (GRU) network~\cite{cho2014learning} that maintains a hidden state summarizing the observation history.
+On a physical F1Tenth vehicle's onboard computer~\cite{nvidia_jetson}, the network produces control actions with an inference time consistently below 1 millisecond.
+Training follows a two-stage pipeline in which the policy is first trained through behavioral cloning~\cite{bc} using demonstrations generated by a map-based expert, then fine-tuned through reinforcement learning using PPO~\cite{ppo}.
+Evaluated across both seen and unseen tracks, End2Race demonstrates strong single-vehicle racing performance as well as competitive overtaking skills.
 The main contributions of this work are as follows:
 
 \begin{enumerate}
-\item We propose an end-to-end imitation learning algorithm that achieves safe navigation in single-agent settings and effective overtaking during head-to-head racing.
+\item We introduce End2Race, an end-to-end learning framework for head-to-head autonomous racing that enables systematic training and evaluation of overtaking policies at scale.
 
-\item Our model demonstrates strong robustness to sensor noise, which is essential for reliable operation in real-world autonomous racing applications.
+\item We design a computationally efficient recurrent policy network with a sensing-to-control latency below 1 millisecond, supporting real-time operation at high racing speeds.
 
-\item We develop an automated workflow to generate diverse overtaking scenarios for both training and evaluation, featuring flexible configuration and seamless adaptation to new tracks.
+\item Through a two-stage training pipeline combining behavioral cloning with reinforcement learning fine-tuning, End2Race generalizes across unseen tracks and demonstrates strong single-vehicle racing performance and competitive overtaking skills.
 \end{enumerate}
 
 \begin{figure*}[!t]
@@ -213,13 +194,21 @@ The main contributions of this work are as follows:
 
 \section{Related Work}
 
-Reinforcement Learning (RL) is a prominent end-to-end paradigm for autonomous racing, encompassing both model-free and model-based methods. Model-free approaches have utilized Soft Actor-Critic (SAC)~\cite{sac}, Twin Delayed Deep Deterministic Policy Gradient (TD3)~\cite{td3}, and Proximal Policy Optimization (PPO)~\cite{ppo}, as shown in recent works~\cite{9763640}. Model-based methods such as Dreamer~\cite{hafner2019dream} have demonstrated improved robustness and generalization, offering potential advantages over model-free ones~\cite{9811650}. 
+\subsection{Imitation Learning}
 
-Beyond standard RL paradigms, several techniques have been proposed to further enhance racing performance. Hybrid approaches such as residual learning, which combine a rule-based policy with a learned policy, outperform either component in isolation~\cite{10186744}. In addition, trajectory-guided learning leverages high-level reference paths to provide structured supervision during training, resulting in improved track completion rates and lap times~\cite{10182327,10003698}.
+Imitation learning (IL) trains a policy from expert demonstrations. Sun et al.~\cite{10186780} generated action labels with a Pure Pursuit controller tracking a predefined reference path, then evaluated behavioral cloning~\cite{bc}, DAgger~\cite{dagger}, HG-DAgger~\cite{hgdagger}, and expert intervention learning~\cite{eil}. All four policies completed the training track but failed to complete an unseen track. Paluch et al.~\cite{paluch2024fpga} trained a feedforward policy to imitate nonlinear model predictive control (NMPC) along a precomputed raceline. The learned policy completed repeated laps with faster lap times than Pure Pursuit. TinyLidarNet~\cite{zarrar2024tinylidarnet} trained a compact convolutional policy from human driving demonstrations and reported generalization to unseen tracks. However, the demonstrations covered only static-obstacle navigation. Zhang and Loidl~\cite{10275226} trained dense and recurrent policies from human overtaking demonstrations, but their study used limited training data and evaluated the policies on a small set of scenarios.
 
-Despite these advances, most developments remain confined to single-agent settings, limiting their use in head-to-head racing. RL methods also require extended training due to the iterative nature of data collection and refinement, making them less sample-efficient than other approaches.
+\subsection{Model-Free Reinforcement Learning}
 
-Imitation Learning (IL) offers greater sample efficiency but remains less commonly adopted. Given the nature of open-loop training and closed-loop evaluation, IL methods are susceptible to distribution shift and accumulation of compounding errors. Although several studies have investigated this direction~\cite{10275226}, their methods have achieved limited success. For example, Sun et al.~\cite{10186780} implemented four state-of-the-art IL algorithms: Behavioral Cloning (BC)~\cite{bc}, Dataset Aggregation (DAgger)~\cite{dagger}, Human-Guided Dataset Aggregation (HG-DAgger)~\cite{hgdagger}, and Expert Imitation Learning (EIL)~\cite{eil}. However, none of these methods succeeded in completing even a single lap. Subsequent work has attempted to improve performance by filtering unsafe demonstrations from multiple experts, but overall results remain suboptimal~\cite{sun2024megadagger}. To the best of our knowledge, no effective imitation learning algorithm for F1Tenth racing has been introduced in the literature prior to our study.  Our method employs a straightforward behavior cloning framework without ad hoc design, yet achieves highly competitive performance.
+Model-free reinforcement learning (RL) learns a control policy by estimating the cumulative reward associated with actions taken in observed states. Hamilton et al.~\cite{9763640} compared DDPG~\cite{ddpg}, SAC~\cite{sac}, and behavioral cloning~\cite{bc}, finding that the RL policies achieved higher racing performance but incurred more collisions under transfer. Steiner et al.~\cite{steiner2025overtaking} trained TD3~\cite{td3} for head-to-head racing and showed across multiple opponent controllers that opponent-inclusive training improved overtaking success. However, the ego vehicle was limited to 2 meters per second, far below practical racing speeds. High-speed scenarios constitute a different regime, where shorter reaction horizons and more pronounced vehicle dynamics demand greater closed-loop stability, real-time responsiveness, and maneuver precision.
+
+\subsection{Model-Based Reinforcement Learning}
+
+Model-based RL learns how the vehicle and environment respond to actions, then uses this predictive model to evaluate possible future outcomes and improve the control policy. Dreamer~\cite{hafner2019dream}, for example, learns a recurrent latent dynamics model and improves the policy through trajectories imagined in that latent state. Brunnbauer et al.~\cite{9811650} applied Dreamer to autonomous racing and reported better task completion and generalization than model-free agents, with transfer performance depending on the observation model.
+
+\subsection{Hybrid Learning Methods}
+
+Hybrid methods retain a structured planner or controller within the learned pipeline. Dwivedi et al.~\cite{10003698} and Ghignone et al.~\cite{10755062} conditioned RL controllers on reference trajectories generated by an external planner, reducing crashes when tire behavior differed from the model used during training. Bhargav et al.~\cite{bhargav2021offline} estimated overtaking success across lateral positions for each track segment, then used these estimates to select normal, left, or right planner modes. Trumpp et al.~\cite{10186744} used residual policy learning to correct actions from a conventional racing controller. Trumpp et al.~\cite{10801657} applied the same approach to an artificial-potential-field planner for multi-agent racing.
 
 \section{Methodology}
 
@@ -492,5 +481,3 @@ In this work, we introduce End2Race, an innovative end-to-end imitation learning
 \bibliography{F1Tenth}
 
 \end{document}
-
-
