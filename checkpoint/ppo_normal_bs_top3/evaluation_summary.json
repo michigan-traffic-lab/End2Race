@@ -1,0 +1,688 @@
+{
+  "generated_at_utc": "2026-08-20T05:44:24Z",
+  "archive_location": "/home/haowei/Documents/End2Race_artifacts/2026-08-20_ppo_top3",
+  "source_repository": "/home/haowei/Documents/End2Race",
+  "source_git": {
+    "branch": "dev_new",
+    "head": "3d542dbe44e6d603ec8ad02811a1d3fd53a8c9a2",
+    "upstream": "origin/dev_new",
+    "behind_upstream_commits": 4
+  },
+  "selection": {
+    "external_multi_best": "ppo_182",
+    "internal_screening_best": "ppo_230",
+    "retained_candidates": [
+      "ppo_182",
+      "ppo_230",
+      "ppo_178"
+    ]
+  },
+  "files": {
+    "ppo_182_actor_critic.pt": {
+      "role": "external multi best; epoch 965 PPO actor-critic",
+      "bytes": 3623801,
+      "sha256": "ce54b1828ad3c020e8573bd1b8bebdeff7dbc86c048b0a381f3d503cb3d4861c"
+    },
+    "ppo_182_actor.pt": {
+      "role": "deployable actor extracted from ppo_182",
+      "bytes": 3405675,
+      "sha256": "60850c61374db95b372d6c48ab4ccb55b98ca59b9d460092d99fe837ccc24ec8"
+    },
+    "ppo_230_actor_critic.pt": {
+      "role": "internal screening best; epoch 1225 PPO actor-critic",
+      "bytes": 3623801,
+      "sha256": "1cc6f2ce7d7a710cf8519e52e00969aa8ac91d4c7bb92d09d1f79deca28d42ee"
+    },
+    "ppo_230_actor.pt": {
+      "role": "deployable actor extracted from ppo_230",
+      "bytes": 3405675,
+      "sha256": "9e47a5c2f97701b994df51911ad1f3b605b92dfbcff16d552d2af31c39a0c920"
+    },
+    "ppo_178_actor_critic.pt": {
+      "role": "internal screening rank 3; epoch 945 PPO actor-critic",
+      "bytes": 3623801,
+      "sha256": "7b373f8c18111b63b8f8d9970ed7859ff85624976a1d6d14810cb9721d70f332"
+    },
+    "ppo_178_actor.pt": {
+      "role": "deployable actor extracted from ppo_178",
+      "bytes": 3405675,
+      "sha256": "e2303d4b883a3dbb3885dabadb51898fa855b1f6cc3129364abba61bfe260935"
+    },
+    "qzj_input_actor.pt": {
+      "role": "QZJ actor used to initialize this PPO run",
+      "bytes": 3406153,
+      "sha256": "4b83ca4343580fd4acc6d445efc855ed6112ba95468cdbfe7853455bf05c747a"
+    },
+    "il_epoch_00500_actor.pt": {
+      "role": "tracked IL checkpoint from the repository",
+      "bytes": 3406469,
+      "sha256": "a4af48d95ad826f8e2e383dfbb84035d38a8a5cbca20c68f0c79fc003eff446c"
+    }
+  },
+  "training_config": {
+    "checkpoint_path": "checkpoint/ppo_001.pt",
+    "map_name": "Austin",
+    "ego_raceline": "raceline1",
+    "opponent_racelines": [
+      "raceline0",
+      "raceline1",
+      "raceline2"
+    ],
+    "opponent_speed_scales": [
+      0.4,
+      0.6,
+      0.8
+    ],
+    "num_startpoints": 80,
+    "interval_index": 15,
+    "episode_duration": 8.0,
+    "num_envs": 16,
+    "max_grad_norm": 0.5,
+    "gamma": 0.999,
+    "gae_lambda": 0.99,
+    "clip_range": 0.2,
+    "checkpoint_type": "IL",
+    "fixed_steering_std": 0.05,
+    "fixed_speed_std": 0.5,
+    "value_weight": 0.5,
+    "progress_reward": 0.025,
+    "overtake_distance": 0.58,
+    "collision_penalty": -1.0,
+    "maximum_ego_speed": 20.0,
+    "batch_size": 720,
+    "gpu_processes": 1,
+    "workers_per_gpu": 16,
+    "total_env_workers": 16,
+    "trajectories_per_scenario": 1,
+    "update_epochs": 1,
+    "learning_rate": 1e-05,
+    "evaluation_interval": 5,
+    "training_duration": "until_stopped",
+    "minimum_safety_rate": 0.9,
+    "minimum_overtake_rate": 0.6
+  },
+  "top3_aggregate": {
+    "generated_at_utc": "2026-08-20T05:31:35Z",
+    "selection": {
+      "source": "checkpoint/ppo/metrics.jsonl",
+      "ranking": "Descending minimum of internal safety and overtake rates, then descending sum",
+      "internal_protocol": "Deterministic Austin 720-scenario PPO screening"
+    },
+    "external_protocol": {
+      "single": {
+        "maps": [
+          "Austin",
+          "Hockenheim",
+          "MoscowRaceway",
+          "Nuerburgring"
+        ],
+        "laps_per_map": 10,
+        "noise": 0.0,
+        "seed": 42,
+        "render": false
+      },
+      "multi": {
+        "maps": [
+          "Hockenheim",
+          "MoscowRaceway",
+          "Nuerburgring"
+        ],
+        "scenarios_per_map": 720,
+        "num_startpoints": 80,
+        "ego_raceline": "raceline1",
+        "opponent_racelines": [
+          "raceline0",
+          "raceline1",
+          "raceline2"
+        ],
+        "opponent_speed_scales": [
+          0.4,
+          0.6,
+          0.8
+        ],
+        "sim_duration": 8.0,
+        "noise": 0.0,
+        "seed": 42,
+        "render": false
+      }
+    },
+    "models": [
+      {
+        "internal_rank": 1,
+        "model": "ppo_230.pt",
+        "epoch": 1225,
+        "summary_path": "eval_results/validation_20260820/ppo_230/summary.json",
+        "internal": {
+          "safety_percent": 97.6389,
+          "overtake_percent": 97.2222,
+          "failures": 17,
+          "overtakes": 700,
+          "scenarios": 720
+        },
+        "external_single": {
+          "maps_passed": 4,
+          "maps_evaluated": 4,
+          "laps_completed": 40,
+          "target_laps": 40,
+          "collisions": 0
+        },
+        "external_multi": {
+          "complete": true,
+          "completed_scenarios": 2160,
+          "planned_scenarios": 2160,
+          "following": 3,
+          "overtaking": 2130,
+          "collision": 27,
+          "errors": 0,
+          "overtaking_percent": 98.6111,
+          "success_percent": 98.75,
+          "collision_percent": 1.25
+        }
+      },
+      {
+        "internal_rank": 2,
+        "model": "ppo_182.pt",
+        "epoch": 965,
+        "summary_path": "eval_results/validation_20260820/ppo_182/summary.json",
+        "internal": {
+          "safety_percent": 97.2222,
+          "overtake_percent": 97.2222,
+          "failures": 20,
+          "overtakes": 700,
+          "scenarios": 720
+        },
+        "external_single": {
+          "maps_passed": 4,
+          "maps_evaluated": 4,
+          "laps_completed": 40,
+          "target_laps": 40,
+          "collisions": 0
+        },
+        "external_multi": {
+          "complete": true,
+          "completed_scenarios": 2160,
+          "planned_scenarios": 2160,
+          "following": 0,
+          "overtaking": 2133,
+          "collision": 27,
+          "errors": 0,
+          "overtaking_percent": 98.75,
+          "success_percent": 98.75,
+          "collision_percent": 1.25
+        }
+      },
+      {
+        "internal_rank": 3,
+        "model": "ppo_178.pt",
+        "epoch": 945,
+        "summary_path": "eval_results/validation_20260820/ppo_178/summary.json",
+        "internal": {
+          "safety_percent": 97.2222,
+          "overtake_percent": 96.6667,
+          "failures": 20,
+          "overtakes": 696,
+          "scenarios": 720
+        },
+        "external_single": {
+          "maps_passed": 4,
+          "maps_evaluated": 4,
+          "laps_completed": 40,
+          "target_laps": 40,
+          "collisions": 0
+        },
+        "external_multi": {
+          "complete": true,
+          "completed_scenarios": 2160,
+          "planned_scenarios": 2160,
+          "following": 8,
+          "overtaking": 2092,
+          "collision": 60,
+          "errors": 0,
+          "overtaking_percent": 96.8519,
+          "success_percent": 97.2222,
+          "collision_percent": 2.7778
+        }
+      }
+    ]
+  },
+  "complete_external_evaluations": {
+    "ppo_182": {
+      "generated_at_utc": "2026-08-20T05:31:35Z",
+      "source_checkpoint": {
+        "path": "checkpoint/ppo/ppo_182.pt",
+        "sha256": "ce54b1828ad3c020e8573bd1b8bebdeff7dbc86c048b0a381f3d503cb3d4861c",
+        "epoch": 965,
+        "format": "PPO actor-critic state_dict"
+      },
+      "evaluation_checkpoint": {
+        "path": "eval_results/validation_20260820/ppo_182/actor.pt",
+        "sha256": "60850c61374db95b372d6c48ab4ccb55b98ca59b9d460092d99fe837ccc24ec8",
+        "format": "End2Race actor state_dict",
+        "extraction": "All model.* tensors with the model. prefix removed"
+      },
+      "single": {
+        "protocol": {
+          "laps_per_map": 10,
+          "noise": 0.0,
+          "seed": 42,
+          "render": false
+        },
+        "maps": {
+          "Austin": {
+            "passed": true,
+            "collision": false,
+            "laps_completed": 10,
+            "lap_time": 451.242,
+            "mean_lap_time": 45.124,
+            "average_speed": 9.412,
+            "speed_variance": 1.039,
+            "total_distance": 4246.814
+          },
+          "Hockenheim": {
+            "passed": true,
+            "collision": false,
+            "laps_completed": 10,
+            "lap_time": 377.917,
+            "mean_lap_time": 37.792,
+            "average_speed": 9.601,
+            "speed_variance": 0.831,
+            "total_distance": 3628.399
+          },
+          "MoscowRaceway": {
+            "passed": true,
+            "collision": false,
+            "laps_completed": 10,
+            "lap_time": 352.017,
+            "mean_lap_time": 35.202,
+            "average_speed": 9.262,
+            "speed_variance": 1.088,
+            "total_distance": 3260.28
+          },
+          "Nuerburgring": {
+            "passed": true,
+            "collision": false,
+            "laps_completed": 10,
+            "lap_time": 461.183,
+            "mean_lap_time": 46.118,
+            "average_speed": 9.757,
+            "speed_variance": 0.666,
+            "total_distance": 4499.837
+          }
+        },
+        "aggregate": {
+          "maps_passed": 4,
+          "maps_evaluated": 4,
+          "laps_completed": 40,
+          "target_laps": 40,
+          "collisions": 0
+        }
+      },
+      "multi": {
+        "protocol": {
+          "maps": [
+            "Hockenheim",
+            "MoscowRaceway",
+            "Nuerburgring"
+          ],
+          "num_startpoints": 80,
+          "ego_raceline": "raceline1",
+          "opponent_racelines": [
+            "raceline0",
+            "raceline1",
+            "raceline2"
+          ],
+          "opponent_speed_scales": [
+            0.4,
+            0.6,
+            0.8
+          ],
+          "sim_duration": 8.0,
+          "noise": 0.0,
+          "seed": 42,
+          "render": false,
+          "scenarios_per_map": 720
+        },
+        "maps": {
+          "Hockenheim": {
+            "complete": true,
+            "completed_scenarios": 720,
+            "following": 0,
+            "overtaking": 715,
+            "collision": 5,
+            "errors": 0,
+            "overtaking_percent": 99.3056,
+            "success_percent": 99.3056,
+            "collision_percent": 0.6944
+          },
+          "MoscowRaceway": {
+            "complete": true,
+            "completed_scenarios": 720,
+            "following": 0,
+            "overtaking": 705,
+            "collision": 15,
+            "errors": 0,
+            "overtaking_percent": 97.9167,
+            "success_percent": 97.9167,
+            "collision_percent": 2.0833
+          },
+          "Nuerburgring": {
+            "complete": true,
+            "completed_scenarios": 720,
+            "following": 0,
+            "overtaking": 713,
+            "collision": 7,
+            "errors": 0,
+            "overtaking_percent": 99.0278,
+            "success_percent": 99.0278,
+            "collision_percent": 0.9722
+          }
+        },
+        "aggregate": {
+          "complete": true,
+          "completed_scenarios": 2160,
+          "planned_scenarios": 2160,
+          "following": 0,
+          "overtaking": 2133,
+          "collision": 27,
+          "errors": 0,
+          "following_percent": 0.0,
+          "overtaking_percent": 98.75,
+          "success_percent": 98.75,
+          "collision_percent": 1.25
+        }
+      }
+    },
+    "ppo_230": {
+      "generated_at_utc": "2026-08-20T00:58:03Z",
+      "source_checkpoint": {
+        "path": "checkpoint/ppo/ppo_230.pt",
+        "sha256": "1cc6f2ce7d7a710cf8519e52e00969aa8ac91d4c7bb92d09d1f79deca28d42ee",
+        "epoch": 1225,
+        "format": "PPO actor-critic state_dict"
+      },
+      "evaluation_checkpoint": {
+        "path": "eval_results/validation_20260820/ppo_230/actor.pt",
+        "sha256": "9e47a5c2f97701b994df51911ad1f3b605b92dfbcff16d552d2af31c39a0c920",
+        "format": "End2Race actor state_dict",
+        "extraction": "All model.* tensors with the model. prefix removed"
+      },
+      "single": {
+        "protocol": {
+          "laps_per_map": 10,
+          "noise": 0.0,
+          "seed": 42,
+          "render": false
+        },
+        "maps": {
+          "Austin": {
+            "passed": true,
+            "collision": false,
+            "laps_completed": 10,
+            "lap_time": 450.383,
+            "mean_lap_time": 45.038,
+            "average_speed": 9.424,
+            "speed_variance": 1.129,
+            "total_distance": 4244.563
+          },
+          "Hockenheim": {
+            "passed": true,
+            "collision": false,
+            "laps_completed": 10,
+            "lap_time": 377.067,
+            "mean_lap_time": 37.707,
+            "average_speed": 9.614,
+            "speed_variance": 0.91,
+            "total_distance": 3625.2
+          },
+          "MoscowRaceway": {
+            "passed": true,
+            "collision": false,
+            "laps_completed": 10,
+            "lap_time": 351.875,
+            "mean_lap_time": 35.187,
+            "average_speed": 9.258,
+            "speed_variance": 1.19,
+            "total_distance": 3257.583
+          },
+          "Nuerburgring": {
+            "passed": true,
+            "collision": false,
+            "laps_completed": 10,
+            "lap_time": 460.167,
+            "mean_lap_time": 46.017,
+            "average_speed": 9.774,
+            "speed_variance": 0.717,
+            "total_distance": 4497.657
+          }
+        },
+        "aggregate": {
+          "maps_passed": 4,
+          "maps_evaluated": 4,
+          "laps_completed": 40,
+          "target_laps": 40,
+          "collisions": 0
+        }
+      },
+      "multi": {
+        "protocol": {
+          "maps": [
+            "Hockenheim",
+            "MoscowRaceway",
+            "Nuerburgring"
+          ],
+          "num_startpoints": 80,
+          "ego_raceline": "raceline1",
+          "opponent_racelines": [
+            "raceline0",
+            "raceline1",
+            "raceline2"
+          ],
+          "opponent_speed_scales": [
+            0.4,
+            0.6,
+            0.8
+          ],
+          "sim_duration": 8.0,
+          "noise": 0.0,
+          "seed": 42,
+          "render": false,
+          "scenarios_per_map": 720
+        },
+        "maps": {
+          "Hockenheim": {
+            "complete": true,
+            "completed_scenarios": 720,
+            "following": 2,
+            "overtaking": 712,
+            "collision": 6,
+            "errors": 0,
+            "overtaking_percent": 98.8889,
+            "success_percent": 99.1667,
+            "collision_percent": 0.8333
+          },
+          "MoscowRaceway": {
+            "complete": true,
+            "completed_scenarios": 720,
+            "following": 0,
+            "overtaking": 701,
+            "collision": 19,
+            "errors": 0,
+            "overtaking_percent": 97.3611,
+            "success_percent": 97.3611,
+            "collision_percent": 2.6389
+          },
+          "Nuerburgring": {
+            "complete": true,
+            "completed_scenarios": 720,
+            "following": 1,
+            "overtaking": 717,
+            "collision": 2,
+            "errors": 0,
+            "overtaking_percent": 99.5833,
+            "success_percent": 99.7222,
+            "collision_percent": 0.2778
+          }
+        },
+        "aggregate": {
+          "complete": true,
+          "completed_scenarios": 2160,
+          "planned_scenarios": 2160,
+          "following": 3,
+          "overtaking": 2130,
+          "collision": 27,
+          "errors": 0,
+          "following_percent": 0.1389,
+          "overtaking_percent": 98.6111,
+          "success_percent": 98.75,
+          "collision_percent": 1.25
+        }
+      }
+    },
+    "ppo_178": {
+      "generated_at_utc": "2026-08-20T05:31:35Z",
+      "source_checkpoint": {
+        "path": "checkpoint/ppo/ppo_178.pt",
+        "sha256": "7b373f8c18111b63b8f8d9970ed7859ff85624976a1d6d14810cb9721d70f332",
+        "epoch": 945,
+        "format": "PPO actor-critic state_dict"
+      },
+      "evaluation_checkpoint": {
+        "path": "eval_results/validation_20260820/ppo_178/actor.pt",
+        "sha256": "e2303d4b883a3dbb3885dabadb51898fa855b1f6cc3129364abba61bfe260935",
+        "format": "End2Race actor state_dict",
+        "extraction": "All model.* tensors with the model. prefix removed"
+      },
+      "single": {
+        "protocol": {
+          "laps_per_map": 10,
+          "noise": 0.0,
+          "seed": 42,
+          "render": false
+        },
+        "maps": {
+          "Austin": {
+            "passed": true,
+            "collision": false,
+            "laps_completed": 10,
+            "lap_time": 450.992,
+            "mean_lap_time": 45.099,
+            "average_speed": 9.401,
+            "speed_variance": 1.076,
+            "total_distance": 4239.756
+          },
+          "Hockenheim": {
+            "passed": true,
+            "collision": false,
+            "laps_completed": 10,
+            "lap_time": 377.5,
+            "mean_lap_time": 37.75,
+            "average_speed": 9.591,
+            "speed_variance": 0.847,
+            "total_distance": 3620.629
+          },
+          "MoscowRaceway": {
+            "passed": true,
+            "collision": false,
+            "laps_completed": 10,
+            "lap_time": 352.133,
+            "mean_lap_time": 35.213,
+            "average_speed": 9.233,
+            "speed_variance": 1.15,
+            "total_distance": 3251.077
+          },
+          "Nuerburgring": {
+            "passed": true,
+            "collision": false,
+            "laps_completed": 10,
+            "lap_time": 460.783,
+            "mean_lap_time": 46.078,
+            "average_speed": 9.747,
+            "speed_variance": 0.682,
+            "total_distance": 4491.283
+          }
+        },
+        "aggregate": {
+          "maps_passed": 4,
+          "maps_evaluated": 4,
+          "laps_completed": 40,
+          "target_laps": 40,
+          "collisions": 0
+        }
+      },
+      "multi": {
+        "protocol": {
+          "maps": [
+            "Hockenheim",
+            "MoscowRaceway",
+            "Nuerburgring"
+          ],
+          "num_startpoints": 80,
+          "ego_raceline": "raceline1",
+          "opponent_racelines": [
+            "raceline0",
+            "raceline1",
+            "raceline2"
+          ],
+          "opponent_speed_scales": [
+            0.4,
+            0.6,
+            0.8
+          ],
+          "sim_duration": 8.0,
+          "noise": 0.0,
+          "seed": 42,
+          "render": false,
+          "scenarios_per_map": 720
+        },
+        "maps": {
+          "Hockenheim": {
+            "complete": true,
+            "completed_scenarios": 720,
+            "following": 3,
+            "overtaking": 697,
+            "collision": 20,
+            "errors": 0,
+            "overtaking_percent": 96.8056,
+            "success_percent": 97.2222,
+            "collision_percent": 2.7778
+          },
+          "MoscowRaceway": {
+            "complete": true,
+            "completed_scenarios": 720,
+            "following": 4,
+            "overtaking": 692,
+            "collision": 24,
+            "errors": 0,
+            "overtaking_percent": 96.1111,
+            "success_percent": 96.6667,
+            "collision_percent": 3.3333
+          },
+          "Nuerburgring": {
+            "complete": true,
+            "completed_scenarios": 720,
+            "following": 1,
+            "overtaking": 703,
+            "collision": 16,
+            "errors": 0,
+            "overtaking_percent": 97.6389,
+            "success_percent": 97.7778,
+            "collision_percent": 2.2222
+          }
+        },
+        "aggregate": {
+          "complete": true,
+          "completed_scenarios": 2160,
+          "planned_scenarios": 2160,
+          "following": 8,
+          "overtaking": 2092,
+          "collision": 60,
+          "errors": 0,
+          "following_percent": 0.3704,
+          "overtaking_percent": 96.8519,
+          "success_percent": 97.2222,
+          "collision_percent": 2.7778
+        }
+      }
+    }
+  }
+}
