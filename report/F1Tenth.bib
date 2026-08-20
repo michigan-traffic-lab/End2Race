@@ -6,14 +6,25 @@
   year={2020}
 }
 
-@misc{evans2024unifyingf1tenthautonomousracing,
-      title={Unifying F1TENTH Autonomous Racing: Survey, Methods and Benchmarks}, 
-      author={Benjamin David Evans and Raphael Trumpp and Marco Caccamo and Felix Jahncke and Johannes Betz and Hendrik Willem Jordaan and Herman Arnold Engelbrecht},
-      year={2024},
-      eprint={2402.18558},
-      archivePrefix={arXiv},
-      primaryClass={cs.RO},
-      url={https://arxiv.org/abs/2402.18558}, 
+@article{o2019f1,
+  title={F1/10: An open-source autonomous cyber-physical platform},
+  author={O'Kelly, Matthew and Sukhil, Varundev and Abbas, Houssam and Harkins, Jack and Kao, Chris and Pant, Yash Vardhan and Mangharam, Rahul and Agarwal, Dipshil and Behl, Madhur and Burgio, Paolo and Bertogna, Marko},
+  journal={arXiv preprint arXiv:1901.08567},
+  year={2019}
+}
+
+@manual{hokuyoUST10LX,
+  title={UST-10LX Specification},
+  organization={Hokuyo Automatic Co., Ltd.},
+  year={2015},
+  url={https://www.hokuyo-aut.jp/dl/UST-10LX_Specification.pdf}
+}
+
+@manual{intelRealSenseD435i,
+  title={Intel RealSense D400 Series Product Family Datasheet},
+  organization={Intel Corporation},
+  year={2022},
+  url={https://www.intelrealsense.com/wp-content/uploads/2022/04/Intel-RealSense-D400-Series-Datasheet-April-2022.pdf}
 }
 
 @article{Heilmeier02102020,
@@ -42,6 +53,33 @@ eprint = {https://doi.org/10.1080/00423114.2019.1631455}}
   journal = {Journal of Open Source Software}
 }
 
+@article{walsh2017cddt,
+  title={CDDT: Fast Approximate 2D Ray Casting for Accelerated Localization},
+  author={Walsh, Corey and Karaman, Sertac},
+  journal={arXiv preprint arXiv:1705.01167},
+  year={2017},
+  url={https://arxiv.org/abs/1705.01167}
+}
+
+@inproceedings{zang2023localinn,
+  author={Zang, Zirui and Zheng, Hongrui and Betz, Johannes and Mangharam, Rahul},
+  title={{Local\_INN}: Implicit Map Representation and Localization with Invertible Neural Networks},
+  booktitle={2023 IEEE International Conference on Robotics and Automation (ICRA)},
+  pages={11742--11748},
+  year={2023},
+  doi={10.1109/ICRA48891.2023.10161015}
+}
+
+@article{muzzini2024gpu,
+  author={Muzzini, Filippo and Capodieci, Nicola and Ramanzin, Federico and Burgio, Paolo},
+  title={GPU Implementation of the Frenet Path Planner for Embedded Autonomous Systems: A Case Study in the {F1TENTH} Scenario},
+  journal={Journal of Systems Architecture},
+  volume={154},
+  pages={103239},
+  year={2024},
+  doi={10.1016/j.sysarc.2024.103239}
+}
+
 @techreport{coulter1992implementation,
     author = {R. Craig Coulter},
     title = {Implementation of the Pure Pursuit Path Tracking Algorithm},
@@ -50,6 +88,17 @@ eprint = {https://doi.org/10.1080/00423114.2019.1631455}}
     institution = {Carnegie Mellon University},
     address = {Pittsburgh, PA},
     number = {CMU-RI-TR-92-01},
+}
+
+@article{falcone2007predictive,
+  author={Falcone, Paolo and Borrelli, Francesco and Asgari, Jahan and Tseng, Hongtei Eric and Hrovat, Davor},
+  title={Predictive Active Steering Control for Autonomous Vehicle Systems},
+  journal={IEEE Transactions on Control Systems Technology},
+  volume={15},
+  number={3},
+  pages={566--580},
+  year={2007},
+  doi={10.1109/TCST.2007.894653}
 }
 
 @INPROCEEDINGS{7963748,
@@ -86,6 +135,13 @@ author = {Volkan Sezer and Metin Gokasan},
       url={https://arxiv.org/abs/1707.06347}, 
 }
 
+@inproceedings{ddpg,
+  title={Continuous Control with Deep Reinforcement Learning},
+  author={Lillicrap, Timothy P. and Hunt, Jonathan J. and Pritzel, Alexander and Heess, Nicolas and Erez, Tom and Tassa, Yuval and Silver, David and Wierstra, Daan},
+  booktitle={International Conference on Learning Representations},
+  year={2016}
+}
+
 @inproceedings{sac,
   title={Soft actor-critic: Off-policy maximum entropy deep reinforcement learning with a stochastic actor},
   author={Haarnoja, Tuomas and Zhou, Aurick and Abbeel, Pieter and Levine, Sergey},
@@ -104,17 +160,6 @@ author = {Volkan Sezer and Metin Gokasan},
   organization={PMLR}
 }
 
-@ARTICLE{10182327,
-  author={Evans, Benjamin David and Engelbrecht, Herman Arnold and Jordaan, Hendrik Willem},
-  journal={IEEE Robotics and Automation Letters}, 
-  title={High-Speed Autonomous Racing Using Trajectory-Aided Deep Reinforcement Learning}, 
-  year={2023},
-  volume={8},
-  number={9},
-  pages={5353-5359},
-  keywords={Trajectory;Reinforcement learning;Laser radar;Deep learning;Sensors;Accidents;Radar tracking;Deep learning methods;machine learning for robot control;reinforcement learning},
-  doi={10.1109/LRA.2023.3295252}}
-
 @INPROCEEDINGS{10003698,
   author={Dwivedi, Tanay and Betz, Tobias and Sauerbeck, Florian and Manivannan, Pv and Lienkamp, Markus},
   booktitle={2022 22nd International Conference on Control, Automation and Systems (ICCAS)}, 
@@ -125,28 +170,6 @@ author = {Volkan Sezer and Metin Gokasan},
   pages={244-250},
   keywords={Deep learning;Software algorithms;Reinforcement learning;Prediction algorithms;Stability analysis;Software;Behavioral sciences;Autonomous driving;intelligent vehicles;world models;deep reinforcement learning;artificial intelligence},
   doi={10.23919/ICCAS55662.2022.10003698}}
-
-@ARTICLE{10755062,
-  author={Ghignone, Edoardo and Baumann, Nicolas and Magno, Michele},
-  journal={IEEE Transactions on Field Robotics}, 
-  title={TC-Driver: A Trajectory-Conditioned Reinforcement Learning Approach to Zero-Shot Autonomous Racing}, 
-  year={2024},
-  volume={1},
-  number={},
-  pages={527-536},
-  keywords={Computer architecture;Trajectory;Training;Planning;Computational modeling;Robustness;Friction;Autonomous driving;Reinforcement learning;Robot learning;Mobile robots;Robot kinematics;Autonomous vehicles;Robot control;Autonomous driving;reinforcement learning (RL);robot control;robot learning;wheeled robots},
-  doi={10.1109/TFR.2024.3499912}}
-
-@INPROCEEDINGS{10186744,
-  author={Trumpp, Raphael and Hoornaert, Denis and Caccamo, Marco},
-  booktitle={2023 IEEE Intelligent Vehicles Symposium (IV)}, 
-  title={Residual Policy Learning for Vehicle Control of Autonomous Racing Cars}, 
-  year={2023},
-  volume={},
-  number={},
-  pages={1-6},
-  keywords={Bridges;Intelligent vehicles;Performance gain;Robustness;Behavioral sciences;Automobiles;Noise measurement;Residual Policy Learning;Autonomous Racing;Vehicle Control;F1TENTH},
-  doi={10.1109/IV55152.2023.10186744}}
 
 @INPROCEEDINGS{10801657,
   author={Trumpp, Raphael and Javanmardi, Ehsan and Nakazato, Jin and Tsukada, Manabu and Caccamo, Marco},
@@ -180,25 +203,6 @@ author = {Volkan Sezer and Metin Gokasan},
   pages={1-5},
   keywords={Learning systems;Reinforcement learning;Benchmark testing;Network architecture;Planning;Automobiles;Autonomous vehicles},
   doi={10.1109/IV55152.2023.10186780}}
-
-@inproceedings{evans2023bypassing,
-  title={Bypassing the simulation-to-reality gap: Online reinforcement learning using a supervisor},
-  author={Evans, Benjamin David and Betz, Johannes and Zheng, Hongrui and Engelbrecht, Herman A and Mangharam, Rahul and Jordaan, Hendrik W},
-  booktitle={2023 21st International Conference on Advanced Robotics (ICAR)},
-  pages={325--331},
-  year={2023},
-  organization={IEEE}
-}
-
-@article{evans2023comparing,
-  title={Comparing deep reinforcement learning architectures for autonomous racing},
-  author={Evans, Benjamin David and Jordaan, Hendrik Willem and Engelbrecht, Herman Arnold},
-  journal={Machine Learning with Applications},
-  volume={14},
-  pages={100496},
-  year={2023},
-  publisher={Elsevier}
-}
 
 @misc{sun2024megadagger,
       title={MEGA-DAgger: Imitation Learning with Multiple Imperfect Experts}, 
@@ -247,13 +251,6 @@ author = {Volkan Sezer and Metin Gokasan},
       archivePrefix={arXiv},
       primaryClass={cs.RO},
       url={https://arxiv.org/abs/2209.07758}, 
-}
-
-@misc{f1tenth_gym_repo,
-  author       = "{f1tenth}.",
-  title        = "{f1tenth\_gym}: The F1TENTH Gym environment (GitHub repository)",
-  howpublished = "\url{https://github.com/f1tenth/f1tenth_gym}",
-  year         = "2025"
 }
 
 @article{shortcut,
@@ -337,35 +334,50 @@ doi = {10.1007/978-0-387-30164-8_69}
   publisher={Springer}
 }
 
-@misc{nvidia_jetson,
-  author       = {NVIDIA Corporation},
-  title        = {NVIDIA Jetson Xavier NX Module},
-  year         = {2020},
-  url          = {https://www.nvidia.com/en-us/autonomous-machines/embedded-systems/jetson-xavier-series/},
-  note         = {Accessed: 2024-09-12}
+@article{hossain2022local,
+  author={Hossain, Tagor and Habibullah, Habibullah and Islam, Rafiqul and Padilla, Ricardo V.},
+  title={Local Path Planning for Autonomous Mobile Robots by Integrating Modified Dynamic-Window Approach and Improved Follow the Gap Method},
+  journal={Journal of Field Robotics},
+  volume={39},
+  number={4},
+  pages={371--386},
+  year={2022},
+  doi={10.1002/rob.22055}
 }
 
-@misc{nvidia_h100,
-  author       = {NVIDIA Corporation},
-  title        = {NVIDIA H100 Tensor Core GPU},
-  year         = {2022},
-  url          = {https://www.nvidia.com/en-us/data-center/h100/},
-  note         = {Accessed: 2024-09-12}
+@misc{zarrar2024tinylidarnet,
+  title={TinyLidarNet: 2D LiDAR-based End-to-End Deep Learning Model for F1TENTH Autonomous Racing},
+  author={Zarrar, Mohammed Misbah and Weng, Qitao and Yerjan, Bakhbyergyen and Soyyigit, Ahmet and Yun, Heechul},
+  year={2024},
+  eprint={2410.07447},
+  archivePrefix={arXiv},
+  primaryClass={cs.RO}
 }
 
-@article{vaswani2017attention,
-  title={Attention is all you need},
-  author={Vaswani, Ashish and Shazeer, Noam and Parmar, Niki and Uszkoreit, Jakob and Jones, Llion and Gomez, Aidan N and Kaiser, {\L}ukasz and Polosukhin, Illia},
-  journal={Advances in neural information processing systems},
-  volume={30},
-  year={2017}
+@misc{paluch2024fpga,
+  title={FPGA Hardware Neural Control of CartPole and F1TENTH Race Car},
+  author={Paluch, Marcin and Bolli, Florian and Deng, Xiang and Rios Navarro, Antonio and Gao, Chang and Delbruck, Tobi},
+  year={2024},
+  eprint={2407.08681},
+  archivePrefix={arXiv},
+  primaryClass={cs.RO}
 }
 
-@inproceedings{radford2021learning,
-  title={Learning transferable visual models from natural language supervision},
-  author={Radford, Alec and Kim, Jong Wook and Hallacy, Chris and Ramesh, Aditya and Goh, Gabriel and Agarwal, Sandhini and Sastry, Girish and Askell, Amanda and Mishkin, Pamela and Clark, Jack and others},
-  booktitle={International conference on machine learning},
-  pages={8748--8763},
+@misc{bhargav2021offline,
+  title={Track Based Offline Policy Learning for Overtaking Maneuvers with Autonomous Racecars},
+  author={Bhargav, Jayanth and Betz, Johannes and Zheng, Hongrui and Mangharam, Rahul},
   year={2021},
-  organization={PmLR}
+  eprint={2107.09782},
+  archivePrefix={arXiv},
+  primaryClass={cs.RO}
+}
+
+@inproceedings{steiner2025overtaking,
+  title={Accelerating Real-World Overtaking in F1TENTH Racing Employing Reinforcement Learning Methods},
+  author={Steiner, Emily and van der Spuy, Daniel and Zhou, Futian and Pama, Afereti and Liarokapis, Minas and Williams, Henry},
+  booktitle={2025 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS)},
+  pages={4528--4534},
+  year={2025},
+  organization={IEEE},
+  doi={10.1109/IROS60139.2025.11247759}
 }

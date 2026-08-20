@@ -1,0 +1,15 @@
+# Writing Skill
+
+High-level instructions for working on this report.
+
+1. **Never edit without explicit instruction.** When something is proposed, share an opinion and settle on the approach first. Only edit the files when explicitly told to apply the change.
+
+2. **Phrasing is direction, not verbatim.** What is said conveys the intended meaning, not the exact words to drop into the report. Craft wording that fits the paper's style and flow.
+
+3. **No em dashes** in the writing.
+
+## Working preferences
+
+- **Reword, don't reinvent.** When asked to expand or adjust a sentence, rephrase the same idea; do not inject new clauses, ideas, or content that were not asked for.
+- **No redundant tails.** Do not append qualifying or explanatory tail phrases that restate what nearby text already conveys. State the point once.
+- **Reason before phrasing.** Before proposing or editing prose, identify the passage's purpose, required information, and relationship to the surrounding argument. Do not jump directly to a surface rewrite or use stock transitions, rhetorical filler, and verbal polish as substitutes for substantive reasoning.
