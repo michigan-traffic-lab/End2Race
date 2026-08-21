@@ -179,6 +179,12 @@ R.~Trumpp, E.~Javanmardi, J.~Nakazato, M.~Tsukada, and M.~Caccamo, ``Racemop:
   policy learning,'' in {\em 2024 IEEE/RSJ International Conference on
   Intelligent Robots and Systems (IROS)}, pp.~8449--8456, 2024.
 
+\bibitem{werling2010optimal}
+M.~Werling, J.~Ziegler, S.~Kammel, and S.~Thrun, ``Optimal trajectory
+  generation for dynamic street scenarios in a fren{\'e}t frame,'' in {\em 2010
+  IEEE International Conference on Robotics and Automation}, pp.~987--993,
+  2010.
+
 \bibitem{7963748}
 U.~Rosolia, A.~Carvalho, and F.~Borrelli, ``Autonomous racing using learning
   model predictive control,'' in {\em 2017 American Control Conference (ACC)},

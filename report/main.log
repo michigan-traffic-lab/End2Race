@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.25 (TeX Live 2023/Debian) (preloaded format=pdflatex 2026.5.26)  19 AUG 2026 17:00
+This is pdfTeX, Version 3.141592653-2.6-1.40.25 (TeX Live 2023/Debian) (preloaded format=pdflatex 2026.5.26)  21 AUG 2026 01:09
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
@@ -422,28 +422,31 @@ t.pdf>] [4]
 
 pdfTeX warning: pdflatex (file ./figures/overtake.pdf): PDF inclusion: found PD
 F version <1.7>, but at most version <1.5> allowed
-<figures/overtake.pdf, id=172, 794.97pt x 202.356pt>
+<figures/overtake.pdf, id=173, 794.97pt x 202.356pt>
 File: figures/overtake.pdf Graphic file (type pdf)
 <use figures/overtake.pdf>
-Package pdftex.def Info: figures/overtake.pdf  used on input line 400.
+Package pdftex.def Info: figures/overtake.pdf  used on input line 413.
 (pdftex.def)             Requested size: 505.89pt x 128.7756pt.
 
 
 pdfTeX warning: pdflatex (file ./figures/follow.pdf): PDF inclusion: found PDF 
 version <1.7>, but at most version <1.5> allowed
-<figures/follow.pdf, id=173, 794.97pt x 202.356pt>
+<figures/follow.pdf, id=174, 794.97pt x 202.356pt>
 File: figures/follow.pdf Graphic file (type pdf)
 <use figures/follow.pdf>
-Package pdftex.def Info: figures/follow.pdf  used on input line 407.
+Package pdftex.def Info: figures/follow.pdf  used on input line 420.
 (pdftex.def)             Requested size: 505.89pt x 128.7756pt.
 [5]
+Underfull \vbox (badness 10000) has occurred while \output is active []
+
+
 Underfull \vbox (badness 10000) has occurred while \output is active []
 
  [6 <./figures/overtake.pdf> <./figures/follow.pdf
 
 pdfTeX warning: pdflatex (file ./figures/follow.pdf): PDF inclusion: multiple p
 dfs with page group included in a single page
->] (./main.bbl
+>] [7] (./main.bbl
 Underfull \hbox (badness 1371) in paragraph at lines 12--14
 []\OT1/ptm/m/n/8 Intel Cor-po-ra-tion, \OT1/ptm/m/it/8 In-tel Re-alSense D400 S
 e-ries Prod-uct Fam-ily
@@ -454,13 +457,13 @@ Underfull \hbox (badness 7362) in paragraph at lines 26--30
 []\OT1/ptm/m/n/8 A. Heilmeier, A. Wis-chnewski, L. Her-mans-dor-fer, J. Betz,
  []
 
-[7]
+
 Underfull \hbox (badness 1776) in paragraph at lines 162--165
 \OT1/ptm/m/n/8 trol: Learn-ing be-hav-iors by la-tent imag-i-na-tion,'' \OT1/pt
 m/m/it/8 arXiv preprint
  []
 
-)
+[8])
 
 ** Conference Paper **
 Before submitting the final camera ready copy, remember to:
@@ -472,17 +475,19 @@ Before submitting the final camera ready copy, remember to:
  uses only Type 1 fonts and that every step in the generation
  process uses the US letter (8.5in X 11in) paper size.
 
-[8] (./main.aux)
+[9
+
+] (./main.aux)
  ***********
 LaTeX2e <2023-11-01> patch level 1
 L3 programming layer <2024-01-22>
  ***********
  ) 
 Here is how much of TeX's memory you used:
- 4685 strings out of 476182
- 75308 string characters out of 5795595
- 1953975 words of memory out of 5000000
- 26597 multiletter control sequences out of 15000+600000
+ 4687 strings out of 476182
+ 75336 string characters out of 5795595
+ 1952975 words of memory out of 5000000
+ 26599 multiletter control sequences out of 15000+600000
  607835 words of font info for 136 fonts, out of 8000000 for 9000
  14 hyphenation exceptions out of 8191
  72i,15n,79p,1505b,364s stack positions out of 10000i,1000n,20000p,200000b,200000s
@@ -491,18 +496,19 @@ r/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmex10.pfb></usr/shar
 e/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi10.pfb></usr/share/texl
 ive/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi7.pfb></usr/share/texlive/tex
 mf-dist/fonts/type1/public/amsfonts/cm/cmr10.pfb></usr/share/texlive/texmf-dist
-/fonts/type1/public/amsfonts/cm/cmr6.pfb></usr/share/texlive/texmf-dist/fonts/t
-ype1/public/amsfonts/cm/cmr7.pfb></usr/share/texlive/texmf-dist/fonts/type1/pub
-lic/amsfonts/cm/cmsy10.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/am
-sfonts/cm/cmsy7.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/
-symbols/msbm10.pfb></usr/share/texlive/texmf-dist/fonts/type1/urw/times/utmb8a.
-pfb></usr/share/texlive/texmf-dist/fonts/type1/urw/times/utmbi8a.pfb></usr/shar
-e/texlive/texmf-dist/fonts/type1/urw/times/utmr8a.pfb></usr/share/texlive/texmf
--dist/fonts/type1/urw/times/utmri8a.pfb>
-Output written on main.pdf (8 pages, 628528 bytes).
+/fonts/type1/public/amsfonts/cm/cmr5.pfb></usr/share/texlive/texmf-dist/fonts/t
+ype1/public/amsfonts/cm/cmr6.pfb></usr/share/texlive/texmf-dist/fonts/type1/pub
+lic/amsfonts/cm/cmr7.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsf
+onts/cm/cmsy10.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/c
+m/cmsy7.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/symbols/
+msbm10.pfb></usr/share/texlive/texmf-dist/fonts/type1/urw/times/utmb8a.pfb></us
+r/share/texlive/texmf-dist/fonts/type1/urw/times/utmbi8a.pfb></usr/share/texliv
+e/texmf-dist/fonts/type1/urw/times/utmr8a.pfb></usr/share/texlive/texmf-dist/fo
+nts/type1/urw/times/utmri8a.pfb>
+Output written on main.pdf (9 pages, 640697 bytes).
 PDF statistics:
- 289 PDF objects out of 1000 (max. 8388607)
- 169 compressed objects within 2 object streams
+ 297 PDF objects out of 1000 (max. 8388607)
+ 174 compressed objects within 2 object streams
  0 named destinations out of 1000 (max. 500000)
  36 words of extra memory for PDF output out of 10000 (max. 10000000)
 

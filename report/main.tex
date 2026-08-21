@@ -238,19 +238,32 @@ Hybrid methods retain a structured planner or controller within the learned pipe
 
 \section{Methodology}
 
-We develop and evaluate End2Race using the F1TENTH Gym simulator~\cite{o2020f1tenth}, which provides high-fidelity vehicle dynamics and 2D LiDAR sensing. Four tracks are selected, each reflecting the layout of a real-world Formula 1 circuit: Austin, Hockenheim, Moscow Raceway, and Nuerburgring (Fig.~\ref{fig:overview}(a)). The Austin track is used for training, while the remaining tracks are reserved for evaluation. To systematically generate overtaking scenarios at scale, we develop an automated workflow spanning diverse track geometries, raceline configurations, and racing speeds. Scenario execution relies on a map-based expert that provides demonstrations for the ego policy and controls the opponent (Fig.~\ref{fig:overview}(b)). The policy network employs a Gated Recurrent Unit (GRU) that processes LiDAR measurements encoded as spatial pressure tokens. Its two-stage learning pipeline begins with behavioral cloning (Fig.~\ref{fig:overview}(c)) and continues with PPO fine-tuning (Fig.~\ref{fig:overview}(d)). The following sections detail each component.
+We develop and evaluate End2Race using the F1TENTH Gym simulator~\cite{o2020f1tenth}, which provides high-fidelity vehicle dynamics and accurate 2D LiDAR simulation.
+Four racing tracks are selected, each reflecting the layout of a real-world Formula 1 circuit: Austin, Hockenheim, MoscowRaceway, and Nuerburgring (Fig.~\ref{fig:overview}(a)).
+The Austin track is used for training, while the remaining tracks are reserved for evaluation.
+Within this environment, an automated workflow generates overtaking scenarios at scale across diverse track geometries, raceline configurations, and racing speeds, with each scenario pairing an ego vehicle with a leading opponent.
+A map-based expert supports scenario execution by generating demonstrations for the ego policy while controlling the opponent (Fig.~\ref{fig:overview}(b)).
+We first train a Gated Recurrent Unit (GRU) network on these demonstrations through behavioral cloning (Fig.~\ref{fig:overview}(c)), and then fine-tune the resulting policy through reinforcement learning with PPO (Fig.~\ref{fig:overview}(d)).
+The following sections describe each stage in detail.
 
-\subsection{Scenario Generation}
+\subsection{Overtaking Scenario Generation}
 
-Each scenario involves an ego vehicle and a leading vehicle (opponent) with the initial conditions defined by a set of user-adjustable parameters, \(\{r,\, k,\, d,\, v_\ell\}\):
-\begin{itemize}
-    \item \(r\): raceline selection
-    \item \(k\): number of initial positions of the ego vehicle
-    \item \(d\): initial distance to the leading (opponent) vehicle
-    \item \(v_\ell\): speed profile of the leading vehicle
-\end{itemize}
+Each overtaking scenario pairs an ego vehicle with an opponent initially positioned ahead of it and has a duration of 8 seconds. Vehicle placement is expressed in Frenet coordinates~\cite{werling2010optimal}, in which the longitudinal direction measures progress around the circuit and the lateral direction specifies position across the track width. We specify each scenario using four parameters, \(\left(s_0,\,d_0,\,r_{\mathrm{opp}},\,\alpha_{\mathrm{opp}}\right)\), as detailed below.
 
-Raceline generation \(r\) follows the methodology in~\cite{7963748}, allowing the creation of multiple reference trajectories (e.g., left, center, right) for both the ego and the leading vehicle. The starting positions \(k\) for the ego vehicle are evenly distributed along the track. The leading vehicle is then placed at a distance \(d\) ahead, not too far away from the ego, and its speed profile \(v_\ell\) can be adjusted by a discount factor to facilitate overtaking. This formulation enables users to tailor scenario generation to their specific needs and explore a broad range of racing conditions.
+\noindent\textbf{Ego Starting Position (\(s_0\)).} For each track, we define \(N_s\) equally spaced ego starting positions and fix \(N_s=80\) across all tracks. For example, on the 420~m Austin track, adjacent starting positions are separated by approximately 5.2~m in the longitudinal direction.
+
+\noindent\textbf{Initial Distance (\(d_0\)).} The initial distance \(d_0\) specifies how far ahead of the ego vehicle the opponent is positioned at the start of a scenario. A short distance provides insufficient starting space for the ego vehicle to maneuver. Conversely, a long distance requires the ego vehicle to spend more time catching the opponent, leaving less time for interaction. We therefore set \(d_0=3\)~m to balance these considerations.
+
+\noindent\textbf{Opponent Raceline (\(r_{\mathrm{opp}}\)).} Beyond their longitudinal placement, the relative lateral positions of the ego vehicle and opponent are critical to the overtaking geometry. We specify these positions through reference racelines, which define the paths followed by the vehicles as they progress along the track. To represent this variation, the center reference is placed at \(50\%\) of the local usable track width, while the left and right references are placed at \(35\%\) and \(65\%\), respectively. The usable width excludes a \(0.3\)~m safety margin along each track boundary. For example, the Austin track has an average usable width of approximately \(1.64\)~m, producing an average lateral separation of approximately \(0.25\)~m between the center reference and each side reference. A raceline is generated for each reference following the method in~\cite{7963748}, and \(r_{\mathrm{opp}}\) specifies which raceline is assigned to the opponent. The ego uses the center raceline as its nominal reference but may temporarily deviate from it to overtake or follow a dynamically advantageous path through a curve. The opponent is assigned equally across all three racelines. An opponent following the center raceline leaves limited clearance on either side, whereas either side raceline generally provides a wider passing space on the opposite side.
+
+\noindent\textbf{Opponent Speed Scale (\(\alpha_{\mathrm{opp}}\)).} Let \(v_{r_{\mathrm{opp}}}(s)\) denote the curvature-dependent desired-speed profile of the selected opponent raceline, capped by the vehicle's maximum speed of 7.5~m/s. The scaled opponent reference speed is
+\begin{equation}
+v_{\mathrm{opp}}^{\mathrm{ref}}(s)
+= \alpha_{\mathrm{opp}}\,v_{r_{\mathrm{opp}}}(s).
+\end{equation}
+We set \(\alpha_{\mathrm{opp}}\) to 0.4, 0.6, or 0.8, while the ego retains a speed scale of 1.0. Empirical testing showed that scales below 0.4 produce opponents that are unrealistically slow for competition, whereas scales above 0.8 leave few opportunities for the ego to catch the opponent within 8 seconds. The scale modifies the opponent's desired speed rather than its realized speed, which also depends on local curvature, acceleration limits, and closed-loop tracking.
+
+With \(d_0\) fixed, combining \(N_s=80\) values of \(s_0\), three values of \(r_{\mathrm{opp}}\), and three values of \(\alpha_{\mathrm{opp}}\) yields 720 scenarios per track.
 
 \subsection{Expert Demonstration}
 
