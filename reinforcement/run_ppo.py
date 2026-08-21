@@ -19,11 +19,7 @@ from .train_ppo import (
     VALUE_LOSS_WEIGHT,
     train_epoch,
 )
-from expert.utils import (
-    find_opponent_start_index,
-    get_ego_idx_range,
-    require_end2race_runtime,
-)
+from expert.utils import find_opponent_start_index, get_ego_idx_range
 from f1tenth_sim.utils import load_racetrack_config, load_raceline
 
 ARTIFACT_DIR = Path("checkpoint/ppo")
@@ -233,7 +229,6 @@ def _synchronize_model(model):
 
 def main():
     args = parse_arguments()
-    require_end2race_runtime()
     rank, world_size, device = _initialize_process_group()
     envs = None
     try:
