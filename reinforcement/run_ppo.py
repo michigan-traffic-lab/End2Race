@@ -238,7 +238,6 @@ def main():
     envs = None
     try:
         artifact_dir = ARTIFACT_DIR
-        model_path = artifact_dir / "ppo.pt"
         config_path = artifact_dir / "config.json"
         episodes_path = artifact_dir / "episodes.jsonl"
         metrics_path = artifact_dir / "metrics.jsonl"
@@ -296,6 +295,7 @@ def main():
 
         envs = VectorEnv(args.num_envs, args)
         rng = np.random.default_rng()
+        saved_model_count = 0
         for epoch in itertools.count(1):
             epoch_action_std = model.action_std.detach().cpu().tolist()
             ordered, rollout_summary, statistics = train_epoch(
@@ -351,7 +351,10 @@ def main():
                 )
                 metrics["model_saved"] = model_saved
                 if model_saved:
-                    torch.save(model.model.state_dict(), model_path)
+                    saved_model_count += 1
+                    model_path = artifact_dir / f"ppo_{saved_model_count:03d}.pt"
+                    with model_path.open("xb") as stream:
+                        torch.save(model.model.state_dict(), stream)
                     print(
                         f"{label} saved {model_path.name}: "
                         f"safety {metrics['screening_safety_rate']:.2%} | "

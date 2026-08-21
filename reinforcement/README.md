@@ -16,7 +16,7 @@ The simulator runs at 120 Hz and holds each actor action for three physics steps
 The environment reward is:
 
 ```text
-0.02 * ego_progress_delta
+0.015 * ego_progress_delta
 - 1.0 on ego collision
 ```
 
@@ -42,6 +42,6 @@ torchrun --standalone --nproc_per_node=4 --module reinforcement.run_ppo \
   --checkpoint_path checkpoint/epoch_00500.pt
 ```
 
-PPO saves `config.json`, `episodes.jsonl`, `metrics.jsonl`, and the deployable policy `ppo.pt` directly inside `checkpoint/ppo/`. Every deterministic full-pool evaluation with safety strictly greater than 95% and an overtake rate strictly greater than 90% overwrites `ppo.pt` with the policy weights only. The critic, optimizer, and runtime training state are never saved. `episodes.jsonl` identifies every training and screening scenario by epoch. Each `metrics.jsonl` record contains the screening safe, collision, and overtake counts and rates, the training rollout summary, and whether that epoch saved the model. Each launch starts with a clean `checkpoint/ppo/` directory.
+PPO saves `config.json`, `episodes.jsonl`, `metrics.jsonl`, and deployable policies directly inside `checkpoint/ppo/`. Every deterministic full-pool evaluation with safety strictly greater than 95% and an overtake rate strictly greater than 90% saves a new policy with the next qualifying-evaluation number: `ppo_001.pt`, `ppo_002.pt`, and so on. These files contain policy weights only and are never overwritten. The critic, optimizer, and runtime training state are never saved. `episodes.jsonl` identifies every training and screening scenario by epoch. Each `metrics.jsonl` record contains the screening safe, collision, and overtake counts and rates, the training rollout summary, and whether that epoch saved a model. Each launch starts with a clean `checkpoint/ppo/` directory.
 
 The terminal reports the learning rate once at startup and one global start and completion line for each deterministic screening. Each completed stochastic training batch reports collision, following, and overtaking counts; policy steering and speed mean and standard deviation; mean value estimate, episode return, and elapsed phase time. Each PPO update reports value loss, approximate KL divergence, clip fraction, and gradient norms before and after clipping. Repeated Gym maintenance notices and the expected RK4 integrator warning are suppressed for PPO workers.

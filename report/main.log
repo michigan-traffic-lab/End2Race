@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.25 (TeX Live 2023/Debian) (preloaded format=pdflatex 2026.5.26)  19 AUG 2026 16:27
+This is pdfTeX, Version 3.141592653-2.6-1.40.25 (TeX Live 2023/Debian) (preloaded format=pdflatex 2026.5.26)  19 AUG 2026 17:00
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
@@ -436,7 +436,10 @@ File: figures/follow.pdf Graphic file (type pdf)
 <use figures/follow.pdf>
 Package pdftex.def Info: figures/follow.pdf  used on input line 407.
 (pdftex.def)             Requested size: 505.89pt x 128.7756pt.
-[5] [6 <./figures/overtake.pdf> <./figures/follow.pdf
+[5]
+Underfull \vbox (badness 10000) has occurred while \output is active []
+
+ [6 <./figures/overtake.pdf> <./figures/follow.pdf
 
 pdfTeX warning: pdflatex (file ./figures/follow.pdf): PDF inclusion: multiple p
 dfs with page group included in a single page
@@ -478,7 +481,7 @@ L3 programming layer <2024-01-22>
 Here is how much of TeX's memory you used:
  4685 strings out of 476182
  75308 string characters out of 5795595
- 1955975 words of memory out of 5000000
+ 1953975 words of memory out of 5000000
  26597 multiletter control sequences out of 15000+600000
  607835 words of font info for 136 fonts, out of 8000000 for 9000
  14 hyphenation exceptions out of 8191
@@ -496,7 +499,7 @@ symbols/msbm10.pfb></usr/share/texlive/texmf-dist/fonts/type1/urw/times/utmb8a.
 pfb></usr/share/texlive/texmf-dist/fonts/type1/urw/times/utmbi8a.pfb></usr/shar
 e/texlive/texmf-dist/fonts/type1/urw/times/utmr8a.pfb></usr/share/texlive/texmf
 -dist/fonts/type1/urw/times/utmri8a.pfb>
-Output written on main.pdf (8 pages, 628372 bytes).
+Output written on main.pdf (8 pages, 628528 bytes).
 PDF statistics:
  289 PDF objects out of 1000 (max. 8388607)
  169 compressed objects within 2 object streams

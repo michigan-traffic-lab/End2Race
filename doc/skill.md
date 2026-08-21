@@ -84,9 +84,9 @@ The `reinforcement/run_ppo.py` orchestrator owns PPO artifact persistence.
 
 - Keep the model, training state, metrics, and resolved configuration together in one flat artifact directory.
 - Keep PPO artifacts flat inside `checkpoint/ppo/`. Do not expose another PPO artifact-directory path.
-- Use role-based names: `ppo.pt` for the deployable PPO model and `config.json` for the resolved configuration.
+- Use `ppo_NNN.pt` for deployable PPO models, numbered consecutively from `ppo_001.pt` for each qualifying evaluation, and `config.json` for the resolved configuration.
 - Reserve `.jsonl` for append-only streams such as `metrics.jsonl` and `episodes.jsonl`; write a record produced once to `.json`.
-- Overwrite `ppo.pt` in place. Do not keep per-epoch or per-update history, numbered snapshots, or duplicate model aliases.
+- Save every qualifying PPO model under its next consecutive number without overwriting an earlier qualifying model. Do not save models for non-qualifying epochs or create duplicate model aliases.
 - Do not save optimizer, critic, training, or resume state for PPO.
 - Do not repeat experiment, model, map, or method names in filenames when the directory or saved configuration already records them.
 - Do not create nested run, model, checkpoint, or metrics directories beneath the artifact directory.
