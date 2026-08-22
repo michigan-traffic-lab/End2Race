@@ -1,12 +1,24 @@
 {
-  "schema_version": 1,
-  "generated_at_utc": "2026-08-15T00:35:29Z",
-  "source": "existing_collection_artifacts",
+  "generated_at_utc": "2026-08-21T21:03:22Z",
   "collection_config": {
     "mode": "multi_agent",
     "map_name": "Austin",
     "ego_raceline": "raceline1",
     "num_startpoints": 80,
+    "opponent_racelines": [
+      "raceline0",
+      "raceline1",
+      "raceline2"
+    ],
+    "opponent_speed_scales": [
+      0.4,
+      0.6,
+      0.8
+    ],
+    "interval_index": 15,
+    "simulation_duration_seconds": 8.0,
+    "render": false,
+    "workers": 8,
     "ego_indices": [
       0,
       26,
@@ -89,28 +101,9 @@
       2044,
       2070
     ],
-    "opponent_racelines": [
-      "raceline0",
-      "raceline1",
-      "raceline2"
-    ],
-    "opponent_speed_scales": [
-      0.4,
-      0.6,
-      0.8
-    ],
-    "interval_index": 15,
-    "simulation_duration_seconds": 8.0,
     "simulation_frequency_hz": 120,
-    "simulation_timestep_seconds": 0.008333333333333333,
     "control_frequency_hz": 40,
-    "control_timestep_seconds": 0.025,
-    "simulation_steps_per_control": 3,
-    "expert_planner_frequency_hz": 10,
-    "simulation_steps_per_expert_plan": 12,
-    "sample_interval_seconds": 0.025,
-    "render": false,
-    "workers": 12
+    "expert_planner_frequency_hz": 10
   },
   "data_config": {
     "lidar_features": 180,
@@ -118,6 +111,7 @@
     "vehicle": {
       "steering_limit": 0.4189,
       "maximum_speed": 7.5,
+      "length": 0.58,
       "width": 0.31,
       "mass": 3.362,
       "drag_coefficient": 0.0075
@@ -140,36 +134,24 @@
       "max_lookahead": 2.5,
       "lookahead_speed_scale": 8.0,
       "steering_gain": 0.8,
-      "interpolation_points": 10
+      "interpolation_points": 10,
+      "parallel_workers": 4
     }
   },
   "results": {
     "expected_scenarios": 720,
-    "recorded_scenarios": 720,
-    "missing_scenarios": 0,
-    "unexpected_extra_scenarios": 0,
     "collection_process_failures": 0,
+    "recorded_scenarios": 720,
     "collision_free_scenarios": 642,
     "collision_scenarios": 78,
     "successful_overtakes": 619,
     "collision_free_following": 23,
-    "collision_final_state": {
-      "overtaking": 53,
-      "following": 25
-    },
-    "rates_percent_of_recorded": {
-      "collision_free": 89.1667,
-      "collision": 10.8333,
-      "successful_overtake": 85.9722,
-      "collision_free_following": 3.1944
-    },
+    "collision_free_rate_percent": 89.1667,
+    "successful_overtake_rate_percent": 85.9722,
+    "collisions_while_overtaking": 53,
     "training_rows": 205440,
-    "artifacts": {
-      "success_csv": 642,
-      "collision_json": 78,
-      "success_video": 0,
-      "collision_video": 0
-    },
+    "success_videos": 0,
+    "collision_videos": 0,
     "breakdown": [
       {
         "opponent_raceline": "raceline0",

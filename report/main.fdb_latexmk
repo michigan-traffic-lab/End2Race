@@ -1,15 +1,16 @@
 # Fdb version 4
-["bibtex main"] 1787288971.12759 "main.aux" "main.bbl" "main" 1787288971.36113 0
-  "./F1Tenth.bib" 1787288673.46344 15310 a45054e69e29686ba4f2cd7b39f701e2 ""
+["bibtex main"] 1787350561.2711 "main.aux" "main.bbl" "main" 1787350561.50731 0
+  "./F1Tenth.bib" 1787346610.83424 15215 b98399a500f551cf13935034f599f047 ""
   "/usr/share/texlive/texmf-dist/bibtex/bst/base/ieeetr.bst" 1292289607 18361 1a00e58565e7f19bf2b3e1bfb82254ae ""
-  "main.aux" 1787288971.31131 6505 0dd6a79be8c209438ac959dc8601d5da "pdflatex"
+  "main.aux" 1787350561.46258 6615 052cf6c80d7c73fcda82f404785833a6 "pdflatex"
   (generated)
   "main.bbl"
   "main.blg"
   (rewritten before read)
-["pdflatex"] 1787288971.13931 "main.tex" "main.pdf" "main" 1787288971.36123 0
+["pdflatex"] 1787350561.28597 "/home/zhijie/Research/End2Race/report/main.tex" "main.pdf" "main" 1787350561.50744 0
   "/etc/texmf/web2c/texmf.cnf" 1779824601.61643 475 c0e671620eb5563b2130f56340a5fde8 ""
   "/home/zhijie/.texlive2023/texmf-var/fonts/map/pdftex/updmap/pdftex.map" 1785371197.72818 168270 5798690ade9f3ff9086a006a39ff7659 ""
+  "/home/zhijie/Research/End2Race/report/main.tex" 1787350560.90353 46163 d9eaf5acf24527a35076976069a42fe0 ""
   "/usr/share/texlive/texmf-dist/fonts/enc/dvips/base/8r.enc" 1165713224 4850 80dc9bab7f31fb78a000ccfed0e27cab ""
   "/usr/share/texlive/texmf-dist/fonts/map/fontname/texfonts.map" 1577235249 3524 cb3e574dea2d1052e39280babc910dc8 ""
   "/usr/share/texlive/texmf-dist/fonts/tfm/adobe/symbol/psyr.tfm" 1136768653 1408 5937f58aa508ea2cea4901c07d10f5fe ""
@@ -52,7 +53,6 @@
   "/usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi10.pfb" 1248133631 36299 5f9df58c2139e7edcf37c8fca4bd384d ""
   "/usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi7.pfb" 1248133631 36281 c355509802a035cadc5f15869451dcee ""
   "/usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmr10.pfb" 1248133631 35752 024fb6c41858982481f6968b5fc26508 ""
-  "/usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmr5.pfb" 1248133631 31809 8670ca339bf94e56da1fc21c80635e2a ""
   "/usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmr6.pfb" 1248133631 32734 69e00a6b65cedb993666e42eedb3d48f ""
   "/usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmr7.pfb" 1248133631 32762 224316ccc9ad3ca0423a14971cfa7fc1 ""
   "/usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy10.pfb" 1248133631 32569 5e5ddc8df908dea60932f3c484a54c0d ""
@@ -118,9 +118,9 @@
   "figures/overtake.pdf" 1785798852 137999 431dde2c75984a1258aa057db6106ab4 ""
   "figures/scenario.pdf" 1785798852 66205 8c0c4e8f348770305e00d07075ae1ddc ""
   "ieeeconf.cls" 1785798854 197574 c8a8a2004c9762153e255667fc17d954 ""
-  "main.aux" 1787288971.31131 6505 0dd6a79be8c209438ac959dc8601d5da "pdflatex"
-  "main.bbl" 1787288971.13772 9128 aa250512803b20881ef606460296d7d0 "bibtex main"
-  "main.tex" 1787288968.48024 46202 16053f1668f5b25e524b6e4afa6e890f ""
+  "main.aux" 1787350561.46258 6615 052cf6c80d7c73fcda82f404785833a6 "pdflatex"
+  "main.bbl" 1787350561.28435 8938 0abc7184729739ec25d8d6d0ea3565b4 "bibtex main"
+  "main.tex" 1787350560.90353 46163 d9eaf5acf24527a35076976069a42fe0 ""
   (generated)
   "main.aux"
   "main.log"

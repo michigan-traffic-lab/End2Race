@@ -10,7 +10,7 @@ import numpy as np
 import torch
 from f110_gym.envs.base_classes import Integrator
 
-from expert.lattice_planner import create_opponent
+from expert.controllers import RacelineFollower
 from expert.utils import (
     calculate_metrics,
     create_multiagent_render_callback,
@@ -120,7 +120,7 @@ def evaluate_segment(model, device, vehicle, args):
         env.add_render_callback(render_callback)
 
     video_frames = []
-    opponent = create_opponent(args.map_name, args.opponent_raceline)
+    opponent = RacelineFollower(args.map_name, args.opponent_raceline)
     tracker_steps = opponent.conf.tracker_steps
     hidden_size = model.gru.hidden_size
     hidden_state = torch.zeros((1, 1, hidden_size), device=device)
@@ -191,12 +191,9 @@ def evaluate_segment(model, device, vehicle, args):
             previous_speed = obs["linear_vels_x"][0]
 
         if tracker_count == 0:
-            opponent_trajectory = opponent.plan(
+            opponent_trajectory = opponent.reference_trajectory(
                 obs["poses_x"][1],
                 obs["poses_y"][1],
-                obs["poses_theta"][1],
-                obs["scans"][1],
-                obs["linear_vels_x"][1],
             )
 
         opponent_steer, opponent_speed = opponent.tracker.plan(

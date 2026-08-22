@@ -6,43 +6,43 @@ Database file #1: F1Tenth.bib
 Warning--empty journal in bc
 You've used 40 entries,
             1876 wiz_defined-function locations,
-            698 strings with 12039 characters,
-and the built_in function-call counts, 11571 in all, are:
-= -- 1032
-> -- 601
+            696 strings with 12068 characters,
+and the built_in function-call counts, 11375 in all, are:
+= -- 1005
+> -- 610
 < -- 1
-+ -- 215
-- -- 175
-* -- 849
-:= -- 1636
++ -- 218
+- -- 178
+* -- 840
+:= -- 1622
 add.period$ -- 40
 call.type$ -- 40
 change.case$ -- 38
 chr.to.int$ -- 0
 cite$ -- 41
-duplicate$ -- 581
-empty$ -- 1080
-format.name$ -- 175
-if$ -- 2797
+duplicate$ -- 562
+empty$ -- 1058
+format.name$ -- 178
+if$ -- 2740
 int.to.chr$ -- 0
 int.to.str$ -- 40
-missing$ -- 31
+missing$ -- 30
 newline$ -- 123
 num.names$ -- 38
 pop$ -- 188
 preamble$ -- 1
 purify$ -- 0
 quote$ -- 0
-skip$ -- 405
+skip$ -- 391
 stack$ -- 0
-substring$ -- 711
-swap$ -- 235
+substring$ -- 675
+swap$ -- 224
 text.length$ -- 1
 text.prefix$ -- 0
 top$ -- 0
 type$ -- 0
 warning$ -- 1
-while$ -- 93
+while$ -- 91
 width$ -- 42
-write$ -- 361
+write$ -- 359
 (There was 1 warning)

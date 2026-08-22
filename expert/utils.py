@@ -3,6 +3,7 @@ import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 from numba import njit
@@ -17,6 +18,13 @@ from f1tenth_sim.utils import (
 
 def load_expert_config():
     return load_yaml_config(Path(__file__).resolve().parent / "config.yaml")
+
+
+def expert_configuration():
+    return SimpleNamespace(
+        **vars(load_expert_config().expert),
+        **vars(load_racetrack_config().vehicle),
+    )
 
 
 @njit(cache=True)

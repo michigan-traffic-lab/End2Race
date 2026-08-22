@@ -39,7 +39,8 @@ end2race/
 ├── expert/
 │   ├── collect.py             # One expert collection scenario
 │   ├── collect.sh             # Parallel collection orchestrator
-│   ├── lattice_planner.py     # PythonRobotics FOT expert and trajectory tracker
+│   ├── controllers.py         # Pure Pursuit and passive raceline controllers
+│   ├── lattice_planner.py     # PythonRobotics FOT expert
 │   ├── config.yaml            # Expert-planner configuration
 │   └── utils.py               # Shared racing and collection utilities
 ├── install.sh                 # Dependency installation

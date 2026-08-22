@@ -11,13 +11,13 @@ This package trains an End2Race policy with recurrent PPO. `train_ppo.py` contai
 - Each trajectory receives per-step GAE. After all 720 trajectories are collected, two PPO-Clip and value-regression updates reuse the fixed rollout estimates and advantage statistics reduced across every rank. Gradients accumulate across local worker-sized rollout chunks, are summed across ranks, and are globally clipped before every identical optimizer step on every replica.
 - Evaluation runs after both updates. Deterministic screening of all 720 scenarios is divided across ranks and gathered by rank 0.
 
-The simulator runs at 120 Hz and holds each actor action for three physics steps, matching the 40 Hz End2Race control rate. PPO bounds the actor's desired speed to `[0, 20]`. The expert `RacelineFollower` controls the opponent with a 120 Hz tracker and 10 Hz replanning.
+The simulator runs at 120 Hz and holds each actor action for three physics steps, matching the 40 Hz End2Race control rate. PPO bounds the actor's desired speed to `[0, 20]`. The non-reactive `RacelineFollower` controls the opponent with 120 Hz Pure Pursuit tracking and a 10 Hz reference-segment refresh.
 
 The environment reward is:
 
 ```text
 0.01 * ego_progress_delta
-- 1.0 on ego collision
+- 2.0 on ego collision
 ```
 
 An overtake is classified when the ego center reaches at least one full vehicle length (`0.58 m`) ahead of the opponent center in wrapped Frenet progress. The policy observes 180 ego LiDAR values and the previous ego speed. A trajectory ends on ego collision or at the configured time limit. Opponent ground-truth poses support outcome classification.
