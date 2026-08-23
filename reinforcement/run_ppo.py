@@ -24,8 +24,8 @@ from f1tenth_sim.utils import load_racetrack_config, load_raceline
 
 ARTIFACT_DIR = Path("checkpoint/ppo")
 LEARNING_RATE = 1e-5
-MINIMUM_SAFETY_RATE = 0.95
-MINIMUM_OVERTAKE_RATE = 0.9
+MINIMUM_SAFETY_RATE = 0.98
+MINIMUM_OVERTAKE_RATE = 0.6
 
 
 def parse_arguments():
