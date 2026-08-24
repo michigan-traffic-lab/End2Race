@@ -78,6 +78,52 @@ current, and consistent with the repository's concise script-oriented style.
 - Keep the multi-agent evaluator responsible only for multi-agent evaluation.
 - Keep pipeline sequencing, checkpoint screening, retries, process supervision, and monitoring in an external orchestrator.
 
+## Build Clean Imitation-Learning Ablations
+
+Treat the baseline implementation as the control. Keep it unchanged and create
+standalone sibling files for each ablation. An ablation changes one requested
+factor; parameter tuning and additional architectural features are separate
+experiments.
+
+### Modify the Model at One Boundary
+
+- Start by copying `imitation/model.py` to `imitation/model_<ablation>.py`. Preserve unchanged code, ordering, formatting, constants, preprocessing, masking, initialization, and output layers.
+- Do not import, subclass, or wrap the baseline model to implement the ablation. The sibling model must remain readable and runnable on its own.
+- Replace only the module under study and the state handling that replacement requires. Keep the input ordering and output contract unchanged unless they are the explicit ablation factor.
+- For a temporal-backbone ablation, preserve the complete path through LiDAR preprocessing, previous-speed embedding, masking, and concatenation into `[B, T, 210]`; replace the GRU block at that point and continue to produce `[B, T, 420]` for the unchanged action head.
+- When capacity matching is requested, report both exact trainable-parameter counts and the difference. Do not add unrelated layers merely to claim architectural equivalence.
+- Prefer maintained PyTorch modules over handwritten attention, normalization, or recurrent primitives. For a Transformer replacement, use `nn.TransformerEncoderLayer` and `nn.TransformerEncoder` unless the requested factor cannot be represented by them.
+- Do not add RoPE, KV caching, residual scaling, dropout, new normalization, auxiliary losses, or other Transformer features unless one is explicitly the factor being tested.
+- Preserve the baseline initialization policy. Add only the minimal initialization needed to prevent cloned Transformer layers from starting with identical parameters.
+- Keep streaming state explicit in `encode()` and `forward()`. A context window or cache must have one documented length and the evaluator must pass back exactly the state returned by the model.
+
+### Copy the Training Pipeline Before Replacing the Model
+
+- Start by copying `imitation/train.py` to `imitation/train_<ablation>.py`. Keep `SequenceDataset` and `train_epoch` local; do not import them from the baseline training module.
+- Change only the model import and class, the ablation checkpoint directory, model-specific constants, and the forward-state unpacking required by the new model.
+- Preserve dataset discovery, column order, sequence construction, previous-speed alignment, DataLoader behavior, initialization, optimizer, loss terms and weights, gradient clipping, epoch count, checkpoint interval, and all default arguments.
+- If the baseline does not set a training seed or a fixed DataLoader generator, do not add either to the ablation. Keep an evaluator seed separate from training randomness.
+- Do not add a scheduler, warmup, dropout, resume state, optimizer checkpoint, mixed precision, or broader CLI solely because the replacement architecture commonly uses it.
+- A hyperparameter sweep is not the clean ablation. Give it a separate script and artifact name, and do not parameterize the canonical ablation trainer unless the user explicitly requests that permanent interface.
+- Save the canonical checkpoint under `checkpoint/ckp_ablation_<ablation>/epoch_00500.pt`. When repeated tuned runs share that directory, encode only the changed values and repetition index, for example `epoch500_bs128_lr1e-4_1.pt`; do not label an unseeded run with a seed.
+
+### Copy Evaluators and Preserve the Protocol
+
+- Leave `evaluation/eval_single.py`, `evaluation/eval_multi.py`, and `evaluation/eval_multi.sh` unchanged. Create `evalsingle_ablation_<ablation>.py`, `evalmulti_ablation_<ablation>.py`, and `evalmulti_ablation_<ablation>.sh` as standalone copies.
+- In the copied evaluators, replace only the model import and class, default checkpoint and output paths, recurrent-state initialization, model call, and shell module name required by the ablation.
+- Preserve maps, scenario grids, start points, opponent policies and speeds, simulation duration, control rate, noise, evaluation seed, rendering default, worker count, stopping rules, metrics, exit status, and `results.json` schema.
+- Load checkpoints strictly into the ablation class. Run Python evaluators from the repository root with `python -m evaluation.<module>` so repository imports resolve consistently.
+- Keep result roots separate, such as `eval_results/<ablation>_ablation/<checkpoint_stem>/`, so different models and baseline results cannot overwrite one another.
+
+### Verify the Single Changed Factor
+
+- Diff each ablation file against its baseline and enumerate every difference. Any unexplained difference invalidates a clean single-factor claim.
+- Verify preprocessing and tensors immediately before the replaced module are equal for controlled inputs. Check output shapes, parameter counts, finite loss and gradients, and a real optimizer update for every parameter group.
+- For causal sequence models, test that future-token changes do not affect past outputs, full-sequence and streaming outputs agree over the trained window, and behavior remains finite after the context window begins sliding.
+- Compile each Python entry point, run `bash -n` on each shell script, strictly load the intended checkpoint, and run at least one single-agent and one multi-agent smoke scenario before a full panel.
+- Qualify a full multi-agent panel only when `planned_scenarios`, `completed_scenarios`, `complete`, and `errors` prove that the requested scenario set finished. Do not infer completion from videos, directory size, or process exit alone.
+- Report steering and speed losses separately from their weighted sum. Keep training fit, closed-loop performance, and causal explanations distinct; a lower supervised loss does not by itself establish a better controller.
+
 ## Name and Save Artifacts Simply
 
 The `reinforcement/run_ppo.py` orchestrator owns PPO artifact persistence.

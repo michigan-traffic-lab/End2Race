@@ -8,3 +8,5 @@ eval_results/
 
 f1tenth_sim/f1tenth_gym/docs/html/
 f1tenth_sim/f1tenth_gym/docs/xml/
+checkpoint/ckp_ablation*/
+run.sh
