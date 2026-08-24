@@ -250,15 +250,18 @@ The following sections describe each stage in detail.
 
 Each overtaking scenario pairs an ego vehicle with an opponent initially positioned ahead of it and has a duration of 8 seconds. Vehicle placement is expressed in Frenet coordinates~\cite{werling2010optimal}, in which the longitudinal direction measures progress around the circuit and the lateral direction specifies position across the track width. We specify each scenario using four parameters, \(\left(s_0,\,d_0,\,r_{\mathrm{opp}},\,\alpha_{\mathrm{opp}}\right)\), as detailed below.
 
-\noindent\textbf{Ego Starting Position (\(s_0\)).} For each track, we define \(N_s\) ego starting positions equally spaced in the longitudinal direction, with \(N_s=80\) fixed across all tracks. For example, on the 420~m Austin track, adjacent starting positions are separated by approximately 5.2~m.
+\subsubsection{Ego Starting Position (\(s_0\))}
+For each track, we define \(N_s\) ego starting positions equally spaced in the longitudinal direction, with \(N_s=80\) fixed across all tracks. For example, on the 420~m Austin track, adjacent starting positions are separated by approximately 5.2~m.
 
-\noindent\textbf{Initial Distance (\(d_0\)).} The initial distance \(d_0\) specifies how far the opponent is positioned longitudinally ahead of the ego vehicle at the start of a scenario. A short distance provides insufficient starting space for the ego vehicle to maneuver, while a long distance requires the ego vehicle to spend more time catching the opponent, leaving less time for interaction. We therefore set \(d_0=3\)~m to balance these considerations.
+\subsubsection{Initial Distance (\(d_0\))}
+The initial distance \(d_0\) specifies how far the opponent is positioned longitudinally ahead of the ego vehicle at the start of a scenario. A short distance provides insufficient starting space for the ego vehicle to maneuver, while a long distance requires the ego vehicle to spend more time catching the opponent, leaving less time for interaction. We therefore set \(d_0=3\)~m to balance these considerations.
 
-\noindent\textbf{Opponent Raceline (\(r_{\mathrm{opp}}\)).} Beyond their longitudinal placement, the relative lateral positions of the ego vehicle and opponent are critical to the overtaking geometry. We represent this configuration using racelines, which define the reference paths followed by the vehicles around the circuit. Using the trajectory-generation framework of Heilmeier et al.~\cite{Heilmeier02102020}, we construct left, center, and right racelines at \(35\%\), \(50\%\), and \(65\%\) of the local track width, respectively. For Austin, an average track width of \(1.64\)~m yields an approximately \(0.25\)~m separation between the center and each side raceline.
-
+\subsubsection{Opponent Raceline (\(r_{\mathrm{opp}}\))}
+Beyond their longitudinal placement, the relative lateral positions of the ego vehicle and opponent are critical to the overtaking geometry. We represent this configuration using racelines, which define the reference paths followed by the vehicles around the circuit. Using the trajectory-generation framework of Heilmeier et al.~\cite{Heilmeier02102020}, we construct left, center, and right racelines at \(35\%\), \(50\%\), and \(65\%\) of the local track width, respectively. For Austin, an average track width of \(1.64\)~m yields an approximately \(0.25\)~m separation between the center and each side raceline.
 The ego vehicle starts on the center raceline but may temporarily deviate from it to overtake or take a faster line through a corner. The opponent, by contrast, follows the raceline specified by \(r_{\mathrm{opp}}\), with all three choices equally represented across the scenarios. An opponent on the center raceline leaves limited clearance on both sides and is therefore harder to pass, whereas one on a side raceline leaves wider passing space.
 
-\noindent\textbf{Opponent Speed Scale (\(\alpha_{\mathrm{opp}}\)).} To facilitate effective overtaking behavior, the ego vehicle must have a speed advantage over the opponent. Here, we define a maximum vehicle speed of 7.5~m/s, equivalent to approximately 168~mph at full scale. This limit is based on empirical testing, which showed that higher speeds compromise control stability under the vehicle's dynamic constraints. The ego vehicle retains this limit, while the opponent's raceline speed profile is scaled by a factor of \(\alpha_{\mathrm{opp}}\).
+\subsubsection{Opponent Speed Scale (\(\alpha_{\mathrm{opp}}\))}
+To facilitate effective overtaking behavior, the ego vehicle must have a speed advantage over the opponent. Here, we define a maximum vehicle speed of 7.5~m/s, equivalent to approximately 168~mph at full scale. This limit is based on empirical testing, which showed that higher speeds compromise control stability under the vehicle's dynamic constraints. The ego vehicle retains this limit, while the opponent's raceline speed profile is scaled by a factor of \(\alpha_{\mathrm{opp}}\).
 We use \(\alpha_{\mathrm{opp}}\in\{0.4,0.6,0.8\}\), corresponding to maximum opponent reference speeds of \(\{3.0,4.5,6.0\}\)~m/s, respectively. Values below 0.4 make the opponent unrealistically slow for competitive racing, while values above 0.8 often prevent the ego vehicle from catching up to the opponent within the 8-second scenario.
 
 Together, \(s_0\) and \(d_0\) determine the vehicles' initial longitudinal configuration, while \(r_{\mathrm{opp}}\) and \(\alpha_{\mathrm{opp}}\) specify the opponent's path and speed profile. The opponent passively tracks its assigned raceline using a Pure Pursuit controller and does not engage in adversarial behavior, such as active blocking or abrupt acceleration~\cite{zheng2023gametheoreticobjectivespaceplanning}. With \(d_0\) fixed, the 80 starting positions, three opponent racelines, and three speed scales yield 720 scenarios per track, each lasting 8 seconds.
@@ -312,36 +315,45 @@ For behavioral-cloning training (Sec.~\ref{sec:behavioral-cloning}), we exclude 
 \subsection{Model Architecture}
 
 We adopt an end-to-end policy that maps sensory inputs and the current vehicle state directly to control outputs.
-At each timestep~\(t\), the sensory input is a 360-degree 2D LiDAR scan comprising 180 beams at an angular resolution of 2 degrees.
-To maintain dynamic consistency across consecutive model predictions, the current ego speed is also included as input.
-The control output consists of the desired vehicle speed in meters per second and the steering angle in radians.
+At each timestep~\(t\), the policy receives a 360-degree 2D LiDAR scan comprising 180 beams at an angular resolution of 2 degrees.
+The current ego speed is also provided as input to maintain dynamic consistency across consecutive model predictions.
+The policy outputs the desired vehicle speed in meters per second and the steering angle in radians.
+To capture temporal dependencies in ego and opponent motion, we use a Gated Recurrent Unit (GRU), an architecture that uses reset and update gates to selectively retain relevant history and incorporate new information over time.
+In End2Race, the hidden state summarizes previous observations and provides temporal context for each control prediction.
 
-To capture temporal dependencies in ego and opponent motion, we use a Gated Recurrent Unit (GRU) that summarizes previous observations in its hidden state.
+\subsubsection{LiDAR Representation}
 
 For LiDAR processing, the scan $\mathbf{z}_t$ is normalized elementwise into spatial pressure tokens using a sigmoid function $\sigma(\cdot)$, defined as
 \begin{equation}
     \sigma(x) = \left(-\frac{1}{1 + e^{-k x}} + 1\right) \cdot 2
 \end{equation}
 where $x$ denotes a single LiDAR scan beam of $\mathbf{z}_t$, and the fixed coefficient $k=0.3$ determines the effective sensing range.
-
 This normalization maps each raw scan value, \( x \in [0, \infty) \), to a spatial pressure token within the range \( [0, 1] \). The S-shaped curve of the sigmoid ensures that large scan distances \( x \) are mapped to values that asymptotically approach zero, meaning distant obstacles have minimal influence on the network. As obstacles become closer, the token value increases rapidly and nonlinearly, making the system much more sensitive to nearby objects. At the same time, the maximum value is bounded at \( 1 \) as \( x \) approaches zero, ensuring stable normalization outputs. In this way, the LiDAR inputs are represented in a nonlinear, continuous, and differentiable manner that naturally aligns with human cognition. This facilitates more efficient training and enables the model to converge more effectively.
 
-The most recently measured ego speed \(v_{t-1} \in \mathbb{R}\) is projected through a learned linear layer into a 30-dimensional embedding \(\psi(v_{t-1})\). Concatenating this embedding with the 180 spatial pressure tokens produces a 210-dimensional GRU input. The recurrent update is defined as
+\subsubsection{Ego-Speed Embedding}
+
+The most recently measured ego speed \(v_{t-1} \in \mathbb{R}\) is projected through a learned linear layer into a 30-dimensional embedding \(\psi(v_{t-1})\).
+During behavioral-cloning training, we prevent shortcut learning~\cite{shortcut}, where the model simply copies the ego-speed input to its output, by randomly replacing this embedding with a learnable mask:
+\begin{equation}
+\widetilde{\psi}(v_{t-1}) =
+\begin{cases}
+    \psi(v_{t-1}), & \text{with probability } 1-p \\
+    \mathbf{e}_{\mathrm{mask}}, & \text{with probability } p.
+\end{cases}
+\end{equation}
+We set \(p=0.2\), encouraging the model to extract meaningful patterns from the LiDAR input rather than relying primarily on the ego speed. Masking is disabled during inference, when the projected ego speed is always used.
+
+\subsubsection{Recurrent Control Prediction}
+
+Concatenating the 180 spatial pressure tokens with the 30-dimensional ego-speed embedding produces a 210-dimensional GRU input. At each timestep, the GRU combines this input with the preceding hidden state:
 \begin{equation}
     \mathbf{h}_t = \mathrm{GRU}_\theta\left(\sigma(\mathbf{z}_t) \Vert \psi(v_{t-1}),\, \mathbf{h}_{t-1}\right),
 \end{equation}
-where \(\mathbf{h}_t \in \mathbb{R}^{420}\) is the updated hidden state. Its dimensionality is twice that of the GRU input.
+where \(\mathbf{h}_t \in \mathbb{R}^{420}\) is the updated hidden state, with twice the dimensionality of the GRU input. A two-layer MLP decoder head (\(420 \rightarrow 128 \rightarrow 2\)) then maps \(\mathbf{h}_t\) to the steering-angle and desired-speed commands, \(\mathbf{a}_t=[\delta_t,v_t^{\mathrm{des}}]\).
 
-Finally, the control actions are derived from the hidden state using a two-layer multilayer perceptron (MLP):
-\begin{equation}
-\begin{split}
-    \mathbf{h}_t' &= \mathrm{ReLU}(W_1 \mathbf{h}_t + \mathbf{b}_1), \\
-    \mathbf{a}_t  &= W_2 \mathbf{h}_t' + \mathbf{b}_2
-\end{split}
-\end{equation}
-where $\mathbf{a}_t = [\delta_t, v_t^{\mathrm{des}}]$ contains the steering-angle and desired-speed commands, respectively.
+\subsection{Policy Training}
 
-\subsection{Behavioral Cloning}
+\subsubsection{Behavioral Cloning}
 \label{sec:behavioral-cloning}
 
 To preserve temporal dependencies, each scenario input sequence is considered in its entirety, producing predictions at each timestep and aggregating losses across the full temporal horizon. The loss function is defined as a weighted sum of mean squared errors (MSE) for both the ego vehicle’s speed and steering angle, balancing their relative scales and jointly guiding the model toward accurate control.
@@ -349,18 +361,7 @@ To preserve temporal dependencies, each scenario input sequence is considered in
 \mathcal{L} = 0.05\, \mathcal{L}_{\text{speed}} + \mathcal{L}_{\text{steer}}
 \end{equation}
 
-To prevent shortcut learning~\cite{shortcut}, where the model simply copies the current ego speed as output, we employ a masking technique that randomly replaces the ego speed embedding with a learnable mask.
-\begin{equation}
-\psi(v_t) =
-\begin{cases}
-    \psi(v_t), & \text{with probability } 1-p \\
-    \mathbf{e}_{\mathrm{mask}}, & \text{with probability } p
-\end{cases}
-\end{equation}
-
-During training, we set the masking probability to \(p = 0.1\). This strategy encourages the model to extract meaningful patterns from the LiDAR input while still leveraging previous vehicle dynamics for smoother control.
-
-\subsection{Reinforcement Learning Fine-Tuning}
+\subsubsection{Reinforcement Learning Fine-Tuning}
 \label{sec:rl-finetuning}
 
 TBD
