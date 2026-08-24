@@ -1,13 +1,13 @@
 # Fdb version 4
-["bibtex main"] 1787593524.33633 "main.aux" "main.bbl" "main" 1787593524.56399 0
-  "./F1Tenth.bib" 1787515154.67844 15697 c14fc79a748397bd24ba03407b5daf06 ""
+["bibtex main"] 1787605918.86671 "main.aux" "main.bbl" "main" 1787606065.5814 0
+  "./F1Tenth.bib" 1787595402.00325 15987 f6716e84d56320e14e107e6d5e57ed4c ""
   "/usr/share/texlive/texmf-dist/bibtex/bst/base/ieeetr.bst" 1292289607 18361 1a00e58565e7f19bf2b3e1bfb82254ae ""
-  "main.aux" 1787593524.51551 8566 44a389717c180d02a150fee177740375 "pdflatex"
+  "main.aux" 1787606065.53194 8730 e12d25429125bda024b0f6fcd51756ea "pdflatex"
   (generated)
   "main.bbl"
   "main.blg"
   (rewritten before read)
-["pdflatex"] 1787593524.34969 "main.tex" "main.pdf" "main" 1787593524.5641 0
+["pdflatex"] 1787606065.36731 "main.tex" "main.pdf" "main" 1787606065.58151 0
   "/etc/texmf/web2c/texmf.cnf" 1779824601.61643 475 c0e671620eb5563b2130f56340a5fde8 ""
   "/home/zhijie/.texlive2023/texmf-var/fonts/map/pdftex/updmap/pdftex.map" 1785371197.72818 168270 5798690ade9f3ff9086a006a39ff7659 ""
   "/usr/share/texlive/texmf-dist/fonts/enc/dvips/base/8r.enc" 1165713224 4850 80dc9bab7f31fb78a000ccfed0e27cab ""
@@ -56,7 +56,6 @@
   "/usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmr7.pfb" 1248133631 32762 224316ccc9ad3ca0423a14971cfa7fc1 ""
   "/usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy10.pfb" 1248133631 32569 5e5ddc8df908dea60932f3c484a54c0d ""
   "/usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy7.pfb" 1248133631 32716 08e384dc442464e7285e891af9f45947 ""
-  "/usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/symbols/msbm10.pfb" 1248133631 34694 ad62b13721ee8eda1dcc8993c8bd7041 ""
   "/usr/share/texlive/texmf-dist/fonts/type1/urw/times/utmb8a.pfb" 1136849748 44729 811d6c62865936705a31c797a1d5dada ""
   "/usr/share/texlive/texmf-dist/fonts/type1/urw/times/utmbi8a.pfb" 1136849748 44656 0cbca70e0534538582128f6b54593cca ""
   "/usr/share/texlive/texmf-dist/fonts/type1/urw/times/utmr8a.pfb" 1136849748 46026 6dab18b61c907687b520c72847215a68 ""
@@ -120,9 +119,9 @@
   "figures/follow.pdf" 1785798852 138835 82f67fc874c6cbc04215d80a3e4ea3ad ""
   "figures/overtake.pdf" 1785798852 137999 431dde2c75984a1258aa057db6106ab4 ""
   "ieeeconf.cls" 1785798854 197574 c8a8a2004c9762153e255667fc17d954 ""
-  "main.aux" 1787593524.51551 8566 44a389717c180d02a150fee177740375 "pdflatex"
-  "main.bbl" 1787593524.34735 9446 016b0801b26fdc2f1ca84bc14ebdecf5 "bibtex main"
-  "main.tex" 1787593520.25642 47467 c6cf8622d64469620d0b0b34404c8caf ""
+  "main.aux" 1787606065.53194 8730 e12d25429125bda024b0f6fcd51756ea "pdflatex"
+  "main.bbl" 1787605918.8768 9640 8e6724bdc6a471664522010938bc224f "bibtex main"
+  "main.tex" 1787606062.55687 49627 2e68e61380c26802e14119c92657ec85 ""
   (generated)
   "main.aux"
   "main.log"
