@@ -1,16 +1,15 @@
 # Fdb version 4
-["bibtex main"] 1787350561.2711 "main.aux" "main.bbl" "main" 1787350561.50731 0
-  "./F1Tenth.bib" 1787346610.83424 15215 b98399a500f551cf13935034f599f047 ""
+["bibtex main"] 1787535003.77899 "main.aux" "main.bbl" "main" 1787535004.01789 0
+  "./F1Tenth.bib" 1787515154.67844 15697 c14fc79a748397bd24ba03407b5daf06 ""
   "/usr/share/texlive/texmf-dist/bibtex/bst/base/ieeetr.bst" 1292289607 18361 1a00e58565e7f19bf2b3e1bfb82254ae ""
-  "main.aux" 1787350561.46258 6615 052cf6c80d7c73fcda82f404785833a6 "pdflatex"
+  "main.aux" 1787535003.96082 7525 d4a769e323525466869dde75f6d584cc "pdflatex"
   (generated)
   "main.bbl"
   "main.blg"
   (rewritten before read)
-["pdflatex"] 1787350561.28597 "/home/zhijie/Research/End2Race/report/main.tex" "main.pdf" "main" 1787350561.50744 0
+["pdflatex"] 1787535003.79289 "main.tex" "main.pdf" "main" 1787535004.018 0
   "/etc/texmf/web2c/texmf.cnf" 1779824601.61643 475 c0e671620eb5563b2130f56340a5fde8 ""
   "/home/zhijie/.texlive2023/texmf-var/fonts/map/pdftex/updmap/pdftex.map" 1785371197.72818 168270 5798690ade9f3ff9086a006a39ff7659 ""
-  "/home/zhijie/Research/End2Race/report/main.tex" 1787350560.90353 46163 d9eaf5acf24527a35076976069a42fe0 ""
   "/usr/share/texlive/texmf-dist/fonts/enc/dvips/base/8r.enc" 1165713224 4850 80dc9bab7f31fb78a000ccfed0e27cab ""
   "/usr/share/texlive/texmf-dist/fonts/map/fontname/texfonts.map" 1577235249 3524 cb3e574dea2d1052e39280babc910dc8 ""
   "/usr/share/texlive/texmf-dist/fonts/tfm/adobe/symbol/psyr.tfm" 1136768653 1408 5937f58aa508ea2cea4901c07d10f5fe ""
@@ -110,17 +109,20 @@
   "/usr/share/texlive/texmf-dist/web2c/texmf.cnf" 1707919699 40399 f2c302f7d2af602abb742093540a5834 ""
   "/usr/share/texmf/web2c/texmf.cnf" 1707919699 40399 f2c302f7d2af602abb742093540a5834 ""
   "/var/lib/texmf/web2c/pdftex/pdflatex.fmt" 1779824625 6800791 b4be001197cae145768a39a642964860 ""
-  "figures/architecture-expert.pdf" 1787161969.52167 34937 aa65e18c95614a7f5fc7b8de8a17311e ""
-  "figures/architecture-imitation.pdf" 1787161969.84378 40862 007efe307e69b309b2b0c68357f96160 ""
-  "figures/architecture-reinforcement.pdf" 1787165224.17229 29528 9945f19eaf18d80fa6bc73517390f244 ""
-  "figures/architecture-scenarios.pdf" 1787161969.09519 33999 ddb74993a71061c385dfab9ac72cbe16 ""
+  "figures/fig1/scenario.pdf" 1785798852 66205 8c0c4e8f348770305e00d07075ae1ddc ""
+  "figures/fig2/architecture-expert.pdf" 1787161969.52167 34937 aa65e18c95614a7f5fc7b8de8a17311e ""
+  "figures/fig2/architecture-imitation.pdf" 1787161969.84378 40862 007efe307e69b309b2b0c68357f96160 ""
+  "figures/fig2/architecture-reinforcement.pdf" 1787165224.17229 29528 9945f19eaf18d80fa6bc73517390f244 ""
+  "figures/fig2/architecture-scenarios.pdf" 1787161969.09519 33999 ddb74993a71061c385dfab9ac72cbe16 ""
+  "figures/fig3/expert-demo-1.png" 1787532159.15486 136379 7b728bca03bb193499ef5c0a141d35dc ""
+  "figures/fig3/expert-demo-2.png" 1787532159.20699 136272 63db801b02da8244e2b827419b482c0d ""
+  "figures/fig3/expert-demo-3.png" 1787532159.25508 125228 bff84386c58f19c2cd65818fe469f27e ""
   "figures/follow.pdf" 1785798852 138835 82f67fc874c6cbc04215d80a3e4ea3ad ""
   "figures/overtake.pdf" 1785798852 137999 431dde2c75984a1258aa057db6106ab4 ""
-  "figures/scenario.pdf" 1785798852 66205 8c0c4e8f348770305e00d07075ae1ddc ""
   "ieeeconf.cls" 1785798854 197574 c8a8a2004c9762153e255667fc17d954 ""
-  "main.aux" 1787350561.46258 6615 052cf6c80d7c73fcda82f404785833a6 "pdflatex"
-  "main.bbl" 1787350561.28435 8938 0abc7184729739ec25d8d6d0ea3565b4 "bibtex main"
-  "main.tex" 1787350560.90353 46163 d9eaf5acf24527a35076976069a42fe0 ""
+  "main.aux" 1787535003.96082 7525 d4a769e323525466869dde75f6d584cc "pdflatex"
+  "main.bbl" 1787535003.79212 9446 016b0801b26fdc2f1ca84bc14ebdecf5 "bibtex main"
+  "main.tex" 1787535000.89276 47376 198a7d3e9f5f350ff6cb17e92977a96f ""
   (generated)
   "main.aux"
   "main.log"

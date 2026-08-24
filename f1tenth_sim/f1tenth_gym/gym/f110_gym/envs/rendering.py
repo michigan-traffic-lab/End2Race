@@ -31,6 +31,7 @@ import pyglet
 from pyglet.gl import *
 
 # other
+import cv2
 import numpy as np
 from PIL import Image
 import yaml
@@ -45,6 +46,12 @@ ZOOM_OUT_FACTOR = 1 / ZOOM_IN_FACTOR
 # vehicle shape constants
 CAR_LENGTH = 0.58
 CAR_WIDTH = 0.31
+
+BACKGROUND_COLOR = (244, 241, 234)
+TRACK_BOUNDARY_COLOR = (31, 35, 38)
+EGO_COLOR = (79, 146, 196)
+OPPONENT_COLOR = (214, 111, 102)
+VEHICLE_OUTLINE_COLOR = (35, 39, 42)
 
 
 class EnvRenderer(pyglet.window.Window):
@@ -65,12 +72,13 @@ class EnvRenderer(pyglet.window.Window):
         """
         conf = Config(sample_buffers=1, samples=4, depth_size=16, double_buffer=True)
         super().__init__(
-            width, height, config=conf, resizable=True, vsync=False, *args, **kwargs
+            width, height, config=conf, resizable=False, vsync=False, *args, **kwargs
         )
 
         # gl init
-        glClearColor(9 / 255, 32 / 255, 87 / 255, 1.0)
-        glPointSize(2.5) 
+        glClearColor(*(channel / 255 for channel in BACKGROUND_COLOR), 1.0)
+        glPointSize(4.0)
+        glLineWidth(3.5)
 
         # initialize camera values
         self.left = -width / 2
@@ -98,14 +106,15 @@ class EnvRenderer(pyglet.window.Window):
             "Lap Time: {laptime:.2f}, Ego Lap Count: {count:.0f}".format(
                 laptime=0.0, count=0.0
             ),
-            font_size=36,
+            font_name="Arial",
+            font_size=6,
             x=0,
             y=-800,
-            anchor_x="center",
-            anchor_y="center",
+            anchor_x="left",
+            anchor_y="top",
             # width=0.01,
             # height=0.01,
-            color = (255, 255, 0, 255),
+            color=(*VEHICLE_OUTLINE_COLOR, 255),
             batch=self.batch,
         )
 
@@ -141,29 +150,38 @@ class EnvRenderer(pyglet.window.Window):
         map_height = map_img.shape[0]
         map_width = map_img.shape[1]
 
-        # convert map pixels to coordinates
-        range_x = np.arange(map_width)
-        range_y = np.arange(map_height)
-        map_x, map_y = np.meshgrid(range_x, range_y)
-        map_x = (map_x * map_resolution + origin_x).flatten()
-        map_y = (map_y * map_resolution + origin_y).flatten()
-        map_z = np.zeros(map_y.shape)
-        map_coords = np.vstack((map_x, map_y, map_z))
-
-        # mask and only leave the obstacle points
-        map_mask = map_img == 0.0
-        map_mask_flat = map_mask.flatten()
-        map_points = 50.0 * map_coords[:, map_mask_flat].T
-        # glPointSize(2.0)
-        for i in range(map_points.shape[0]):
-            self.batch.add(
-                1,
-                GL_POINTS,
-                None,
-                ("v3f/stream", [map_points[i, 0], map_points[i, 1], map_points[i, 2]]),
-                ("c3B/stream", [255, 255, 255]),
+        occupied = (map_img <= 128.0).astype(np.uint8) * 255
+        centerlines = cv2.ximgproc.thinning(occupied)
+        component_count, labels = cv2.connectedComponents(centerlines)
+        map_segments = []
+        for component in range(1, component_count):
+            component_mask = (labels == component).astype(np.uint8) * 255
+            contours, _ = cv2.findContours(
+                component_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE
             )
-        self.map_points = map_points
+            if not contours:
+                continue
+            pixels = contours[0][:, 0, :].astype(np.float64)
+            pixels = sum(np.roll(pixels, shift, axis=0) for shift in range(-3, 4)) / 7.0
+            points = np.column_stack(
+                (
+                    50.0 * (pixels[:, 0] * map_resolution + origin_x),
+                    50.0 * (pixels[:, 1] * map_resolution + origin_y),
+                    np.zeros(len(pixels)),
+                )
+            )
+            map_segments.append(
+                np.column_stack((points, np.roll(points, -1, axis=0))).reshape(-1, 3)
+            )
+        map_vertices = np.concatenate(map_segments)
+        self.batch.add(
+            len(map_vertices),
+            GL_LINES,
+            None,
+            ("v3f/static", map_vertices.flatten().tolist()),
+            ("c3B/static", list(TRACK_BOUNDARY_COLOR) * len(map_vertices)),
+        )
+        self.map_points = map_vertices
 
     def on_resize(self, width, height):
         """
@@ -325,41 +343,41 @@ class EnvRenderer(pyglet.window.Window):
         num_agents = len(poses_x)
         if self.poses is None:
             self.cars = []
+            self.car_outlines = []
             for i in range(num_agents):
-                if i == self.ego_idx:
-                    vertices_np = get_vertices(
-                        np.array([0.0, 0.0, 0.0]), CAR_LENGTH, CAR_WIDTH
-                    )
-                    vertices = list(vertices_np.flatten())
-                    car = self.batch.add(
+                vertices_np = get_vertices(
+                    np.array([0.0, 0.0, 0.0]), CAR_LENGTH, CAR_WIDTH
+                )
+                vertices = list(vertices_np.flatten())
+                body_color = EGO_COLOR if i == self.ego_idx else OPPONENT_COLOR
+                self.car_outlines.append(
+                    self.batch.add(
                         4,
                         GL_QUADS,
                         None,
-                        ("v2f", vertices),
-                        ("c3B", [255, 255, 0, 255, 255, 0, 255, 255, 0, 255, 255, 0]),
-                        # [172, 97, 185, 172, 97, 185, 172, 97, 185, 172, 97, 185],
+                        ("v2f/stream", vertices),
+                        ("c3B/static", list(VEHICLE_OUTLINE_COLOR) * 4),
                     )
-                    self.cars.append(car)
-                else:
-                    vertices_np = get_vertices(
-                        np.array([0.0, 0.0, 0.0]), CAR_LENGTH, CAR_WIDTH
-                    )
-                    vertices = list(vertices_np.flatten())
-                    car = self.batch.add(
+                )
+                self.cars.append(
+                    self.batch.add(
                         4,
                         GL_QUADS,
                         None,
-                        ("v2f", vertices),
-                        ("c3B", [255, 0, 0, 255, 0, 0, 255, 0, 0, 255, 0, 0]), 
-                        #[99, 52, 94, 99, 52, 94, 99, 52, 94, 99, 52, 94]),
+                        ("v2f/stream", vertices),
+                        ("c3B/static", list(body_color) * 4),
                     )
-                    self.cars.append(car)
+                )
 
         poses = np.stack((poses_x, poses_y, poses_theta)).T
         for j in range(poses.shape[0]):
             vertices_np = 50.0 * get_vertices(poses[j, :], CAR_LENGTH, CAR_WIDTH)
             vertices = list(vertices_np.flatten())
             self.cars[j].vertices = vertices
+            outline_vertices = 50.0 * get_vertices(
+                poses[j, :], CAR_LENGTH + 0.05, CAR_WIDTH + 0.05
+            )
+            self.car_outlines[j].vertices = outline_vertices.flatten().tolist()
         self.poses = poses
 
         self.score_label.text = (

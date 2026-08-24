@@ -1,5 +1,5 @@
 {
-  "generated_at_utc": "2026-08-21T21:03:22Z",
+  "generated_at_utc": "2026-08-24T01:15:36Z",
   "collection_config": {
     "mode": "multi_agent",
     "map_name": "Austin",
@@ -142,14 +142,14 @@
     "expected_scenarios": 720,
     "collection_process_failures": 0,
     "recorded_scenarios": 720,
-    "collision_free_scenarios": 642,
-    "collision_scenarios": 78,
-    "successful_overtakes": 619,
+    "collision_free_scenarios": 643,
+    "collision_scenarios": 77,
+    "successful_overtakes": 620,
     "collision_free_following": 23,
-    "collision_free_rate_percent": 89.1667,
-    "successful_overtake_rate_percent": 85.9722,
+    "collision_free_rate_percent": 89.3056,
+    "successful_overtake_rate_percent": 86.1111,
     "collisions_while_overtaking": 53,
-    "training_rows": 205440,
+    "training_rows": 205760,
     "success_videos": 0,
     "collision_videos": 0,
     "breakdown": [
@@ -179,12 +179,12 @@
         "opponent_raceline": "raceline0",
         "opponent_speed_scale": 0.8,
         "recorded_scenarios": 80,
-        "collision_free_scenarios": 75,
-        "collision_scenarios": 5,
-        "successful_overtakes": 74,
+        "collision_free_scenarios": 76,
+        "collision_scenarios": 4,
+        "successful_overtakes": 75,
         "collision_free_following": 1,
-        "collision_free_rate_percent": 93.75,
-        "successful_overtake_rate_percent": 92.5
+        "collision_free_rate_percent": 95.0,
+        "successful_overtake_rate_percent": 93.75
       },
       {
         "opponent_raceline": "raceline1",

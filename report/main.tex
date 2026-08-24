@@ -150,7 +150,7 @@ Each year, competitions are held at venues worldwide and attract broad participa
 \begin{figure}[!t]
     \centering
     \vspace{0.15cm}
-    \includegraphics[width=0.7\linewidth]{figures/scenario.pdf}
+    \includegraphics[width=0.7\linewidth]{figures/fig1/scenario.pdf}
     \caption{Simple overtake scenario illustration.}
     \label{fig:example}
     \vspace{-0.6cm}
@@ -204,10 +204,10 @@ The main contributions of this work are as follows:
 \begin{figure*}[!t]
     \centering
     \vspace{0.15cm}
-    \includegraphics[width=0.247\textwidth]{figures/architecture-scenarios.pdf}\hfill
-    \includegraphics[width=0.247\textwidth]{figures/architecture-expert.pdf}\hfill
-    \includegraphics[width=0.247\textwidth]{figures/architecture-imitation.pdf}\hfill
-    \includegraphics[width=0.247\textwidth]{figures/architecture-reinforcement.pdf}
+    \includegraphics[width=0.247\textwidth]{figures/fig2/architecture-scenarios.pdf}\hfill
+    \includegraphics[width=0.247\textwidth]{figures/fig2/architecture-expert.pdf}\hfill
+    \includegraphics[width=0.247\textwidth]{figures/fig2/architecture-imitation.pdf}\hfill
+    \includegraphics[width=0.247\textwidth]{figures/fig2/architecture-reinforcement.pdf}
     \caption{System overview. The F1TENTH vehicle photograph in panel 1 is adapted from the official F1TENTH documentation under CC BY-NC-SA 4.0.}
     \label{fig:overview}
     \vspace{-0.1cm}
@@ -265,7 +265,7 @@ Together, \(s_0\) and \(d_0\) determine the vehicles' initial longitudinal confi
 
 \subsection{Expert Demonstration}
 
-To generate training demonstrations for the ego vehicle, we design a map-based expert that combines a lattice planner with a Pure Pursuit controller. Adapted from the Frenet Optimal Trajectory implementation in PythonRobotics~\cite{sakai2018pythonrobotics}, the lattice planner converts each LiDAR scan into obstacle points and generates candidate trajectories across a range of lateral positions and terminal speeds. Candidates that violate the vehicle's dynamic constraints are discarded. Among the remaining candidates, the planner selects the trajectory \(\tau\) that minimizes the trajectory cost \(\mathcal{J}(\tau)\):
+To generate demonstrations for the ego vehicle, we design a map-based expert that combines a lattice planner with a Pure Pursuit controller. The lattice planner, adapted from the Frenet Optimal Trajectory implementation in PythonRobotics~\cite{sakai2018pythonrobotics}, converts each LiDAR scan into obstacle points and generates candidate trajectories across a range of lateral positions and terminal speeds. It then discards candidates that violate the vehicle's dynamic constraints and, among the remaining candidates, selects the trajectory \(\tau\) that minimizes the trajectory cost \(\mathcal{J}(\tau)\):
 \begin{equation}
     \mathcal{J}(\tau)
     =
@@ -276,30 +276,38 @@ To generate training demonstrations for the ego vehicle, we design a map-based e
     \max_{i}
     \left[
         \max\left(0,1-\frac{d_i}{d_c}\right)
-    \right]^p
+    \right]^2
 \end{equation}
 where
 \begin{itemize}
-    \item \(N=6\) is the number of future points sampled at 0.1~s intervals over the 0.6~s planning horizon, excluding the current vehicle state at \(t=0\);
-    \item \(v_i\) is the projected vehicle speed at future trajectory point \(i\), clipped to \([0,v_{\max}]\) when computing the cost;
-    \item \(v_{\max}=7.5\)~m/s is the maximum vehicle speed;
-    \item \(d_i\) is the Euclidean distance from future trajectory point \(i\) to the nearest LiDAR-derived obstacle point;
-    \item \(d_c=0.5\)~m is the clearance threshold below which a collision penalty is applied;
-    \item \(\lambda_c=5\) is the collision-avoidance penalty weight; and
-    \item \(p=2\) is the collision-penalty exponent.
+    \item \(N=6\) is the number of future trajectory points sampled at 0.1~s intervals over the 0.6~s planning horizon;
+    \item \(v_i\) is the projected vehicle speed at point \(i\);
+    \item \(v_{\max}=7.5\)~m/s is the speed limit for the ego vehicle;
+    \item \(d_i\) is the distance from point \(i\) to the nearest obstacle;
+    \item \(d_c=0.5\)~m is the clearance threshold for applying the collision penalty;
+    \item \(\lambda_c=5\) is the collision-avoidance penalty weight.
 \end{itemize}
 
-The first term favors trajectories with higher mean speed, while the second penalizes the largest clearance deficit along the trajectory. After a trajectory is selected, the Pure Pursuit controller identifies a lookahead point along it. The controller computes the steering command from the lateral displacement of this point relative to the ego vehicle and uses its associated trajectory speed as the desired speed.
+The first term favors trajectories with higher mean speeds, while the second penalizes the maximum clearance deficit along the trajectory. After selecting a trajectory, the Pure Pursuit controller identifies a lookahead point, computes the steering command from its lateral displacement relative to the ego vehicle, and uses the trajectory speed at that point as the desired speed.
 
 \subsection{Training Dataset}
 
-Using the scenario generation process described above, we generate 600 overtaking scenarios per track, each with an 8-second time limit. The Austin track is used to construct the training dataset, while the remaining tracks are reserved for evaluation (Fig.~\ref{fig:overview}). For each training scenario, expert actions for the ego vehicle are recorded and downsampled to 10Hz (from an original simulation frequency of 100~Hz), while the policy of the opponent is not used.
+Using the procedure described above, we generate 720 eight-second overtaking scenarios on each track. The Austin track provides the training demonstrations, while the remaining tracks are reserved for evaluation (Fig.~\ref{fig:overview}(a)). Training data are recorded at 40~Hz to reflect the onboard LiDAR-to-control update cycle (Fig.~\ref{fig:overview}(b)). Each complete scenario contains 320 observation-action pairs, yielding up to 230,400 samples. Among the 720 Austin scenarios, 620 (86.1\%) resulted in successful overtakes, 23 (3.2\%) in collision-free car-following, and 77 (10.7\%) in collisions.
 
-Notably, even the map-based expert cannot guarantee safety under all conditions, reflecting the inherent challenges of real-world autonomous racing. These incidents can stem from minor control imperfections that cause vehicles to drift or from overtaking maneuvers encountering unexpectedly narrow corridors, leaving insufficient space for both vehicles to pass safely.
+The expert's failure mode stems primarily from the lattice planner's forward-only obstacle evaluation, which does not account for a moving opponent alongside or behind the ego vehicle. Consequently, the planner may return to the center lane before the ego vehicle has fully cleared the opponent. The number of failures increases as the speed difference decreases, from 4 cases at a speed scale of 0.4 to 15 at 0.6 and 58 at 0.8. Figure~\ref{fig:expert-failure} illustrates a scenario in which this failure occurs, with the opponent following the right raceline at a speed scale of 0.8. During overtaking, the planned trajectory of the ego vehicle shifts toward the center lane while the ego and the opponent still overlap longitudinally, resulting in a rear sideswipe collision.
 
-Furthermore, by design, the lattice planner considers only a predefined set of look-ahead points for trajectory planning and obstacle avoidance, without accounting for vehicles approaching from behind. As a result, it might occasionally prompt premature returns to the center lane immediately after overtaking, which can lead to rear-end sideswipe collisions, especially when the speed difference between the ego vehicle and the opponent is low. This illustrates the inherent difficulties in developing autonomous racing policies that balance safety and efficiency, even when leveraging sophisticated rule-based approaches.
+For behavioral-cloning training (Sec.~\ref{sec:behavioral-cloning}), we exclude demonstrations from the 77 ego-collision scenarios and retain 643 collision-free sequences (89.3\%), yielding 205,760 training samples. However, filtering alone does not provide the model with the experience needed to learn safe responses in such scenarios. Such failures can be mitigated by combining explicit opponent detection and motion prediction with interaction-aware planning as in~\cite{baumann2025predictive}. The approach, however, requires considerable manual design and cost adjustment, incurs additional computation, and suffers from error propagation across modules. We instead address this failure mode through direct end-to-end reinforcement learning fine-tuning (Sec.~\ref{sec:rl-finetuning}), keeping the model intentionally lightweight while enhancing its opponent-interaction capabilities.
 
-Out of the 600 generated scenarios, 194 featured safe car-following, 378 resulted in successful overtakes, and 28 ended in collisions. Unsafe demonstrations that result in collisions are excluded from the training set, resulting in a total of 45,760 training samples. However, these scenarios are still included during evaluation to assess model performance.
+\begin{figure}[!t]
+    \centering
+    \begin{tabular}{@{}c@{\hspace{0.8mm}}c@{\hspace{0.8mm}}c@{}}
+        \includegraphics[width=0.315\linewidth]{figures/fig3/expert-demo-1.png} &
+        \includegraphics[width=0.315\linewidth]{figures/fig3/expert-demo-2.png} &
+        \includegraphics[width=0.315\linewidth]{figures/fig3/expert-demo-3.png}
+    \end{tabular}
+    \caption{Expert-planner failure during overtaking, shown in temporal order from (a) to (c). In this scenario, the opponent follows the right raceline with a speed scale of 0.8. Each frame shows the planned ego trajectory and both vehicle speeds; blue denotes the ego vehicle and red the opponent. (a) The ego approaches the opponent. (b) The vehicles travel side by side during overtaking. (c) The ego returns to the center lane prematurely, leading to a sideswipe collision.}
+    \label{fig:expert-failure}
+\end{figure}
 
 \subsection{Model Architecture}
 
@@ -331,7 +339,8 @@ To predict the driving actions, we apply a decoder head implemented as a two-lay
 \end{equation}
 where $\mathbf{a}_t = [v, \delta]$ denotes the ego speed and steering angle.
 
-\subsection{Training Objective}
+\subsection{Behavioral Cloning}
+\label{sec:behavioral-cloning}
 
 To preserve temporal dependencies, each scenario input sequence is considered in its entirety, producing predictions at each timestep and aggregating losses across the full temporal horizon. The loss function is defined as a weighted sum of mean squared errors (MSE) for both the ego vehicle’s speed and steering angle, balancing their relative scales and jointly guiding the model toward accurate control.
 \begin{equation}
@@ -348,6 +357,11 @@ To prevent shortcut learning~\cite{shortcut}, where the model simply copies the 
 \end{equation}
 
 During training, we set the masking probability to \(p = 0.1\). This strategy encourages the model to extract meaningful patterns from the LiDAR input while still leveraging previous vehicle dynamics for smoother control.
+
+\subsection{Reinforcement Learning Fine-Tuning}
+\label{sec:rl-finetuning}
+
+TBD
 
 \begin{table*}[!ht]
 \vspace{0.15cm}
