@@ -311,33 +311,35 @@ For behavioral-cloning training (Sec.~\ref{sec:behavioral-cloning}), we exclude 
 
 \subsection{Model Architecture}
 
-We adopt a Gated Recurrent Unit (GRU) architecture that maps raw observations to driving commands.
-At each timestep~\( t \), the network receives a 360-degree LiDAR scan \( \mathbf{z}_t \in \mathbb{R}^{360} \) at 1-degree resolution and the ego speed \( v_{t} \in \mathbb{R} \).
-The update is defined as:
-\begin{equation}
-    \mathbf{h}_t = \mathrm{GRU}_\theta\left(\sigma(\mathbf{z}_t) \Vert \psi(v_t),\, \mathbf{h}_{t-1}\right)
-\end{equation}
+We adopt an end-to-end policy that maps sensory inputs and the current vehicle state directly to control outputs.
+At each timestep~\(t\), the sensory input is a 360-degree 2D LiDAR scan comprising 180 beams at an angular resolution of 2 degrees.
+To maintain dynamic consistency across consecutive model predictions, the current ego speed is also included as input.
+The control output consists of the desired vehicle speed in meters per second and the steering angle in radians.
 
-Here, \( \mathbf{h}_t \) denotes the hidden state of the model, and its dimensionality is set to four times the input size to capture the complexities of the racing task. 
+To capture temporal dependencies in ego and opponent motion, we use a Gated Recurrent Unit (GRU) that summarizes previous observations in its hidden state.
 
-To better represent the sensor input, the raw LiDAR scan $\mathbf{z}_t$ is normalized elementwise using a sigmoid function $\sigma(\cdot)$, defined as
+For LiDAR processing, the scan $\mathbf{z}_t$ is normalized elementwise into spatial pressure tokens using a sigmoid function $\sigma(\cdot)$, defined as
 \begin{equation}
     \sigma(x) = \left(-\frac{1}{1 + e^{-k x}} + 1\right) \cdot 2
 \end{equation}
-where $x$ denotes a single LiDAR scan beam of $\mathbf{z}_t$; $k > 0$ determines the effective sensing range.
+where $x$ denotes a single LiDAR scan beam of $\mathbf{z}_t$, and the fixed coefficient $k=0.3$ determines the effective sensing range.
 
 This normalization maps each raw scan value, \( x \in [0, \infty) \), to a spatial pressure token within the range \( [0, 1] \). The S-shaped curve of the sigmoid ensures that large scan distances \( x \) are mapped to values that asymptotically approach zero, meaning distant obstacles have minimal influence on the network. As obstacles become closer, the token value increases rapidly and nonlinearly, making the system much more sensitive to nearby objects. At the same time, the maximum value is bounded at \( 1 \) as \( x \) approaches zero, ensuring stable normalization outputs. In this way, the LiDAR inputs are represented in a nonlinear, continuous, and differentiable manner that naturally aligns with human cognition. This facilitates more efficient training and enables the model to converge more effectively.
 
-The ego speed \( v_t \) is transformed using a learnable projection \( \psi(v_t) \), which encodes the scalar input into a higher-dimensional embedding. It is then concatenated with the normalized spatial pressure tokens to form the observation at each timestep, serving as the GRU input. The recurrent architecture also propagates the previous hidden state, $\mathbf{h}_{t-1}$, to the next timestep, incorporating the latest observations to produce the updated hidden state, $\mathbf{h}_t$. This design enables the model to capture long-term temporal dependencies while maintaining a compact summary of past observations without excessive computation, which is critical for modeling high-speed, dynamic interactions in autonomous racing scenarios.
+The most recently measured ego speed \(v_{t-1} \in \mathbb{R}\) is projected through a learned linear layer into a 30-dimensional embedding \(\psi(v_{t-1})\). Concatenating this embedding with the 180 spatial pressure tokens produces a 210-dimensional GRU input. The recurrent update is defined as
+\begin{equation}
+    \mathbf{h}_t = \mathrm{GRU}_\theta\left(\sigma(\mathbf{z}_t) \Vert \psi(v_{t-1}),\, \mathbf{h}_{t-1}\right),
+\end{equation}
+where \(\mathbf{h}_t \in \mathbb{R}^{420}\) is the updated hidden state. Its dimensionality is twice that of the GRU input.
 
-To predict the driving actions, we apply a decoder head implemented as a two-layer multilayer perceptron (MLP):
+Finally, the control actions are derived from the hidden state using a two-layer multilayer perceptron (MLP):
 \begin{equation}
 \begin{split}
     \mathbf{h}_t' &= \mathrm{ReLU}(W_1 \mathbf{h}_t + \mathbf{b}_1), \\
     \mathbf{a}_t  &= W_2 \mathbf{h}_t' + \mathbf{b}_2
 \end{split}
 \end{equation}
-where $\mathbf{a}_t = [v, \delta]$ denotes the ego speed and steering angle.
+where $\mathbf{a}_t = [\delta_t, v_t^{\mathrm{des}}]$ contains the steering-angle and desired-speed commands, respectively.
 
 \subsection{Behavioral Cloning}
 \label{sec:behavioral-cloning}

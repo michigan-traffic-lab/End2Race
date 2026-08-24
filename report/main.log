@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.25 (TeX Live 2023/Debian) (preloaded format=pdflatex 2026.5.26)  23 AUG 2026 21:30
+This is pdfTeX, Version 3.141592653-2.6-1.40.25 (TeX Live 2023/Debian) (preloaded format=pdflatex 2026.5.26)  24 AUG 2026 13:21
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
@@ -450,7 +450,7 @@ F version <1.7>, but at most version <1.5> allowed
 <figures/overtake.pdf, id=178, 794.97pt x 202.356pt>
 File: figures/overtake.pdf Graphic file (type pdf)
 <use figures/overtake.pdf>
-Package pdftex.def Info: figures/overtake.pdf  used on input line 429.
+Package pdftex.def Info: figures/overtake.pdf  used on input line 431.
 (pdftex.def)             Requested size: 505.89pt x 128.7756pt.
 
 
@@ -459,7 +459,7 @@ version <1.7>, but at most version <1.5> allowed
 <figures/follow.pdf, id=179, 794.97pt x 202.356pt>
 File: figures/follow.pdf Graphic file (type pdf)
 <use figures/follow.pdf>
-Package pdftex.def Info: figures/follow.pdf  used on input line 436.
+Package pdftex.def Info: figures/follow.pdf  used on input line 438.
 (pdftex.def)             Requested size: 505.89pt x 128.7756pt.
 [6]
 Underfull \vbox (badness 3977) has occurred while \output is active []
@@ -526,7 +526,7 @@ symbols/msbm10.pfb></usr/share/texlive/texmf-dist/fonts/type1/urw/times/utmb8a.
 pfb></usr/share/texlive/texmf-dist/fonts/type1/urw/times/utmbi8a.pfb></usr/shar
 e/texlive/texmf-dist/fonts/type1/urw/times/utmr8a.pfb></usr/share/texlive/texmf
 -dist/fonts/type1/urw/times/utmri8a.pfb>
-Output written on main.pdf (9 pages, 1031789 bytes).
+Output written on main.pdf (9 pages, 1031636 bytes).
 PDF statistics:
  295 PDF objects out of 1000 (max. 8388607)
  171 compressed objects within 2 object streams

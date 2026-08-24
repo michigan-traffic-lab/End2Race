@@ -2,11 +2,13 @@
 
 High-level instructions for working on this report.
 
-1. **Never edit without explicit instruction.** When something is proposed, share an opinion and settle on the approach first. Only edit the files when explicitly told to apply the change.
+1. **Never edit without explicit instruction.** When something is proposed, share an opinion and settle on the approach first. Only edit the files when explicitly told to apply the change. An unambiguous instruction to change wording or framing, or to add or remove content, may be applied directly.
 
 2. **Phrasing is direction, not verbatim.** What is said conveys the intended meaning, not the exact words to drop into the report. Craft wording that fits the paper's style and flow.
 
 3. **No em dashes** in the writing.
+
+4. **Recompile after every TeX change.** Immediately after changing any `.tex` file, recompile `main.pdf` and verify that compilation succeeds.
 
 ## Working preferences
 
