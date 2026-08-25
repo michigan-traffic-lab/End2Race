@@ -103,7 +103,7 @@ python -m evaluation.eval_single \
   --render
 ```
 
-`--checkpoint_path` is required and `--map_name` defaults to `Austin`. `--output_dir`, `--noise`, `--seed`, `--lap_num`, `--start_idx`, and `--minimum_lap_time` default to `eval_results`, `0.0`, `42`, `1`, `0`, and `10.0`. The run exits 0 when the checkpoint completes every lap without a collision and 1 otherwise, and prints `PASSED`, `COLLISION`, `LAPS_COMPLETED`, `LAP_PROGRESS`, `LAP_TIME`, `MEAN_LAP_TIME`, `AVG_SPEED`, `SPEED_VARIANCE`, and `TOTAL_DISTANCE` as `KEY=VALUE` lines. It writes no results file.
+`--checkpoint_path` is required and `--map_name` defaults to `Austin`. `--output_dir`, `--noise`, `--seed`, `--lap_num`, `--start_idx`, and `--minimum_lap_time` default to `eval_results`, `0.0`, `42`, `1`, `0`, and `10.0`. The run exits 0 when the checkpoint completes every lap without a collision or a negative desired-speed prediction and 1 otherwise. A negative desired speed fails immediately before the action reaches the simulator. The evaluator prints `PASSED`, `COLLISION`, `NEGATIVE_VELOCITY`, `NEGATIVE_VELOCITY_VALUE`, `LAPS_COMPLETED`, `LAP_PROGRESS`, `LAP_TIME`, `MEAN_LAP_TIME`, `AVG_SPEED`, `SPEED_VARIANCE`, and `TOTAL_DISTANCE` as `KEY=VALUE` lines. It writes no results file.
 
 With `--render` the video lands directly in `--output_dir`, and its name carries the outcome: `[c_]<map>_lap<progress>[_noiseNN].mp4`, where `c_` marks a collision, the progress is the completed laps plus the fraction of the current lap to one decimal with `.` written as `_`, and the noise suffix appears only for a nonzero `--noise` as the percentage. `Austin_lap1_0.mp4` completed the target lap; `c_Austin_lap0_5.mp4` collided halfway around; `c_Austin_lap0_5_noise10.mp4` did the same at `--noise 0.1`.
 
