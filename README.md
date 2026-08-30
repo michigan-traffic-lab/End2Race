@@ -124,7 +124,7 @@ python -m evaluation.eval_multi \
 
 `--checkpoint_path` is required; `--map_name`, `--output_dir`, `--ego_raceline`, `--ego_idx`, `--opponent_raceline`, `--opponent_speed_scale`, `--interval_idx`, `--sim_duration`, `--noise`, and `--seed` default to `Austin`, `eval_results`, `raceline1`, `0`, `raceline1`, `0.8`, `15`, `8.0`, `0.0`, and `42`. The run prints `STATE`, `AVG_SPEED`, `SPEED_VARIANCE`, and `TOTAL_DISTANCE` as `KEY=VALUE` lines, where `STATE` is 1 for following, 2 for overtaking, and 3 for a collision. It writes no results file; `eval_multi.sh` owns the summary for a whole map.
 
-With `--render` the video lands directly in `--output_dir` as `<c|f|o>_ol<opponent raceline>_e<ego index>_o<opponent index>_s<speed scale>[_noiseNN].mp4`, with the noise suffix present only for a nonzero `--noise`. The name carries the scenario alone, so the checkpoint and map belong in `--output_dir`.
+With `--render` the video lands in the `collision`, `follow`, or `overtake` subdirectory of `--output_dir` as `<c|f|o>_ol<opponent raceline>_e<ego index>_o<opponent index>_s<speed scale>[_noiseNN].mp4`, with the noise suffix present only for a nonzero `--noise`. The name carries the scenario alone, so the checkpoint and map belong in `--output_dir`.
 
 ### Multi-Agent Parallel Evaluation (Optional)
 
@@ -148,7 +148,7 @@ opponent speed scales: 720 scenarios across 16 workers. Artifacts land under
 `<output root>/<checkpoint stem>/<map>/`. Every selected map runs its complete
 720-scenario matrix.
 
-The batch renders no video, so `results.json` is its only artifact: the batch configuration, the following, overtaking, collision, and error counts, and their percentages. A `Ctrl-C` and a `SIGTERM` still write it, so `planned_scenarios`, `completed_scenarios`, `complete`, and `stop_reason` say how much of the batch the numbers cover; percentages always use `completed_scenarios` as their denominator. The batch exits 0 when every scenario ran, 1 on worker errors, and 130 or 143 when interrupted.
+The batch renders no video by default. Set `RENDER=true` to render every scenario and set `WORKERS` to override the default 16 workers, for example `WORKERS=8 RENDER=true bash evaluation/eval_multi.sh ...`. Rendered videos are grouped into `collision`, `follow`, and `overtake` subdirectories. Without rendering, `results.json` is the only artifact: the batch configuration, the following, overtaking, collision, and error counts, and their percentages. A `Ctrl-C` and a `SIGTERM` still write it, so `planned_scenarios`, `completed_scenarios`, `complete`, and `stop_reason` say how much of the batch the numbers cover; percentages always use `completed_scenarios` as their denominator. The batch exits 0 when every scenario ran, 1 on worker errors, and 130 or 143 when interrupted.
 
 ### Checkpoint Qualification
 

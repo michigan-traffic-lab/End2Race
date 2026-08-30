@@ -209,6 +209,10 @@ R.~Geirhos, J.~Jörn-Henrik, C.~Michaelis, R.~Zemel, B.~Wieland, B.~Matthias,
   and F.~A. Wichmann, ``Shortcut learning in deep neural networks,'' {\em
   Nature Machine Intelligence}, vol.~2, pp.~665--673, 11 2020.
 
+\bibitem{mitchell2004driving}
+W.~C. Mitchell, R.~Schroer, and D.~B. Grisez, ``Driving the traction circle,''
+  Tech. Rep. 2004-01-3545, SAE International, 2004.
+
 \bibitem{sun2024megadagger}
 X.~Sun, S.~Yang, M.~Zhou, K.~Liu, and R.~Mangharam, ``Mega-dagger: Imitation
   learning with multiple imperfect experts,'' 2024.

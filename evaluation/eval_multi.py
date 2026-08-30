@@ -263,10 +263,16 @@ def evaluate_segment(model, device, vehicle, args):
 
     if args.render and video_frames:
         state_prefix = "c" if collision_occurred else final_state[0]
+        outcome_dir = {
+            "c": "collision",
+            "f": "follow",
+            "o": "overtake",
+        }[state_prefix]
         opponent_raceline_number = args.opponent_raceline.replace("raceline", "")
         noise_suffix = f"_noise{int(args.noise * 100)}" if args.noise else ""
-        args.output_dir.mkdir(parents=True, exist_ok=True)
-        video_path = args.output_dir / (
+        video_dir = args.output_dir / outcome_dir
+        video_dir.mkdir(parents=True, exist_ok=True)
+        video_path = video_dir / (
             f"{state_prefix}_ol{opponent_raceline_number}_e{args.ego_idx}"
             f"_o{opp_idx}_s{args.opponent_speed_scale}{noise_suffix}.mp4"
         )

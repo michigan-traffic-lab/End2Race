@@ -1,13 +1,13 @@
 # Fdb version 4
-["bibtex main"] 1787684076.82345 "main.aux" "main.bbl" "main" 1787684077.05228 0
-  "./F1Tenth.bib" 1787595402.00325 15987 f6716e84d56320e14e107e6d5e57ed4c ""
+["bibtex main"] 1788121050.14486 "main.aux" "main.bbl" "main" 1788124417.1295 0
+  "./F1Tenth.bib" 1788120276.98296 16236 0f8ce6110e46717730f99d1534f235e8 ""
   "/usr/share/texlive/texmf-dist/bibtex/bst/base/ieeetr.bst" 1292289607 18361 1a00e58565e7f19bf2b3e1bfb82254ae ""
-  "main.aux" 1787684077.00176 9050 1e129eedd4745232644fbed2c029d9e9 "pdflatex"
+  "main.aux" 1788124417.07758 9105 e072a7b9b079086ba56f5e7b5273bd52 "pdflatex"
   (generated)
   "main.bbl"
   "main.blg"
   (rewritten before read)
-["pdflatex"] 1787684076.83638 "main.tex" "main.pdf" "main" 1787684077.0524 0
+["pdflatex"] 1788124416.90299 "main.tex" "main.pdf" "main" 1788124417.12962 0
   "/etc/texmf/web2c/texmf.cnf" 1779824601.61643 475 c0e671620eb5563b2130f56340a5fde8 ""
   "/home/zhijie/.texlive2023/texmf-var/fonts/map/pdftex/updmap/pdftex.map" 1785371197.72818 168270 5798690ade9f3ff9086a006a39ff7659 ""
   "/usr/share/texlive/texmf-dist/fonts/enc/dvips/base/8r.enc" 1165713224 4850 80dc9bab7f31fb78a000ccfed0e27cab ""
@@ -127,9 +127,9 @@
   "figures/follow.pdf" 1785798852 138835 82f67fc874c6cbc04215d80a3e4ea3ad ""
   "figures/overtake.pdf" 1785798852 137999 431dde2c75984a1258aa057db6106ab4 ""
   "ieeeconf.cls" 1785798854 197574 c8a8a2004c9762153e255667fc17d954 ""
-  "main.aux" 1787684077.00176 9050 1e129eedd4745232644fbed2c029d9e9 "pdflatex"
-  "main.bbl" 1787684076.83492 9640 8e6724bdc6a471664522010938bc224f "bibtex main"
-  "main.tex" 1787684071.14061 49682 70270edd7cffb90bc1b162299304c70f ""
+  "main.aux" 1788124417.07758 9105 e072a7b9b079086ba56f5e7b5273bd52 "pdflatex"
+  "main.bbl" 1788121050.15483 9802 75267b785b506f6cac6d41fba7376b9c "bibtex main"
+  "main.tex" 1788124416.8355 52064 da0d3f206801c0ad672b5d7dfa7c725e ""
   (generated)
   "main.aux"
   "main.log"

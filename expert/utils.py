@@ -144,8 +144,9 @@ def mask_lidar_points(lidar, ratio, rng):
     return lidar
 
 
-def follow_vehicle_camera(event, horizontal_margin=340.0):
-    """Center the camera on the ego vehicle at a report-friendly scale."""
+# horizontal_margin=340.0 provides the zoomed-in framing used for figure creation.
+def follow_vehicle_camera(event, horizontal_margin=800.0):
+    """Center the camera on the ego vehicle at the normal render scale."""
     x_vertices = event.cars[0].vertices[::2]
     y_vertices = event.cars[0].vertices[1::2]
     center_x = float(np.mean(x_vertices))
