@@ -144,7 +144,6 @@ def mask_lidar_points(lidar, ratio, rng):
     return lidar
 
 
-# horizontal_margin=340.0 provides the zoomed-in framing used for figure creation.
 def follow_vehicle_camera(event, horizontal_margin=800.0):
     """Center the camera on the ego vehicle at the normal render scale."""
     x_vertices = event.cars[0].vertices[::2]
@@ -160,70 +159,6 @@ def follow_vehicle_camera(event, horizontal_margin=800.0):
 def position_score_label(event):
     event.score_label.x = event.left + 8.0
     event.score_label.y = event.top - 8.0
-
-
-def forward_raceline_segment(waypoints, start_index, distance):
-    """Return the periodic raceline segment reachable within a distance."""
-    points = np.asarray(waypoints)[:, :2]
-    if np.linalg.norm(points[-1] - points[0]) < 1e-9:
-        points = points[:-1]
-    index = start_index % len(points)
-    segment = [points[index]]
-    travelled = 0.0
-    while travelled < distance:
-        next_index = (index + 1) % len(points)
-        travelled += float(np.linalg.norm(points[next_index] - points[index]))
-        segment.append(points[next_index])
-        index = next_index
-    return np.asarray(segment)
-
-
-REPORT_CAMERA_ZOOM = 3.796875
-REPORT_CAMERA_HORIZONTAL_FOCUS = 0.578125
-REPORT_CAMERA_VERTICAL_FOCUS = 0.8590534979
-REPORT_CAMERA_LINE_WIDTH = 13.0
-REPORT_CAMERA_POINT_SIZE = 15.0
-REPORT_TRAJECTORY_LINE_WIDTH = REPORT_CAMERA_LINE_WIDTH * 1.25
-REPORT_TRAJECTORY_POINT_SIZE = REPORT_CAMERA_POINT_SIZE * 0.75
-
-
-def create_fixed_scene_render_callback(
-    scene_points,
-    padding=3.0,
-    scale=50.0,
-    zoom=REPORT_CAMERA_ZOOM,
-    horizontal_focus=REPORT_CAMERA_HORIZONTAL_FOCUS,
-    vertical_focus=REPORT_CAMERA_VERTICAL_FOCUS,
-    line_width=REPORT_CAMERA_LINE_WIDTH,
-    point_size=REPORT_CAMERA_POINT_SIZE,
-):
-    """Create the fixed report camera directly at the final output framing."""
-    scene_points = np.asarray(scene_points)[:, :2] * scale
-
-    def render_callback(event):
-        from pyglet.gl import glLineWidth, glPointSize
-
-        minimum = np.min(scene_points, axis=0) - padding * scale
-        maximum = np.max(scene_points, axis=0) + padding * scale
-        center = 0.5 * (minimum + maximum)
-        half_width, half_height = 0.5 * (maximum - minimum)
-        width, height = event.get_size()
-        window_aspect = width / height
-        if half_width / half_height < window_aspect:
-            half_width = half_height * window_aspect
-        else:
-            half_height = half_width / window_aspect
-        center[0] += (2.0 * horizontal_focus - 1.0) * half_width
-        center[1] += (2.0 * vertical_focus - 1.0) * half_height
-        half_width /= zoom
-        half_height /= zoom
-        event.left, event.right = center[0] - half_width, center[0] + half_width
-        event.bottom, event.top = center[1] - half_height, center[1] + half_height
-        glLineWidth(line_width)
-        glPointSize(point_size)
-        event.score_label.text = ""
-
-    return render_callback
 
 
 def update_point_batches(
@@ -248,70 +183,6 @@ def update_point_batches(
             batches.append(batch_item)
             if batch_objects is not None:
                 batch_objects.append(batch_item)
-
-
-def update_trajectory(
-    event,
-    batches,
-    points,
-    scale=10.0,
-    line_width=None,
-    point_size=None,
-    restore_line_width=1.0,
-    restore_point_size=1.0,
-):
-    """Populate or update the planned path and its prediction samples."""
-    import pyglet
-    from pyglet.gl import GL_LINE_STRIP, GL_POINTS, glLineWidth, glPointSize
-
-    points_xy = np.asarray(points, dtype=np.float32)[:, :2] * scale
-    vertices = points_xy.flatten().tolist()
-    point_vertices = np.column_stack(
-        (points_xy, np.full(len(points_xy), -0.1, dtype=np.float32))
-    ).flatten().tolist()
-    if batches and batches[0].count != len(points):
-        for batch in batches:
-            batch.delete()
-        batches.clear()
-    if batches:
-        batches[0].vertices = vertices
-        batches[1].vertices = point_vertices
-        return
-
-    class LineWidthGroup(pyglet.graphics.OrderedGroup):
-        def set_state(self):
-            glLineWidth(line_width)
-
-        def unset_state(self):
-            glLineWidth(restore_line_width)
-
-    class PointSizeGroup(pyglet.graphics.OrderedGroup):
-        def set_state(self):
-            glPointSize(point_size)
-
-        def unset_state(self):
-            glPointSize(restore_point_size)
-
-    line_group = LineWidthGroup(1) if line_width is not None else None
-    point_group = PointSizeGroup(2) if point_size is not None else None
-    batches.append(
-        event.batch.add(
-            len(points),
-            GL_LINE_STRIP,
-            line_group,
-            ("v2f/stream", vertices),
-            ("c3B/static", [93, 107, 116] * len(points)),
-        )
-    )
-    batches.append(
-        event.batch.add(
-            len(points),
-            GL_POINTS,
-            point_group,
-            ("v3f/stream", point_vertices),
-            ("c3B/static", [214, 165, 85] * len(points)),
-        )
-    )
 
 
 def create_multiagent_render_callback(
@@ -346,8 +217,6 @@ def create_multiagent_render_callback(
 
 
 def create_planner_render_callback(render_info, planner, draw_traj_pts):
-    trajectory_callback = create_trajectory_render_callback(planner, draw_traj_pts)
-
     def render_callback(event):
         follow_vehicle_camera(event)
         position_score_label(event)
@@ -359,39 +228,14 @@ def create_planner_render_callback(render_info, planner, draw_traj_pts):
             f"{render_info['opp_steer']:+.2f}rad"
         )
 
-        trajectory_callback(event)
-
-    return render_callback
-
-
-def create_trajectory_render_callback(
-    planner,
-    draw_traj_pts,
-    line_width=None,
-    point_size=None,
-    restore_line_width=1.0,
-    restore_point_size=1.0,
-):
-    """Render only the unconsumed portion of the ego's current plan."""
-    def render_callback(event):
-        if planner.best_trajectory is None:
-            return
-        trajectory_points = planner.best_trajectory[:, :2]
-        ego_position = event.poses[0, :2]
-        _, _, _, segment_index = nearest_point(ego_position, trajectory_points)
-        trajectory_points = np.vstack(
-            (ego_position, trajectory_points[segment_index + 1 :])
-        )
-        update_trajectory(
-            event,
-            draw_traj_pts,
-            trajectory_points,
-            scale=50.0,
-            line_width=line_width,
-            point_size=point_size,
-            restore_line_width=restore_line_width,
-            restore_point_size=restore_point_size,
-        )
+        if planner.best_trajectory is not None:
+            update_point_batches(
+                event,
+                draw_traj_pts,
+                planner.best_trajectory[:, :2],
+                color=(183, 193, 222),
+                scale=50.0,
+            )
 
     return render_callback
 

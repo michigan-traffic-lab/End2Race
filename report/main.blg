@@ -1,0 +1,48 @@
+This is BibTeX, Version 0.99d (TeX Live 2023/Debian)
+Capacity: max_strings=200000, hash_size=200000, hash_prime=170003
+The top-level auxiliary file: main.aux
+The style file: ieeetr.bst
+Database file #1: F1Tenth.bib
+Warning--empty journal in bc
+You've used 41 entries,
+            1876 wiz_defined-function locations,
+            707 strings with 12292 characters,
+and the built_in function-call counts, 11945 in all, are:
+= -- 1079
+> -- 615
+< -- 2
++ -- 220
+- -- 179
+* -- 879
+:= -- 1690
+add.period$ -- 41
+call.type$ -- 41
+change.case$ -- 39
+chr.to.int$ -- 0
+cite$ -- 42
+duplicate$ -- 594
+empty$ -- 1101
+format.name$ -- 179
+if$ -- 2883
+int.to.chr$ -- 0
+int.to.str$ -- 41
+missing$ -- 31
+newline$ -- 126
+num.names$ -- 39
+pop$ -- 183
+preamble$ -- 1
+purify$ -- 0
+quote$ -- 0
+skip$ -- 422
+stack$ -- 0
+substring$ -- 755
+swap$ -- 246
+text.length$ -- 2
+text.prefix$ -- 0
+top$ -- 0
+type$ -- 0
+warning$ -- 1
+while$ -- 98
+width$ -- 43
+write$ -- 373
+(There was 1 warning)

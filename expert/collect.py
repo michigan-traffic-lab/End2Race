@@ -15,18 +15,11 @@ from f110_gym.envs.base_classes import Integrator
 from expert.controllers import RacelineFollower
 from expert.lattice_planner import create_expert_planner
 from expert.utils import (
-    create_fixed_scene_render_callback,
     create_planner_render_callback,
-    create_trajectory_render_callback,
     downsample_lidar,
     find_opponent_start_index,
-    forward_raceline_segment,
     project_point_to_centerline,
     raceline_pose,
-    REPORT_CAMERA_LINE_WIDTH,
-    REPORT_CAMERA_POINT_SIZE,
-    REPORT_TRAJECTORY_LINE_WIDTH,
-    REPORT_TRAJECTORY_POINT_SIZE,
     require_end2race_runtime,
     unwrap_progress,
 )
@@ -49,26 +42,9 @@ def parse_arguments():
     parser.add_argument("--opponent_speed_scale", type=float, default=0.8)
 
     parser.add_argument("--sim_duration", type=float, default=8.0)
-    render_group = parser.add_mutually_exclusive_group()
-    render_group.add_argument("--render", action="store_true")
-    render_group.add_argument("--fixed_render", action="store_true")
-    render_group.add_argument("--fixed_render_original", action="store_true")
-    parser.add_argument("--fixed_render_zoom", type=float)
-    parser.add_argument("--fixed_render_horizontal_focus", type=float)
-    parser.add_argument("--fixed_render_vertical_focus", type=float)
+    parser.add_argument("--render", action="store_true")
 
-    args = parser.parse_args()
-    camera_overridden = any(
-        value is not None
-        for value in (
-            args.fixed_render_zoom,
-            args.fixed_render_horizontal_focus,
-            args.fixed_render_vertical_focus,
-        )
-    )
-    if camera_overridden and not args.fixed_render:
-        parser.error("fixed-render camera overrides require --fixed_render")
-    return args
+    return parser.parse_args()
 
 
 def total_simulation_steps(sim_duration, timestep):
@@ -165,53 +141,12 @@ def collect_scenario(args):
         integrator=Integrator.RK4,
     )
 
-    render_enabled = args.render or args.fixed_render or args.fixed_render_original
-    if render_enabled:
+    if args.render:
         render_info = {"ego_steer": 0.0, "ego_speed": 0.0, "opp_steer": 0.0, "opp_speed": 0.0}
         draw_traj_pts = []
-        if args.fixed_render or args.fixed_render_original:
-            scene_points = forward_raceline_segment(
-                ego_planner.waypoints,
-                args.ego_idx,
-                vehicle.maximum_speed * args.sim_duration,
-            )
-            if args.fixed_render_original:
-                camera_callback = create_fixed_scene_render_callback(
-                    scene_points,
-                    zoom=1.0,
-                    horizontal_focus=0.5,
-                    vertical_focus=0.5,
-                    line_width=3.5,
-                    point_size=4.0,
-                )
-            else:
-                camera_kwargs = {
-                    name: value
-                    for name, value in {
-                        "zoom": args.fixed_render_zoom,
-                        "horizontal_focus": args.fixed_render_horizontal_focus,
-                        "vertical_focus": args.fixed_render_vertical_focus,
-                    }.items()
-                    if value is not None
-                }
-                camera_callback = create_fixed_scene_render_callback(
-                    scene_points, **camera_kwargs
-                )
-            env.add_render_callback(camera_callback)
-            env.add_render_callback(
-                create_trajectory_render_callback(
-                    ego_planner,
-                    draw_traj_pts,
-                    line_width=REPORT_TRAJECTORY_LINE_WIDTH,
-                    point_size=REPORT_TRAJECTORY_POINT_SIZE,
-                    restore_line_width=REPORT_CAMERA_LINE_WIDTH,
-                    restore_point_size=REPORT_CAMERA_POINT_SIZE,
-                )
-            )
-        else:
-            env.add_render_callback(
-                create_planner_render_callback(render_info, ego_planner, draw_traj_pts)
-            )
+        env.add_render_callback(
+            create_planner_render_callback(render_info, ego_planner, draw_traj_pts)
+        )
 
     ego_waypoints_xytheta = np.column_stack(
         (ego_planner.waypoints[:, :2], ego_planner.waypoints[:, 3])
@@ -236,7 +171,7 @@ def collect_scenario(args):
     obs, _, done, _ = env.reset(
         poses=np.vstack([ego_position, opponent_position]), velocities=initial_velocities
     )
-    if render_enabled:
+    if args.render:
         env.render()
 
     initial_ego_progress, _ = project_point_to_centerline(
@@ -292,7 +227,7 @@ def collect_scenario(args):
             opponent_speed *= args.opponent_speed_scale
             action = np.asarray([[ego_steer, ego_speed], [opponent_steer, opponent_speed]])
 
-            if render_enabled:
+            if args.render:
                 render_info.update({
                     "ego_steer": ego_steer,
                     "ego_speed": ego_speed,
@@ -340,7 +275,7 @@ def collect_scenario(args):
                 done = True
                 collision_occurred = True
 
-            if render_enabled:
+            if args.render:
                 video_frames.append(env.render(mode="rgb_array"))
 
     elapsed_time = simulation_step * simulation.timestep
