@@ -305,12 +305,14 @@ For behavioral-cloning training (Sec.~\ref{sec:behavioral-cloning}), we exclude 
 
 \begin{figure}[!t]
     \centering
+    \setlength{\fboxsep}{0pt}
+    \setlength{\fboxrule}{0.2pt}
     \begin{tabular}{@{}c@{\hspace{0.8mm}}c@{\hspace{0.8mm}}c@{}}
-        \includegraphics[width=0.315\linewidth]{figures/fig3/expert-demo-1.png} &
-        \includegraphics[width=0.315\linewidth]{figures/fig3/expert-demo-2.png} &
-        \includegraphics[width=0.315\linewidth]{figures/fig3/expert-demo-3.png}
+        \fcolorbox{black!10}{white}{\includegraphics[width=0.315\linewidth]{figures/fig3/expert-demo-1.png}} &
+        \fcolorbox{black!10}{white}{\includegraphics[width=0.315\linewidth]{figures/fig3/expert-demo-2.png}} &
+        \fcolorbox{black!10}{white}{\includegraphics[width=0.315\linewidth]{figures/fig3/expert-demo-3.png}}
     \end{tabular}
-    \caption{Expert-planner failure during overtaking, shown in temporal order from (a) to (c). In this scenario, the opponent follows the right raceline with a speed scale of 0.8. Each frame shows the planned ego trajectory and both vehicle speeds; blue denotes the ego vehicle and red the opponent. (a) The ego approaches the opponent. (b) The vehicles travel side by side during overtaking. (c) The ego returns to the center lane prematurely, leading to a sideswipe collision.}
+    \caption{Expert-planner failure during overtaking, shown in temporal order from (I) to (III). In this scenario, the opponent follows the right raceline with a speed scale of 0.8. Each frame shows the planned ego trajectory and both vehicle speeds; blue denotes the ego vehicle and red the opponent. (I) The ego approaches the opponent. (II) The vehicles travel side by side during overtaking. (III) The ego returns to the center lane prematurely, leading to a sideswipe collision.}
     \label{fig:expert-failure}
 \end{figure}
 
@@ -444,7 +446,7 @@ Overtake Rate (\%) & 86.1 & 62.8 & \textbf{96.1} & 90.6 & 66.1 & \textbf{97.1} &
 \section{Experiments}
 \label{sec:experiments}
 
-This section provides implementation details and reports experimental results on the training track as well as three unseen test tracks. We first present model performance in the single-vehicle setting, showing detailed driving metrics. Next, we evaluate policy behavior across overtaking scenarios spanning all four tracks, analyzing outcomes under diverse conditions. Two comparative examples are shown in Fig.~\ref{fig:overtake} and~\ref{fig:follow}, illustrating a successful overtaking maneuver and safe car-following, respectively. Finally, we conduct stress tests with varying levels of sensor noise, which is essential for ensuring reliable operation in real-world autonomous racing applications.
+This section provides implementation details and reports experimental results on the training track as well as three unseen test tracks. We first present model performance in the single-vehicle setting, showing detailed driving metrics. Next, we evaluate policy behavior across overtaking scenarios spanning all four tracks, analyzing outcomes under diverse conditions. Four representative examples are shown in Fig.~\ref{fig:scenario-examples}: two successful overtakes, safe car-following, and a collision.
 
 \subsection{Training Setup}
 
@@ -459,18 +461,52 @@ We first evaluate End2Race in single-vehicle racing, which tests the basic requi
 The PPO policy surpasses both the map-based expert and the BC policy, achieving substantially higher mean speeds and shorter lap times on every track. These gains arise from PPO's continued adaptation during direct interaction with the environment, shaped by a progress reward that encourages faster driving and a collision penalty that discourages unsafe actions. Through this learning process, the policy discovers racing strategies that are often more competitive than those demonstrated by the expert and can closely resemble techniques used by human racers. One example is corner-exit track-out, in which the vehicle moves from the inside to the outside of a curve to reduce speed loss. Another example is corner-exit acceleration and corner-entry braking, in which the vehicle accelerates immediately upon exiting a curve, maintains high speed along the following straight, and brakes sharply just before entering the next curve~\cite{mitchell2004driving}.
 
 \begin{figure*}[!t]
-    \vspace{0.15cm}
     \centering
-    \includegraphics[width=\textwidth]{figures/overtake.pdf}
-    \caption{Overtaking example.}
-    \label{fig:overtake}
-\end{figure*}
+    \setlength{\fboxsep}{0pt}
+    \setlength{\fboxrule}{0.2pt}
+    \begin{minipage}[t]{0.485\textwidth}
+        \centering
+        \fcolorbox{black!10}{white}{\includegraphics[width=0.322\linewidth]{figures/fig5/overtake-1-frame-1.png}}%
+        \hfill
+        \fcolorbox{black!10}{white}{\includegraphics[width=0.322\linewidth]{figures/fig5/overtake-1-frame-2.png}}%
+        \hfill
+        \fcolorbox{black!10}{white}{\includegraphics[width=0.322\linewidth]{figures/fig5/overtake-1-frame-3.png}}
+        \par\vspace{0.4mm}{\footnotesize (a) Overtaking example 1}
+    \end{minipage}%
+    \hfill
+    \begin{minipage}[t]{0.485\textwidth}
+        \centering
+        \fcolorbox{black!10}{white}{\includegraphics[width=0.322\linewidth]{figures/fig5/overtake-2-frame-1.png}}%
+        \hfill
+        \fcolorbox{black!10}{white}{\includegraphics[width=0.322\linewidth]{figures/fig5/overtake-2-frame-2.png}}%
+        \hfill
+        \fcolorbox{black!10}{white}{\includegraphics[width=0.322\linewidth]{figures/fig5/overtake-2-frame-3.png}}
+        \par\vspace{0.4mm}{\footnotesize (b) Overtaking example 2}
+    \end{minipage}
 
-\begin{figure*}[!t]
-    \centering
-    \includegraphics[width=\textwidth]{figures/follow.pdf}
-    \caption{Car-following example.}
-    \label{fig:follow}
+    \vspace{1.5mm}
+
+    \begin{minipage}[t]{0.485\textwidth}
+        \centering
+        \fcolorbox{black!10}{white}{\includegraphics[width=0.322\linewidth]{figures/fig5/follow-frame-1.png}}%
+        \hfill
+        \fcolorbox{black!10}{white}{\includegraphics[width=0.322\linewidth]{figures/fig5/follow-frame-2.png}}%
+        \hfill
+        \fcolorbox{black!10}{white}{\includegraphics[width=0.322\linewidth]{figures/fig5/follow-frame-3.png}}
+        \par\vspace{0.4mm}{\footnotesize (c) Car-following example}
+    \end{minipage}%
+    \hfill
+    \begin{minipage}[t]{0.485\textwidth}
+        \centering
+        \fcolorbox{black!10}{white}{\includegraphics[width=0.322\linewidth]{figures/fig5/collision-frame-1.png}}%
+        \hfill
+        \fcolorbox{black!10}{white}{\includegraphics[width=0.322\linewidth]{figures/fig5/collision-frame-2.png}}%
+        \hfill
+        \fcolorbox{black!10}{white}{\includegraphics[width=0.322\linewidth]{figures/fig5/collision-frame-3.png}}
+        \par\vspace{0.4mm}{\footnotesize (d) Collision example}
+    \end{minipage}
+    \caption{Representative head-to-head racing outcomes. Each three-frame sequence is shown in temporal order from left to right. Blue denotes the ego vehicle and red denotes the opponent.}
+    \label{fig:scenario-examples}
     \vspace{-0.2cm}
 \end{figure*}
 
@@ -484,63 +520,7 @@ PPO significantly outperforms both the map-based expert and BC in safety and ove
 
 \subsection{Scenario Illustration}
 
-We illustrate an overtaking and a car-following scenario with continuous time frames (Fig.~\ref{fig:overtake} and~\ref{fig:follow}). The two scenarios feature nearly identical initial conditions, differing only in the leading vehicle’s velocity, highlighting the contrastive behavior. In each case, the vehicles are navigating a continuous sweeping curve that consists of a left turn immediately followed by a right turn. The ego vehicle is shown in blue and the leading vehicle in red, with their trajectories depicted in the corresponding color.
-
-In this setup, the leading vehicle follows the centerline of the track, leaving minimal gaps on either side, which makes overtaking especially challenging. Initially, the ego vehicle follows the leading vehicle (Fig.~\ref{fig:overtake}.1). As they approach the upcoming right turn, a brief opening appears, and the ego vehicle seizes the opportunity by steering sharply to the right and accelerating (Fig.~\ref{fig:overtake}.2 and~\ref{fig:overtake}.3). Upon entering the turn, the ego vehicle utilizes the inner lane and the shorter path to quickly overtake the leading vehicle. Immediately after passing, it reduces speed to avoid excessive velocity through the curve, which could result in loss of control (Fig.~\ref{fig:overtake}.4). After that, the ego vehicle resumes its pace (Fig.~\ref{fig:overtake}.5).
-
-In the car-following scenario, the leading vehicle travels at a higher speed and maintains a larger distance ahead of the ego vehicle (Fig.~\ref{fig:follow}.1). As in the overtaking example, the ego vehicle initially attempts to overtake by steering to the right (Fig.~\ref{fig:follow}.2). However, midway through the maneuver, the gap closes and overtaking becomes infeasible. Instead of forcing an unsafe pass, the ego vehicle aborts the attempt and steers back behind the leading vehicle to resume following (Fig.~\ref{fig:follow}.3 and~4). After both vehicles complete the turn, they accelerate back to cruising speed (Fig.~\ref{fig:follow}.5).
-
-
-\begin{table*}[!ht]
-\vspace{0.15cm}
-\caption{Single-Vehicle Performance (Hockenheim) with Sensor Noise}
-\centering
-\begin{tabular}{p{2.0cm}|>{\centering\arraybackslash}p{2.4cm}|>{\centering\arraybackslash}p{2.8cm}|>{\centering\arraybackslash}p{2.4cm}|>{\centering\arraybackslash}p{2.8cm}|>{\centering\arraybackslash}p{2.4cm}}
-
-\hline
-\textbf{} & \textbf{Mean Speed (m/s)} & \textbf{Speed Variance (m/s\textsuperscript{2})} & \textbf{Mean LapTime (s)} & \textbf{LapTime Variance (s\textsuperscript{2})} & \textbf{Laps Completed} \\
-\hline
-10\% Noise & 5.48 & 0.16 & 65.19 & 0.21 & 10 \\
-20\% Noise & 4.41 & 0.18 & 80.73 & 0.28 & 10 \\
-30\% Noise & 3.85 & 0.21 & 92.20 & 0.47 & 10 \\
-40\% Noise & 2.76 & 0.10 & - & - & 1.4 \\
-50\% Noise & 1.97 & 0.06 & - & - & 0.6 \\
-\hline
-\end{tabular}
-\label{tab:noise_single}
-\end{table*}
-
-\begin{table*}[!ht]
-\caption{Head-to-Head Racing Performance (Hockenheim) with Sensor Noise}
-\centering
-\begin{tabular}{p{2.0cm}|>{\centering\arraybackslash}p{2.4cm}|>{\centering\arraybackslash}p{2.8cm}|>{\centering\arraybackslash}p{2.4cm}|>{\centering\arraybackslash}p{2.8cm}|>{\centering\arraybackslash}p{2.4cm}}
-
-\hline
-\textbf{} & \textbf{Car Following} & \textbf{Overtaking} & \textbf{Collision} & \textbf{Overtake Rate (\%)} & \textbf{Safety Rate (\%)} \\
-\hline
-10\% Noise & 421 & 155 & 24 & 25.8 & 96.0 \\
-20\% Noise & 535 & 45 & 20 & 7.5 & 96.7 \\
-30\% Noise & 583 & 2 & 15 & 0.4 & 97.5 \\
-40\% Noise & 579 & 1 & 20 & 0.2 & 96.7 \\
-50\% Noise & 553 & 0 & 47 & 0.0 & 92.2 \\
-\hline
-\end{tabular}
-\label{tab:noise_head_to_head}
-\end{table*}
-
-\subsection{Evaluation with Sensor Noise}
-
-In real-world autonomous racing, sensor noise remains a persistent and significant challenge. A common issue is the intermittent return of zeros from some LiDAR beams, caused by hardware malfunctions, environmental interference, or communication errors~\cite{machines5010006}.
-
-These anomalies can significantly degrade system performance. For example, in reactive methods such as Follow-the-Gap, the absence of even a single beam across a wide gap may entirely obstruct the passage, resulting in suboptimal path selection. In map-based methods like the lattice planner, missing measurements can cause localization errors and often lead the vehicle to collide with track boundaries. To the best of our knowledge, the impact of sensor noise has not been investigated in existing F1Tenth learning algorithms.
-
-We assess the robustness of our model by randomly setting a proportion of LiDAR beams to zero at each timestep. Performance metrics are summarized in Tables~\ref{tab:noise_single} and~\ref{tab:noise_head_to_head}, using the Hockenheim track as a representative example.
-
-\subsubsection{Single-Vehicle Setting}
-Our model demonstrates strong robustness to sensor noise, successfully completing ten laps with up to 30\% noise. That is, 108 out of 360 LiDAR beams are set to zero at every timestep, imposing conditions far more demanding than typical real-world sensor failures. Even under 40\% noise, the model still completes more than one lap, and under 50\% noise, more than half a lap. As noise increases, the model adopts a conservative driving strategy, gradually reducing its speed while maintaining a stable speed variance. Under the proximity encoding, zero-valued measurements produce the maximum encoded value in the affected directions, prompting the ego vehicle to slow down and preserve smooth, consistent behavior under severe occlusion.
-
-\subsubsection{Head-to-Head Racing}
-In head-to-head racing scenarios, our model maintains a high safety rate. As the noise level increases, the model performs fewer overtaking maneuvers and more car-following cases. This indicates that even under heavy sensor noise, the model does not abruptly collide with the opponent. Instead, it slows down and remains cautious until conditions improve.
+Figure~\ref{fig:scenario-examples} illustrates the range of interactive behavior produced by the policy. In the two overtaking examples, the ego vehicle closes the initial gap, moves alongside the opponent, and completes the pass while negotiating different track geometries (Fig.~\ref{fig:scenario-examples}(a)--(b)). In the car-following example, the ego vehicle maintains a safe gap rather than forcing an unavailable pass (Fig.~\ref{fig:scenario-examples}(c)). The collision example shows a failure case in which the vehicle paths converge through a curve (Fig.~\ref{fig:scenario-examples}(d)).
 
 % \begin{table*}[!ht]
 % \caption{Ablation Study (Hockenheim) on Model Design}
@@ -570,7 +550,7 @@ The small variant achieves an overtaking rate of 55.0\%, similar to the baseline
 
 \section{Conclusion}
 
-In this work, we introduce End2Race, an innovative end-to-end imitation learning algorithm for F1Tenth racing. Our approach achieves high efficiency in single-vehicle settings, adaptive decision-making during overtaking, and strong robustness to sensor noise. Collectively, these results establish it as a competitive autonomous racing solution. Future work will focus on deployment to a physical vehicle and participation in F1Tenth competitions.
+In this work, we introduce End2Race, an end-to-end learning framework for autonomous racing. Our approach achieves high computational efficiency in single-vehicle settings and adaptive decision-making during head-to-head overtaking. Collectively, these results establish End2Race as a competitive autonomous racing solution. Future work will focus on deployment to a physical vehicle and participation in F1Tenth competitions.
 
 \bibliographystyle{ieeetr}
 \bibliography{F1Tenth}
