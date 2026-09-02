@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.25 (TeX Live 2023/Debian) (preloaded format=pdflatex 2026.5.26)  1 SEP 2026 18:15
+This is pdfTeX, Version 3.141592653-2.6-1.40.25 (TeX Live 2023/Debian) (preloaded format=pdflatex 2026.5.26)  2 SEP 2026 17:03
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
@@ -399,150 +399,134 @@ Package pdftex.def Info: figures/fig1/scenario.pdf  used on input line 154.
 
 
  <./figures/fig1/scenario.pdf>]
-<figures/fig2/architecture-scenarios.pdf, id=24, 216.81pt x 281.85298pt>
-File: figures/fig2/architecture-scenarios.pdf Graphic file (type pdf)
-<use figures/fig2/architecture-scenarios.pdf>
-Package pdftex.def Info: figures/fig2/architecture-scenarios.pdf  used on input
- line 205.
-(pdftex.def)             Requested size: 124.9518pt x 162.43837pt.
-<figures/fig2/architecture-expert.pdf, id=25, 216.81pt x 281.85298pt>
-File: figures/fig2/architecture-expert.pdf Graphic file (type pdf)
-<use figures/fig2/architecture-expert.pdf>
-Package pdftex.def Info: figures/fig2/architecture-expert.pdf  used on input li
-ne 206.
-(pdftex.def)             Requested size: 124.9518pt x 162.43837pt.
-<figures/fig2/architecture-imitation.pdf, id=26, 216.81pt x 281.85298pt>
-File: figures/fig2/architecture-imitation.pdf Graphic file (type pdf)
-<use figures/fig2/architecture-imitation.pdf>
-Package pdftex.def Info: figures/fig2/architecture-imitation.pdf  used on input
- line 207.
-(pdftex.def)             Requested size: 124.9518pt x 162.43837pt.
-<figures/fig2/architecture-reinforcement.pdf, id=27, 216.81pt x 281.85298pt>
-File: figures/fig2/architecture-reinforcement.pdf Graphic file (type pdf)
-<use figures/fig2/architecture-reinforcement.pdf>
-Package pdftex.def Info: figures/fig2/architecture-reinforcement.pdf  used on i
-nput line 208.
-(pdftex.def)             Requested size: 124.9518pt x 162.43837pt.
- [2] [3 <./figures/fig2/architecture-scenarios.pdf> <./figures/fig2/architectur
-e-expert.pdf> <./figures/fig2/architecture-imitation.pdf> <./figures/fig2/archi
-tecture-reinforcement.pdf>]
-Overfull \hbox (1.28911pt too wide) detected at line 281
+<figures/fig2/overview.jpg, id=24, 2369.85374pt x 880.03781pt>
+File: figures/fig2/overview.jpg Graphic file (type jpg)
+<use figures/fig2/overview.jpg>
+Package pdftex.def Info: figures/fig2/overview.jpg  used on input line 205.
+(pdftex.def)             Requested size: 505.89pt x 187.84818pt.
+ [2]
+Overfull \hbox (1.28911pt too wide) detected at line 284
 []\OMS/cmsy/m/n/10 J\OT1/cmr/m/n/10 (\OML/cmm/m/it/10 ^^\\OT1/cmr/m/n/10 ) = []
  [] [] + \OML/cmm/m/it/10 ^^U[] [] [][]
  []
 
-<figures/fig3/expert-demo-1.png, id=165, 975.645pt x 975.645pt>
+
+Underfull \vbox (badness 2221) has occurred while \output is active []
+
+ [3 <./figures/fig2/overview.jpg>]
+<figures/fig3/expert-demo-1.png, id=37, 975.645pt x 975.645pt>
 File: figures/fig3/expert-demo-1.png Graphic file (type png)
 <use figures/fig3/expert-demo-1.png>
-Package pdftex.def Info: figures/fig3/expert-demo-1.png  used on input line 308
+Package pdftex.def Info: figures/fig3/expert-demo-1.png  used on input line 311
 .
 (pdftex.def)             Requested size: 77.4018pt x 77.39816pt.
-<figures/fig3/expert-demo-2.png, id=166, 975.645pt x 975.645pt>
+<figures/fig3/expert-demo-2.png, id=38, 975.645pt x 975.645pt>
 File: figures/fig3/expert-demo-2.png Graphic file (type png)
 <use figures/fig3/expert-demo-2.png>
-Package pdftex.def Info: figures/fig3/expert-demo-2.png  used on input line 309
+Package pdftex.def Info: figures/fig3/expert-demo-2.png  used on input line 312
 .
 (pdftex.def)             Requested size: 77.4018pt x 77.39816pt.
-<figures/fig3/expert-demo-3.png, id=167, 975.645pt x 975.645pt>
+<figures/fig3/expert-demo-3.png, id=39, 975.645pt x 975.645pt>
 File: figures/fig3/expert-demo-3.png Graphic file (type png)
 <use figures/fig3/expert-demo-3.png>
-Package pdftex.def Info: figures/fig3/expert-demo-3.png  used on input line 310
+Package pdftex.def Info: figures/fig3/expert-demo-3.png  used on input line 313
 .
 (pdftex.def)             Requested size: 77.4018pt x 77.39816pt.
-[4 <./figures/fig3/expert-demo-1.png (PNG copy)> <./figures/fig3/expert-demo-2.
-png (PNG copy)> <./figures/fig3/expert-demo-3.png (PNG copy)>]
-<figures/fig4/bc-training.pdf, id=173, 126.4725pt x 97.5645pt>
+ [4 <./figures/fig3/expert-demo-1.png (PNG copy)> <./figures/fig3/expert-demo-2
+.png (PNG copy)> <./figures/fig3/expert-demo-3.png (PNG copy)>]
+<figures/fig4/bc-training.pdf, id=45, 126.4725pt x 97.5645pt>
 File: figures/fig4/bc-training.pdf Graphic file (type pdf)
 <use figures/fig4/bc-training.pdf>
-Package pdftex.def Info: figures/fig4/bc-training.pdf  used on input line 365.
+Package pdftex.def Info: figures/fig4/bc-training.pdf  used on input line 368.
 (pdftex.def)             Requested size: 120.40321pt x 92.88373pt.
-<figures/fig4/ppo-training.pdf, id=174, 126.4725pt x 97.5645pt>
+<figures/fig4/ppo-training.pdf, id=46, 126.4725pt x 97.5645pt>
 File: figures/fig4/ppo-training.pdf Graphic file (type pdf)
 <use figures/fig4/ppo-training.pdf>
-Package pdftex.def Info: figures/fig4/ppo-training.pdf  used on input line 370.
+Package pdftex.def Info: figures/fig4/ppo-training.pdf  used on input line 373.
 
 (pdftex.def)             Requested size: 120.40321pt x 92.88373pt.
  [5 <./figures/fig4/bc-training.pdf> <./figures/fig4/ppo-training.pdf>]
-<figures/fig5/overtake-1-frame-1.png, id=203, 975.645pt x 975.645pt>
+<figures/fig5/overtake-1-frame-1.png, id=74, 975.645pt x 975.645pt>
 File: figures/fig5/overtake-1-frame-1.png Graphic file (type png)
 <use figures/fig5/overtake-1-frame-1.png>
 Package pdftex.def Info: figures/fig5/overtake-1-frame-1.png  used on input lin
-e 446.
+e 449.
 (pdftex.def)             Requested size: 79.00645pt x 79.00597pt.
-<figures/fig5/overtake-1-frame-2.png, id=204, 975.645pt x 975.645pt>
+<figures/fig5/overtake-1-frame-2.png, id=75, 975.645pt x 975.645pt>
 File: figures/fig5/overtake-1-frame-2.png Graphic file (type png)
 <use figures/fig5/overtake-1-frame-2.png>
 Package pdftex.def Info: figures/fig5/overtake-1-frame-2.png  used on input lin
-e 448.
+e 451.
 (pdftex.def)             Requested size: 79.00645pt x 79.00597pt.
-<figures/fig5/overtake-1-frame-3.png, id=205, 975.645pt x 975.645pt>
+<figures/fig5/overtake-1-frame-3.png, id=76, 975.645pt x 975.645pt>
 File: figures/fig5/overtake-1-frame-3.png Graphic file (type png)
 <use figures/fig5/overtake-1-frame-3.png>
 Package pdftex.def Info: figures/fig5/overtake-1-frame-3.png  used on input lin
-e 450.
+e 453.
 (pdftex.def)             Requested size: 79.00645pt x 79.00597pt.
-<figures/fig5/overtake-2-frame-1.png, id=206, 975.645pt x 975.645pt>
+<figures/fig5/overtake-2-frame-1.png, id=77, 975.645pt x 975.645pt>
 File: figures/fig5/overtake-2-frame-1.png Graphic file (type png)
 <use figures/fig5/overtake-2-frame-1.png>
 Package pdftex.def Info: figures/fig5/overtake-2-frame-1.png  used on input lin
-e 456.
+e 459.
 (pdftex.def)             Requested size: 79.00645pt x 79.00597pt.
-<figures/fig5/overtake-2-frame-2.png, id=207, 975.645pt x 975.645pt>
+<figures/fig5/overtake-2-frame-2.png, id=78, 975.645pt x 975.645pt>
 File: figures/fig5/overtake-2-frame-2.png Graphic file (type png)
 <use figures/fig5/overtake-2-frame-2.png>
 Package pdftex.def Info: figures/fig5/overtake-2-frame-2.png  used on input lin
-e 458.
+e 461.
 (pdftex.def)             Requested size: 79.00645pt x 79.00597pt.
-<figures/fig5/overtake-2-frame-3.png, id=208, 975.645pt x 975.645pt>
+<figures/fig5/overtake-2-frame-3.png, id=79, 975.645pt x 975.645pt>
 File: figures/fig5/overtake-2-frame-3.png Graphic file (type png)
 <use figures/fig5/overtake-2-frame-3.png>
 Package pdftex.def Info: figures/fig5/overtake-2-frame-3.png  used on input lin
-e 460.
+e 463.
 (pdftex.def)             Requested size: 79.00645pt x 79.00597pt.
-<figures/fig5/follow-frame-1.png, id=209, 975.645pt x 975.645pt>
+<figures/fig5/follow-frame-1.png, id=80, 975.645pt x 975.645pt>
 File: figures/fig5/follow-frame-1.png Graphic file (type png)
 <use figures/fig5/follow-frame-1.png>
-Package pdftex.def Info: figures/fig5/follow-frame-1.png  used on input line 46
-8.
+Package pdftex.def Info: figures/fig5/follow-frame-1.png  used on input line 47
+1.
 (pdftex.def)             Requested size: 79.00645pt x 79.00597pt.
-<figures/fig5/follow-frame-2.png, id=210, 975.645pt x 975.645pt>
+<figures/fig5/follow-frame-2.png, id=81, 975.645pt x 975.645pt>
 File: figures/fig5/follow-frame-2.png Graphic file (type png)
 <use figures/fig5/follow-frame-2.png>
 Package pdftex.def Info: figures/fig5/follow-frame-2.png  used on input line 47
-0.
+3.
 (pdftex.def)             Requested size: 79.00645pt x 79.00597pt.
-<figures/fig5/follow-frame-3.png, id=211, 975.645pt x 975.645pt>
+<figures/fig5/follow-frame-3.png, id=82, 975.645pt x 975.645pt>
 File: figures/fig5/follow-frame-3.png Graphic file (type png)
 <use figures/fig5/follow-frame-3.png>
 Package pdftex.def Info: figures/fig5/follow-frame-3.png  used on input line 47
-2.
+5.
 (pdftex.def)             Requested size: 79.00645pt x 79.00597pt.
-<figures/fig5/collision-frame-1.png, id=212, 975.645pt x 975.645pt>
+<figures/fig5/collision-frame-1.png, id=83, 975.645pt x 975.645pt>
 File: figures/fig5/collision-frame-1.png Graphic file (type png)
 <use figures/fig5/collision-frame-1.png>
 Package pdftex.def Info: figures/fig5/collision-frame-1.png  used on input line
- 478.
+ 481.
 (pdftex.def)             Requested size: 79.00645pt x 79.00597pt.
-<figures/fig5/collision-frame-2.png, id=213, 975.645pt x 975.645pt>
+<figures/fig5/collision-frame-2.png, id=84, 975.645pt x 975.645pt>
 File: figures/fig5/collision-frame-2.png Graphic file (type png)
 <use figures/fig5/collision-frame-2.png>
 Package pdftex.def Info: figures/fig5/collision-frame-2.png  used on input line
- 480.
+ 483.
 (pdftex.def)             Requested size: 79.00645pt x 79.00597pt.
-<figures/fig5/collision-frame-3.png, id=214, 975.645pt x 975.645pt>
+<figures/fig5/collision-frame-3.png, id=85, 975.645pt x 975.645pt>
 File: figures/fig5/collision-frame-3.png Graphic file (type png)
 <use figures/fig5/collision-frame-3.png>
 Package pdftex.def Info: figures/fig5/collision-frame-3.png  used on input line
- 482.
+ 485.
 (pdftex.def)             Requested size: 79.00645pt x 79.00597pt.
- [6] [7 <./figures/fig5/overtake-1-frame-1.png (PNG copy)> <./figures/fig5/over
-take-1-frame-2.png (PNG copy)> <./figures/fig5/overtake-1-frame-3.png (PNG copy
-)> <./figures/fig5/overtake-2-frame-1.png (PNG copy)> <./figures/fig5/overtake-
-2-frame-2.png (PNG copy)> <./figures/fig5/overtake-2-frame-3.png (PNG copy)> <.
-/figures/fig5/follow-frame-1.png (PNG copy)> <./figures/fig5/follow-frame-2.png
- (PNG copy)> <./figures/fig5/follow-frame-3.png (PNG copy)> <./figures/fig5/col
-lision-frame-1.png (PNG copy)> <./figures/fig5/collision-frame-2.png (PNG copy)
-> <./figures/fig5/collision-frame-3.png (PNG copy)>] (./main.bbl
+
+[6] (./main.bbl [7 <./figures/fig5/overtake-1-frame-1.png (PNG copy)> <./figure
+s/fig5/overtake-1-frame-2.png (PNG copy)> <./figures/fig5/overtake-1-frame-3.pn
+g (PNG copy)> <./figures/fig5/overtake-2-frame-1.png (PNG copy)> <./figures/fig
+5/overtake-2-frame-2.png (PNG copy)> <./figures/fig5/overtake-2-frame-3.png (PN
+G copy)> <./figures/fig5/follow-frame-1.png (PNG copy)> <./figures/fig5/follow-
+frame-2.png (PNG copy)> <./figures/fig5/follow-frame-3.png (PNG copy)> <./figur
+es/fig5/collision-frame-1.png (PNG copy)> <./figures/fig5/collision-frame-2.png
+ (PNG copy)> <./figures/fig5/collision-frame-3.png (PNG copy)>]
 Underfull \hbox (badness 1371) in paragraph at lines 12--14
 []\OT1/ptm/m/n/8 Intel Cor-po-ra-tion, \OT1/ptm/m/it/8 In-tel Re-alSense D400 S
 e-ries Prod-uct Fam-ily
@@ -559,7 +543,7 @@ Underfull \hbox (badness 1776) in paragraph at lines 162--165
 m/m/it/8 arXiv preprint
  []
 
-[8])
+)
 
 ** Conference Paper **
 Before submitting the final camera ready copy, remember to:
@@ -571,19 +555,17 @@ Before submitting the final camera ready copy, remember to:
  uses only Type 1 fonts and that every step in the generation
  process uses the US letter (8.5in X 11in) paper size.
 
-[9
-
-] (./main.aux)
+[8] (./main.aux)
  ***********
 LaTeX2e <2023-11-01> patch level 1
 L3 programming layer <2024-01-22>
  ***********
  ) 
 Here is how much of TeX's memory you used:
- 4882 strings out of 476182
- 81410 string characters out of 5795595
+ 4862 strings out of 476182
+ 80271 string characters out of 5795595
  1952975 words of memory out of 5000000
- 26785 multiletter control sequences out of 15000+600000
+ 26765 multiletter control sequences out of 15000+600000
  609140 words of font info for 142 fonts, out of 8000000 for 9000
  14 hyphenation exceptions out of 8191
  72i,14n,79p,1513b,364s stack positions out of 10000i,1000n,20000p,200000b,200000s
@@ -601,10 +583,10 @@ fonts/cm/cmr8.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm
 e/texlive/texmf-dist/fonts/type1/urw/times/utmbi8a.pfb></usr/share/texlive/texm
 f-dist/fonts/type1/urw/times/utmr8a.pfb></usr/share/texlive/texmf-dist/fonts/ty
 pe1/urw/times/utmri8a.pfb>
-Output written on main.pdf (9 pages, 2208645 bytes).
+Output written on main.pdf (8 pages, 2836734 bytes).
 PDF statistics:
- 294 PDF objects out of 1000 (max. 8388607)
- 163 compressed objects within 2 object streams
+ 162 PDF objects out of 1000 (max. 8388607)
+ 88 compressed objects within 1 object stream
  0 named destinations out of 1000 (max. 500000)
- 111 words of extra memory for PDF output out of 10000 (max. 10000000)
+ 96 words of extra memory for PDF output out of 10000 (max. 10000000)
 

@@ -106,12 +106,12 @@ K.~Cho, B.~Van~Merri{\"e}nboer, C.~Gulcehre, D.~Bahdanau, F.~Bougares,
   encoder-decoder for statistical machine translation,'' {\em arXiv preprint
   arXiv:1406.1078}, 2014.
 
+\bibitem{sutton2018reinforcement}
+R.~S. Sutton and A.~G. Barto, {\em Reinforcement learning: An introduction}.
+\newblock MIT press, 2018.
+
 \bibitem{bc}
 C.~Sammut, ``Behavioral cloning,'' 01 2011.
-
-\bibitem{ppo}
-J.~Schulman, F.~Wolski, P.~Dhariwal, A.~Radford, and O.~Klimov, ``Proximal
-  policy optimization algorithms,'' 2017.
 
 \bibitem{dagger}
 S.~Ross, G.~Gordon, and D.~Bagnell, ``A reduction of imitation learning and
@@ -178,6 +178,10 @@ R.~Trumpp, E.~Javanmardi, J.~Nakazato, M.~Tsukada, and M.~Caccamo, ``Racemop:
   Mapless online path planning for multi-agent autonomous racing using residual
   policy learning,'' in {\em 2024 IEEE/RSJ International Conference on
   Intelligent Robots and Systems (IROS)}, pp.~8449--8456, 2024.
+
+\bibitem{ppo}
+J.~Schulman, F.~Wolski, P.~Dhariwal, A.~Radford, and O.~Klimov, ``Proximal
+  policy optimization algorithms,'' 2017.
 
 \bibitem{werling2010optimal}
 M.~Werling, J.~Ziegler, S.~Kammel, and S.~Thrun, ``Optimal trajectory
