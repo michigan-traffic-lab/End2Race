@@ -8,7 +8,7 @@ class End2Race(nn.Module):
     GRU_HIDDEN_SIZE = 420
     MLP_HIDDEN_SIZE = 128
     SPEED_MASK_PROBABILITY = 0.2
-    LIDAR_MAX_RANGE = 30.0
+    LIDAR_MAX_RANGE = 10.0
     PREPROCESSING_OPTIONS = ("linear", "no_normalization")
 
     def __init__(self, preprocessing: str):
@@ -59,11 +59,12 @@ class End2Race(nn.Module):
         speed_input: torch.Tensor,
         hidden: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
+        truncated_lidar = torch.clamp(x, max=self.LIDAR_MAX_RANGE)
         if self.preprocessing == "linear":
             # Preserve distance ordering instead of the baseline obstacle-pressure ordering.
-            processed_lidar = x / self.LIDAR_MAX_RANGE
+            processed_lidar = truncated_lidar / self.LIDAR_MAX_RANGE
         else:
-            processed_lidar = x
+            processed_lidar = truncated_lidar
 
         batch_size, seq_len, _ = x.shape
         speed_embedding = self.speed_mlp(speed_input)

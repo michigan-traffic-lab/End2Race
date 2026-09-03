@@ -5,7 +5,6 @@ import torch.nn as nn
 class End2RaceMLP(nn.Module):
     NUM_LIDAR_FEATURES = 180
     SPEED_EMBEDDING_DIM = 30
-    ENCODER_HIDDEN_SIZE = 1260
     ENCODER_OUTPUT_SIZE = 420
     MLP_HIDDEN_SIZE = 128
     SPEED_MASK_PROBABILITY = 0.2
@@ -27,12 +26,9 @@ class End2RaceMLP(nn.Module):
 
         processed_features = self.NUM_LIDAR_FEATURES + self.SPEED_EMBEDDING_DIM
 
-        # 795,480 parameters, within 0.11% of the 796,320-parameter GRU.
         # Tanh keeps the encoder output bounded like the replaced GRU state.
         self.mlp = nn.Sequential(
-            nn.Linear(processed_features, self.ENCODER_HIDDEN_SIZE),
-            nn.ReLU(),
-            nn.Linear(self.ENCODER_HIDDEN_SIZE, self.ENCODER_OUTPUT_SIZE),
+            nn.Linear(processed_features, self.ENCODER_OUTPUT_SIZE),
             nn.Tanh(),
         )
 

@@ -41,7 +41,7 @@ def parse_arguments():
     # Evaluation settings
     parser.add_argument("--noise", type=float, default=0.0)
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--lap_num", type=int, default=2)
+    parser.add_argument("--lap_num", type=int, default=1)
     parser.add_argument("--start_idx", type=int, default=0)
     parser.add_argument("--minimum_lap_time", type=float, default=10.0)
 
