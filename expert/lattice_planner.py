@@ -31,24 +31,17 @@ import math
 import multiprocessing as mp
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
-from types import SimpleNamespace
 
 import numpy as np
 from scipy.interpolate import CubicSpline
 from scipy.spatial import cKDTree
 
-from expert.utils import load_expert_config, nearest_point
-from f1tenth_sim.utils import load_racetrack_config, racetrack_path
+from expert.controllers import PurePursuitController
+from expert.utils import expert_configuration, nearest_point
+from f1tenth_sim.utils import racetrack_path
 
 
 LIDAR_FIELD_OF_VIEW = 6.28
-
-
-def _expert_configuration():
-    return SimpleNamespace(
-        **vars(load_expert_config().expert),
-        **vars(load_racetrack_config().vehicle),
-    )
 
 
 class QuarticLateralPolynomial:
@@ -230,47 +223,6 @@ def _frenet_to_cartesian(reference, path):
         path.acceleration.append(acceleration)
 
 
-class TrajectoryTracker:
-    """Track planned trajectories with pure pursuit."""
-
-    def __init__(self, configuration):
-        self.min_lookahead = configuration.min_lookahead
-        self.max_lookahead = configuration.max_lookahead
-        self.lookahead_speed_scale = configuration.lookahead_speed_scale
-        self.steering_gain = configuration.steering_gain
-        self.interpolation_points = configuration.interpolation_points
-
-    def plan(self, pose_x, pose_y, pose_theta, current_speed, trajectory):
-        lookahead = (
-            current_speed
-            * (self.max_lookahead - self.min_lookahead)
-            / self.lookahead_speed_scale
-            + self.min_lookahead
-        )
-        position = np.array([pose_x, pose_y])
-        distances = np.linalg.norm(trajectory[:, :2] - position, axis=1)
-        segment_end = int(np.argmin(distances))
-        if distances[-1] < lookahead:
-            segment_end = len(trajectory) - 1
-        else:
-            while segment_end + 1 < len(trajectory) and distances[segment_end] < lookahead:
-                segment_end += 1
-        segment_start = max(segment_end - 1, 0)
-        x_values = np.linspace(trajectory[segment_start, 0], trajectory[segment_end, 0], self.interpolation_points)
-        y_values = np.linspace(trajectory[segment_start, 1], trajectory[segment_end, 1], self.interpolation_points)
-        speed_values = np.linspace(trajectory[segment_start, 2], trajectory[segment_end, 2], self.interpolation_points)
-        interpolated = np.column_stack((x_values, y_values))
-        index = int(np.argmin(np.abs(np.linalg.norm(interpolated - position, axis=1) - lookahead)))
-        target = interpolated[index]
-        actual_lookahead = max(np.linalg.norm(position - target), 1e-6)
-        lateral_error = np.dot(
-            np.array([math.sin(-pose_theta), math.cos(-pose_theta)]), target - position
-        )
-        error = 2.0 * lateral_error / actual_lookahead**2
-        steering = self.steering_gain * error
-        return float(steering), float(speed_values[index])
-
-
 class FrenetOptimalTrajectoryPlanner:
     def __init__(self, configuration, map_path, raceline_path):
         self.conf = configuration
@@ -283,7 +235,7 @@ class FrenetOptimalTrajectoryPlanner:
         self.reference = PeriodicReference(self.waypoints[:, :2])
         self.maximum_speed = configuration.maximum_speed
         self.best_trajectory = None
-        self.tracker = TrajectoryTracker(configuration)
+        self.tracker = PurePursuitController(configuration)
         self.parallel_workers = configuration.parallel_workers
         self._candidate_pool = None
 
@@ -659,42 +611,9 @@ class FrenetOptimalTrajectoryPlanner:
         return trajectory
 
 
-class RacelineFollower:
-    """Non-reactive traffic vehicle that tracks its assigned raceline."""
-
-    def __init__(self, configuration, raceline_path):
-        self.conf = configuration
-        values = np.loadtxt(raceline_path, delimiter=";", skiprows=1, ndmin=2)
-        self.waypoints = np.column_stack((
-            values[:, 1],
-            values[:, 2],
-            np.clip(values[:, 5], 0.0, configuration.maximum_speed),
-            values[:, 3],
-            values[:, 0],
-        ))
-        self.best_trajectory = None
-        self.tracker = TrajectoryTracker(configuration)
-
-    def plan(self, pose_x, pose_y, pose_theta, lidar_scan, velocity):
-        del pose_theta, lidar_scan, velocity
-        position = np.array([pose_x, pose_y])
-        _, _, fraction, segment_index = nearest_point(position, self.waypoints[:, :2])
-        start_index = segment_index + int(fraction >= 0.5)
-        indices = np.arange(start_index, start_index + self.conf.trajectory_points) % len(self.waypoints)
-        trajectory = np.zeros((len(indices), 5))
-        trajectory[:, :4] = self.waypoints[indices, :4]
-        self.best_trajectory = trajectory
-        return trajectory
-
-
 def create_expert_planner(map_name, raceline_file):
     map_path = racetrack_path(map_name, f"{map_name}_map")
     raceline_path = racetrack_path(map_name, f"{raceline_file}.csv")
     return FrenetOptimalTrajectoryPlanner(
-        _expert_configuration(), str(map_path), raceline_path
+        expert_configuration(), str(map_path), raceline_path
     )
-
-
-def create_opponent(map_name, raceline_file):
-    raceline_path = racetrack_path(map_name, f"{raceline_file}.csv")
-    return RacelineFollower(_expert_configuration(), raceline_path)

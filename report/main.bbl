@@ -106,12 +106,12 @@ K.~Cho, B.~Van~Merri{\"e}nboer, C.~Gulcehre, D.~Bahdanau, F.~Bougares,
   encoder-decoder for statistical machine translation,'' {\em arXiv preprint
   arXiv:1406.1078}, 2014.
 
+\bibitem{sutton2018reinforcement}
+R.~S. Sutton and A.~G. Barto, {\em Reinforcement learning: An introduction}.
+\newblock MIT press, 2018.
+
 \bibitem{bc}
 C.~Sammut, ``Behavioral cloning,'' 01 2011.
-
-\bibitem{ppo}
-J.~Schulman, F.~Wolski, P.~Dhariwal, A.~Radford, and O.~Klimov, ``Proximal
-  policy optimization algorithms,'' 2017.
 
 \bibitem{dagger}
 S.~Ross, G.~Gordon, and D.~Bagnell, ``A reduction of imitation learning and
@@ -179,27 +179,42 @@ R.~Trumpp, E.~Javanmardi, J.~Nakazato, M.~Tsukada, and M.~Caccamo, ``Racemop:
   policy learning,'' in {\em 2024 IEEE/RSJ International Conference on
   Intelligent Robots and Systems (IROS)}, pp.~8449--8456, 2024.
 
-\bibitem{7963748}
-U.~Rosolia, A.~Carvalho, and F.~Borrelli, ``Autonomous racing using learning
-  model predictive control,'' in {\em 2017 American Control Conference (ACC)},
-  pp.~5115--5120, 2017.
+\bibitem{ppo}
+J.~Schulman, F.~Wolski, P.~Dhariwal, A.~Radford, and O.~Klimov, ``Proximal
+  policy optimization algorithms,'' 2017.
+
+\bibitem{werling2010optimal}
+M.~Werling, J.~Ziegler, S.~Kammel, and S.~Thrun, ``Optimal trajectory
+  generation for dynamic street scenarios in a fren{\'e}t frame,'' in {\em 2010
+  IEEE International Conference on Robotics and Automation}, pp.~987--993,
+  2010.
 
 \bibitem{zheng2023gametheoreticobjectivespaceplanning}
 H.~Zheng, Z.~Zhuang, J.~Betz, and R.~Mangharam, ``Game-theoretic objective
   space planning,'' 2023.
 
-\bibitem{sun2024megadagger}
-X.~Sun, S.~Yang, M.~Zhou, K.~Liu, and R.~Mangharam, ``Mega-dagger: Imitation
-  learning with multiple imperfect experts,'' 2024.
+\bibitem{sakai2018pythonrobotics}
+A.~Sakai, D.~Ingram, J.~Dinius, K.~Chawla, A.~Raffin, and A.~Paques,
+  ``{PythonRobotics}: A python code collection of robotics algorithms,'' 2018.
+
+\bibitem{baumann2025predictive}
+N.~Baumann, E.~Ghignone, C.~Hu, B.~Hildisch, T.~H{\"a}mmerle, A.~Bettoni,
+  A.~Carron, L.~Xie, and M.~Magno, ``Predictive spliner: Data-driven overtaking
+  in autonomous racing using opponent trajectory prediction,'' {\em IEEE
+  Robotics and Automation Letters}, vol.~10, no.~2, pp.~1816--1823, 2025.
+
+\bibitem{bufacchi2018action}
+R.~J. Bufacchi and G.~D. Iannetti, ``An action field theory of peripersonal
+  space,'' {\em Trends in Cognitive Sciences}, vol.~22, no.~12, pp.~1076--1090,
+  2018.
 
 \bibitem{shortcut}
 R.~Geirhos, J.~Jörn-Henrik, C.~Michaelis, R.~Zemel, B.~Wieland, B.~Matthias,
   and F.~A. Wichmann, ``Shortcut learning in deep neural networks,'' {\em
   Nature Machine Intelligence}, vol.~2, pp.~665--673, 11 2020.
 
-\bibitem{machines5010006}
-S.~D. Pendleton, H.~Andersen, X.~Du, X.~Shen, M.~Meghjani, Y.~H. Eng, D.~Rus,
-  and M.~H. Ang, ``Perception, planning, control, and coordination for
-  autonomous vehicles,'' {\em Machines}, vol.~5, no.~1, 2017.
+\bibitem{mitchell2004driving}
+W.~C. Mitchell, R.~Schroer, and D.~B. Grisez, ``Driving the traction circle,''
+  Tech. Rep. 2004-01-3545, SAE International, 2004.
 
 \end{thebibliography}

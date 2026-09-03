@@ -7,17 +7,17 @@ This package trains an End2Race policy with recurrent PPO. `train_ppo.py` contai
 - One shared recurrent actor-value model loads an IL checkpoint from `imitation/train.py`. The checkpoint initializes the policy weights, while the value head starts from fresh process randomness. The optimizer, epoch counter, recurrent hidden state, and rollout state also start fresh.
 - The default pool contains 720 scenarios: 80 ego starts, 3 opponent racelines, and 3 opponent speed scales.
 - Launch with `torchrun --nproc_per_node=N` to give each rank one GPU and its own environment workers; `--num_envs` defaults to 8 workers per GPU. A plain Python launch remains the single-device form. Every epoch trains on the complete 720-scenario pool: one shuffled order is synchronized across ranks, divided evenly, and collected concurrently while the policy remains fixed. Every scenario contributes exactly one trajectory per epoch.
-- A launch trains one model for an unlimited number of epochs until the process is stopped. Stochastic collection starts with steering and speed standard deviations of `0.05` and `0.50`. Both standard deviations are multiplied by `0.999` after every epoch.
+- A launch trains one model for an unlimited number of epochs until the process is stopped. Stochastic collection starts with steering and speed standard deviations of `0.05` and `0.50`. Both standard deviations are multiplied by `0.9995` after every epoch.
 - Each trajectory receives per-step GAE. After all 720 trajectories are collected, two PPO-Clip and value-regression updates reuse the fixed rollout estimates and advantage statistics reduced across every rank. Gradients accumulate across local worker-sized rollout chunks, are summed across ranks, and are globally clipped before every identical optimizer step on every replica.
 - Evaluation runs after both updates. Deterministic screening of all 720 scenarios is divided across ranks and gathered by rank 0.
 
-The simulator runs at 120 Hz and holds each actor action for three physics steps, matching the 40 Hz End2Race control rate. PPO bounds the actor's desired speed to `[0, 20]`. The expert `RacelineFollower` controls the opponent with a 120 Hz tracker and 10 Hz replanning.
+The simulator runs at 120 Hz and holds each actor action for three physics steps, matching the 40 Hz End2Race control rate. PPO bounds the actor's desired speed to `[0, 20]`. The non-reactive `RacelineFollower` controls the opponent with 120 Hz Pure Pursuit tracking and a 10 Hz reference-segment refresh.
 
 The environment reward is:
 
 ```text
-0.02 * ego_progress_delta
-- 1.0 on ego collision
+0.01 * ego_progress_delta
+- 3.0 on ego collision
 ```
 
 An overtake is classified when the ego center reaches at least one full vehicle length (`0.58 m`) ahead of the opponent center in wrapped Frenet progress. The policy observes 180 ego LiDAR values and the previous ego speed. A trajectory ends on ego collision or at the configured time limit. Opponent ground-truth poses support outcome classification.
@@ -42,6 +42,6 @@ torchrun --standalone --nproc_per_node=4 --module reinforcement.run_ppo \
   --checkpoint_path checkpoint/epoch_00500.pt
 ```
 
-PPO saves `config.json`, `episodes.jsonl`, `metrics.jsonl`, and the deployable policy `ppo.pt` directly inside `checkpoint/ppo/`. Every deterministic full-pool evaluation with safety strictly greater than 95% and an overtake rate strictly greater than 90% overwrites `ppo.pt` with the policy weights only. The critic, optimizer, and runtime training state are never saved. `episodes.jsonl` identifies every training and screening scenario by epoch. Each `metrics.jsonl` record contains the screening safe, collision, and overtake counts and rates, the training rollout summary, and whether that epoch saved the model. Each launch starts with a clean `checkpoint/ppo/` directory.
+PPO saves `config.json`, `episodes.jsonl`, `metrics.jsonl`, and deployable policies directly inside `checkpoint/ppo/`. Every deterministic full-pool evaluation with safety strictly greater than 95% and an overtake rate strictly greater than 75% saves a new policy with the next qualifying-evaluation number: `ppo_001.pt`, `ppo_002.pt`, and so on. These files contain policy weights only and are never overwritten. The critic, optimizer, and runtime training state are never saved. `episodes.jsonl` identifies every training and screening scenario by epoch. Each `metrics.jsonl` record contains the screening safe, collision, and overtake counts and rates, the training rollout summary, and whether that epoch saved a model. Each launch starts with a clean `checkpoint/ppo/` directory.
 
 The terminal reports the learning rate once at startup and one global start and completion line for each deterministic screening. Each completed stochastic training batch reports collision, following, and overtaking counts; policy steering and speed mean and standard deviation; mean value estimate, episode return, and elapsed phase time. Each PPO update reports value loss, approximate KL divergence, clip fraction, and gradient norms before and after clipping. Repeated Gym maintenance notices and the expected RK4 integrator warning are suppressed for PPO workers.

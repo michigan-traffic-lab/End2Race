@@ -3,6 +3,7 @@ import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 from numba import njit
@@ -17,6 +18,13 @@ from f1tenth_sim.utils import (
 
 def load_expert_config():
     return load_yaml_config(Path(__file__).resolve().parent / "config.yaml")
+
+
+def expert_configuration():
+    return SimpleNamespace(
+        **vars(load_expert_config().expert),
+        **vars(load_racetrack_config().vehicle),
+    )
 
 
 @njit(cache=True)
@@ -136,14 +144,21 @@ def mask_lidar_points(lidar, ratio, rng):
     return lidar
 
 
-def follow_vehicle_camera(event, margin=800.0):
-    """Center the camera on the specified vehicle and apply symmetric margins."""
+def follow_vehicle_camera(event, horizontal_margin=800.0):
+    """Center the camera on the ego vehicle at the normal render scale."""
     x_vertices = event.cars[0].vertices[::2]
     y_vertices = event.cars[0].vertices[1::2]
     center_x = float(np.mean(x_vertices))
     center_y = float(np.mean(y_vertices))
-    event.left, event.right = center_x - margin, center_x + margin
-    event.top, event.bottom = center_y + margin, center_y - margin
+    width, height = event.get_size()
+    vertical_margin = horizontal_margin * height / width
+    event.left, event.right = center_x - horizontal_margin, center_x + horizontal_margin
+    event.top, event.bottom = center_y + vertical_margin, center_y - vertical_margin
+
+
+def position_score_label(event):
+    event.score_label.x = event.left + 8.0
+    event.score_label.y = event.top - 8.0
 
 
 def update_point_batches(
@@ -174,12 +189,11 @@ def create_multiagent_render_callback(
     render_info, visited_points, drawn_points, batch_objects
 ):
     """Create a render callback that visualizes two vehicles and their trajectories."""
-    colors = [(255, 255, 0), (255, 0, 0)]
+    colors = [(48, 112, 162), (193, 82, 75)]
 
     def render_callback(event):
         follow_vehicle_camera(event)
-        event.score_label.x = event.left + 800
-        event.score_label.y = event.bottom + 100
+        position_score_label(event)
 
         event.score_label.text = (
             f"State: {render_info['state']} | "
@@ -205,8 +219,7 @@ def create_multiagent_render_callback(
 def create_planner_render_callback(render_info, planner, draw_traj_pts):
     def render_callback(event):
         follow_vehicle_camera(event)
-        event.score_label.x = event.left + 800
-        event.score_label.y = event.bottom + 100
+        position_score_label(event)
 
         event.score_label.text = (
             f"Ego: {render_info['ego_speed']:.1f}m/s, "
@@ -216,11 +229,10 @@ def create_planner_render_callback(render_info, planner, draw_traj_pts):
         )
 
         if planner.best_trajectory is not None:
-            trajectory_points = planner.best_trajectory[:, :2]
             update_point_batches(
                 event,
                 draw_traj_pts,
-                trajectory_points,
+                planner.best_trajectory[:, :2],
                 color=(183, 193, 222),
                 scale=50.0,
             )
@@ -233,8 +245,7 @@ def create_single_agent_render_callback(
 ):
     def render_callback(event):
         follow_vehicle_camera(event)
-        event.score_label.x = event.left + 800
-        event.score_label.y = event.top - 1500
+        position_score_label(event)
 
         event.score_label.text = (
             f"Laps: {render_info['laps']}/{lap_num} | "
@@ -247,7 +258,7 @@ def create_single_agent_render_callback(
             event,
             drawn_points,
             visited_points,
-            color=(255, 255, 0),
+            color=(48, 112, 162),
             batch_objects=batch_objects,
             scale=50.0,
         )

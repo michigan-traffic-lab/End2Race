@@ -126,6 +126,8 @@ def evaluate_laps(model, device, vehicle, args):
 
     lap_time = 0.0
     collision_occurred = False
+    negative_velocity = False
+    negative_velocity_value = 0.0
     trajectory = []
     speeds = []
     lap_count = 0
@@ -161,6 +163,16 @@ def evaluate_laps(model, device, vehicle, args):
                 )
                 ego_steer = actions[0, -1, 0].item()
                 ego_speed = actions[0, -1, 1].item()
+
+            if ego_speed < 0.0:
+                negative_velocity = True
+                negative_velocity_value = ego_speed
+                done = True
+                print(
+                    f"Negative desired speed {ego_speed:.6f} m/s at "
+                    f"{lap_time:.2f}s"
+                )
+                break
 
             ego_steer = np.clip(
                 ego_steer, -vehicle.steering_limit, vehicle.steering_limit
@@ -292,9 +304,15 @@ def evaluate_laps(model, device, vehicle, args):
         print(f"Mean Lap Time: {mean_lap_time:.2f}s")
         print(f"Lap Time Variance: {lap_time_variance:.3f}s²")
 
-    passed = not collision_occurred and lap_count >= args.lap_num
+    passed = (
+        not collision_occurred
+        and not negative_velocity
+        and lap_count >= args.lap_num
+    )
     if collision_occurred:
         print("\nStatus: Collision occurred")
+    elif negative_velocity:
+        print("\nStatus: Negative desired speed")
     elif passed:
         print("\nStatus: Successfully completed all laps")
     else:
@@ -302,6 +320,8 @@ def evaluate_laps(model, device, vehicle, args):
     return {
         "passed": passed,
         "collision": collision_occurred,
+        "negative_velocity": negative_velocity,
+        "negative_velocity_value": float(negative_velocity_value),
         "laps_completed": lap_count,
         "lap_progress": float(total_lap_progress),
         "lap_time": float(lap_time),
@@ -327,6 +347,8 @@ def main():
     result = evaluate_laps(model, device, vehicle, args)
     print(f"PASSED={int(result['passed'])}")
     print(f"COLLISION={int(result['collision'])}")
+    print(f"NEGATIVE_VELOCITY={int(result['negative_velocity'])}")
+    print(f"NEGATIVE_VELOCITY_VALUE={result['negative_velocity_value']:.6f}")
     print(f"LAPS_COMPLETED={result['laps_completed']}")
     print(f"LAP_PROGRESS={result['lap_progress']:.3f}")
     print(f"LAP_TIME={result['lap_time']:.3f}")

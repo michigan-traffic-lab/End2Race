@@ -39,7 +39,8 @@ end2race/
 ├── expert/
 │   ├── collect.py             # One expert collection scenario
 │   ├── collect.sh             # Parallel collection orchestrator
-│   ├── lattice_planner.py     # PythonRobotics FOT expert and trajectory tracker
+│   ├── controllers.py         # Pure Pursuit and passive raceline controllers
+│   ├── lattice_planner.py     # PythonRobotics FOT expert
 │   ├── config.yaml            # Expert-planner configuration
 │   └── utils.py               # Shared racing and collection utilities
 ├── install.sh                 # Dependency installation
@@ -102,7 +103,7 @@ python -m evaluation.eval_single \
   --render
 ```
 
-`--checkpoint_path` is required and `--map_name` defaults to `Austin`. `--output_dir`, `--noise`, `--seed`, `--lap_num`, `--start_idx`, and `--minimum_lap_time` default to `eval_results`, `0.0`, `42`, `1`, `0`, and `10.0`. The run exits 0 when the checkpoint completes every lap without a collision and 1 otherwise, and prints `PASSED`, `COLLISION`, `LAPS_COMPLETED`, `LAP_PROGRESS`, `LAP_TIME`, `MEAN_LAP_TIME`, `AVG_SPEED`, `SPEED_VARIANCE`, and `TOTAL_DISTANCE` as `KEY=VALUE` lines. It writes no results file.
+`--checkpoint_path` is required and `--map_name` defaults to `Austin`. `--output_dir`, `--noise`, `--seed`, `--lap_num`, `--start_idx`, and `--minimum_lap_time` default to `eval_results`, `0.0`, `42`, `1`, `0`, and `10.0`. The run exits 0 when the checkpoint completes every lap without a collision or a negative desired-speed prediction and 1 otherwise. A negative desired speed fails immediately before the action reaches the simulator. The evaluator prints `PASSED`, `COLLISION`, `NEGATIVE_VELOCITY`, `NEGATIVE_VELOCITY_VALUE`, `LAPS_COMPLETED`, `LAP_PROGRESS`, `LAP_TIME`, `MEAN_LAP_TIME`, `AVG_SPEED`, `SPEED_VARIANCE`, and `TOTAL_DISTANCE` as `KEY=VALUE` lines. It writes no results file.
 
 With `--render` the video lands directly in `--output_dir`, and its name carries the outcome: `[c_]<map>_lap<progress>[_noiseNN].mp4`, where `c_` marks a collision, the progress is the completed laps plus the fraction of the current lap to one decimal with `.` written as `_`, and the noise suffix appears only for a nonzero `--noise` as the percentage. `Austin_lap1_0.mp4` completed the target lap; `c_Austin_lap0_5.mp4` collided halfway around; `c_Austin_lap0_5_noise10.mp4` did the same at `--noise 0.1`.
 
@@ -123,7 +124,7 @@ python -m evaluation.eval_multi \
 
 `--checkpoint_path` is required; `--map_name`, `--output_dir`, `--ego_raceline`, `--ego_idx`, `--opponent_raceline`, `--opponent_speed_scale`, `--interval_idx`, `--sim_duration`, `--noise`, and `--seed` default to `Austin`, `eval_results`, `raceline1`, `0`, `raceline1`, `0.8`, `15`, `8.0`, `0.0`, and `42`. The run prints `STATE`, `AVG_SPEED`, `SPEED_VARIANCE`, and `TOTAL_DISTANCE` as `KEY=VALUE` lines, where `STATE` is 1 for following, 2 for overtaking, and 3 for a collision. It writes no results file; `eval_multi.sh` owns the summary for a whole map.
 
-With `--render` the video lands directly in `--output_dir` as `<c|f|o>_ol<opponent raceline>_e<ego index>_o<opponent index>_s<speed scale>[_noiseNN].mp4`, with the noise suffix present only for a nonzero `--noise`. The name carries the scenario alone, so the checkpoint and map belong in `--output_dir`.
+With `--render` the video lands in the `collision`, `follow`, or `overtake` subdirectory of `--output_dir` as `<c|f|o>_ol<opponent raceline>_e<ego index>_o<opponent index>_s<speed scale>[_noiseNN].mp4`, with the noise suffix present only for a nonzero `--noise`. The name carries the scenario alone, so the checkpoint and map belong in `--output_dir`.
 
 ### Multi-Agent Parallel Evaluation (Optional)
 
@@ -147,7 +148,7 @@ opponent speed scales: 720 scenarios across 16 workers. Artifacts land under
 `<output root>/<checkpoint stem>/<map>/`. Every selected map runs its complete
 720-scenario matrix.
 
-The batch renders no video, so `results.json` is its only artifact: the batch configuration, the following, overtaking, collision, and error counts, and their percentages. A `Ctrl-C` and a `SIGTERM` still write it, so `planned_scenarios`, `completed_scenarios`, `complete`, and `stop_reason` say how much of the batch the numbers cover; percentages always use `completed_scenarios` as their denominator. The batch exits 0 when every scenario ran, 1 on worker errors, and 130 or 143 when interrupted.
+The batch renders no video by default. Set `RENDER=true` to render every scenario and set `WORKERS` to override the default 16 workers, for example `WORKERS=8 RENDER=true bash evaluation/eval_multi.sh ...`. Rendered videos are grouped into `collision`, `follow`, and `overtake` subdirectories. Without rendering, `results.json` is the only artifact: the batch configuration, the following, overtaking, collision, and error counts, and their percentages. A `Ctrl-C` and a `SIGTERM` still write it, so `planned_scenarios`, `completed_scenarios`, `complete`, and `stop_reason` say how much of the batch the numbers cover; percentages always use `completed_scenarios` as their denominator. The batch exits 0 when every scenario ran, 1 on worker errors, and 130 or 143 when interrupted.
 
 ### Checkpoint Qualification
 
@@ -221,7 +222,7 @@ torchrun --standalone --nproc_per_node=4 --module reinforcement.run_ppo \
   --checkpoint_path checkpoint/epoch_00500.pt
 ```
 
-`reinforcement.run_ppo` externally sequences the separate training and evaluation modules. A plain Python launch uses one GPU when available; `torchrun --nproc_per_node=N` gives each rank one GPU and its own `--num_envs` environment workers. Every epoch randomly shuffles the 720 Austin scenarios once, divides them evenly among ranks, and collects one stochastic trajectory per scenario while holding a synchronized policy fixed. Advantages are normalized across all ranks, and the fixed rollout estimates are reused for two PPO updates so clipping can constrain the second pass. For each update, gradients accumulate across each rank's worker-sized rollout chunks, and one globally summed PPO gradient is clipped before every replica takes the same optimizer step. The actor's desired speed is bounded to `[0, 20]` by the PPO environment. The actor and value head use a constant learning rate of `1e-5`. After both updates, deterministic screening of all 720 scenarios is divided across ranks. The same model trains for unlimited epochs until the process is stopped. The required IL checkpoint initializes the policy weights; the value head, optimizer, and runtime training state start fresh. Stochastic collection starts with steering and speed standard deviations of `0.05` and `0.50`, and both decay by a factor of `0.999` after every epoch. Every evaluation with safety strictly greater than 95% and an overtake rate strictly greater than 90% overwrites `checkpoint/ppo/ppo.pt` with deployable policy weights only; the critic and runtime training state are not saved. The other flat PPO artifacts are `config.json`, `episodes.jsonl`, and `metrics.jsonl`. See [reinforcement/README.md](reinforcement/README.md) for the reward, exploration behavior, and artifacts.
+`reinforcement.run_ppo` externally sequences the separate training and evaluation modules. A plain Python launch uses one GPU when available; `torchrun --nproc_per_node=N` gives each rank one GPU and its own `--num_envs` environment workers. Every epoch randomly shuffles the 720 Austin scenarios once, divides them evenly among ranks, and collects one stochastic trajectory per scenario while holding a synchronized policy fixed. Advantages are normalized across all ranks, and the fixed rollout estimates are reused for two PPO updates so clipping can constrain the second pass. For each update, gradients accumulate across each rank's worker-sized rollout chunks, and one globally summed PPO gradient is clipped before every replica takes the same optimizer step. The actor's desired speed is bounded to `[0, 20]` by the PPO environment. The actor and value head use a constant learning rate of `1e-5`. After both updates, deterministic screening of all 720 scenarios is divided across ranks. The same model trains for unlimited epochs until the process is stopped. The required IL checkpoint initializes the policy weights; the value head, optimizer, and runtime training state start fresh. Stochastic collection starts with steering and speed standard deviations of `0.05` and `0.50`, and both decay by a factor of `0.9995` after every epoch. Every evaluation with safety strictly greater than 95% and an overtake rate strictly greater than 90% saves a new deployable policy as `checkpoint/ppo/ppo_NNN.pt`, numbered by qualifying evaluation from `ppo_001.pt`; the critic and runtime training state are not saved. The other flat PPO artifacts are `config.json`, `episodes.jsonl`, and `metrics.jsonl`. See [reinforcement/README.md](reinforcement/README.md) for the reward, exploration behavior, and artifacts.
 
 ## Model Architecture
 

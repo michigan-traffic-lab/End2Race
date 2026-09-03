@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-WORKERS=16
+WORKERS="${WORKERS:-16}"
 CHECKPOINT_PATH="${1:-}"
 OUTPUT_ROOT="${2:-eval_results/mlp_ablation}"
 EGO_RACELINE="raceline1"
@@ -8,7 +8,7 @@ NUM_STARTPOINTS=80
 SIM_DURATION=8.0
 NOISE=0.0
 SEED=42
-RENDER=false
+RENDER="${RENDER:-false}"
 OPPONENT_RACELINES=(raceline0 raceline1 raceline2)
 OPPONENT_SPEED_SCALES=(0.4 0.6 0.8)
 SUPPORTED_MAPS=(Austin Hockenheim MoscowRaceway Nuerburgring)

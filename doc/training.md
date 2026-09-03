@@ -34,7 +34,9 @@ sweep and do not add evaluation or qualification logic to `imitation/train.py`.
 5. Qualify the model only when all 720 scenarios complete without worker errors
    and overall safety (`success_percent`) is strictly greater than 80%.
 
-A single-agent pass means completing one full loop without a collision.
+A single-agent pass means completing one full loop without a collision or a
+negative desired-speed prediction. A negative desired speed fails the run
+before the action reaches the simulator.
 
 ## Artifact Policy
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 DATASET_DIR="${DATASET_DIR:-dataset}"
-WORKERS=16
+WORKERS=8
 MAP_NAME="Austin"
 EGO_RACELINE="raceline1"
 NUM_STARTPOINTS=80

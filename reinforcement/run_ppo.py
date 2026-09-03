@@ -19,17 +19,13 @@ from .train_ppo import (
     VALUE_LOSS_WEIGHT,
     train_epoch,
 )
-from expert.utils import (
-    find_opponent_start_index,
-    get_ego_idx_range,
-    require_end2race_runtime,
-)
+from expert.utils import find_opponent_start_index, get_ego_idx_range
 from f1tenth_sim.utils import load_racetrack_config, load_raceline
 
 ARTIFACT_DIR = Path("checkpoint/ppo")
 LEARNING_RATE = 1e-5
 MINIMUM_SAFETY_RATE = 0.95
-MINIMUM_OVERTAKE_RATE = 0.9
+MINIMUM_OVERTAKE_RATE = 0.75
 
 
 def parse_arguments():
@@ -233,12 +229,10 @@ def _synchronize_model(model):
 
 def main():
     args = parse_arguments()
-    require_end2race_runtime()
     rank, world_size, device = _initialize_process_group()
     envs = None
     try:
         artifact_dir = ARTIFACT_DIR
-        model_path = artifact_dir / "ppo.pt"
         config_path = artifact_dir / "config.json"
         episodes_path = artifact_dir / "episodes.jsonl"
         metrics_path = artifact_dir / "metrics.jsonl"
@@ -296,6 +290,7 @@ def main():
 
         envs = VectorEnv(args.num_envs, args)
         rng = np.random.default_rng()
+        saved_model_count = 0
         for epoch in itertools.count(1):
             epoch_action_std = model.action_std.detach().cpu().tolist()
             ordered, rollout_summary, statistics = train_epoch(
@@ -351,7 +346,10 @@ def main():
                 )
                 metrics["model_saved"] = model_saved
                 if model_saved:
-                    torch.save(model.model.state_dict(), model_path)
+                    saved_model_count += 1
+                    model_path = artifact_dir / f"ppo_{saved_model_count:03d}.pt"
+                    with model_path.open("xb") as stream:
+                        torch.save(model.model.state_dict(), stream)
                     print(
                         f"{label} saved {model_path.name}: "
                         f"safety {metrics['screening_safety_rate']:.2%} | "

@@ -5,6 +5,8 @@ dist/
 
 eval_results/
 *.mp4
+!report/figures/fig3/*.mp4
+!report/figures/fig5/*.mp4
 
 f1tenth_sim/f1tenth_gym/docs/html/
 f1tenth_sim/f1tenth_gym/docs/xml/

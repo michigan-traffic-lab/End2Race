@@ -13,7 +13,7 @@ import numpy as np
 import torch
 from f110_gym.envs.base_classes import Integrator
 
-from expert.lattice_planner import create_opponent
+from expert.controllers import RacelineFollower
 from expert.utils import (
     downsample_lidar,
     project_point_to_centerline,
@@ -63,8 +63,8 @@ def _wrapped_progress_delta(current_progress, previous_progress, track_length):
 class RaceEnv:
     """Two-agent racing episode stepped at 40 Hz over 120 Hz physics."""
 
-    PROGRESS_REWARD_WEIGHT = 0.02
-    COLLISION_PENALTY = -1.0
+    PROGRESS_REWARD_WEIGHT = 0.01
+    COLLISION_PENALTY = -3.0
     MAXIMUM_EGO_SPEED = 20.0
 
     def __init__(self, settings):
@@ -90,7 +90,7 @@ class RaceEnv:
 
     def _opponent(self, raceline):
         if raceline not in self.opponents:
-            opponent = create_opponent(self.map_name, raceline)
+            opponent = RacelineFollower(self.map_name, raceline)
             if opponent.conf.tracker_steps != self.simulation.steps_per_expert_plan:
                 raise ValueError(
                     "expert.tracker_steps must match the number of simulation "
@@ -141,12 +141,9 @@ class RaceEnv:
     def _opponent_action(self):
         opponent = self.opponents[self.scenario.opponent_raceline]
         if self.tracker_count == 0:
-            self.opponent_trajectory = opponent.plan(
+            self.opponent_trajectory = opponent.reference_trajectory(
                 self.raw_observation["poses_x"][1],
                 self.raw_observation["poses_y"][1],
-                self.raw_observation["poses_theta"][1],
-                self.raw_observation["scans"][1],
-                self.raw_observation["linear_vels_x"][1],
             )
         steering, speed = opponent.tracker.plan(
             self.raw_observation["poses_x"][1],

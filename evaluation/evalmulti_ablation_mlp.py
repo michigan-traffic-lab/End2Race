@@ -10,7 +10,7 @@ import numpy as np
 import torch
 from f110_gym.envs.base_classes import Integrator
 
-from expert.lattice_planner import create_opponent
+from expert.controllers import RacelineFollower
 from expert.utils import (
     calculate_metrics,
     create_multiagent_render_callback,
@@ -120,7 +120,7 @@ def evaluate_segment(model, device, vehicle, args):
         env.add_render_callback(render_callback)
 
     video_frames = []
-    opponent = create_opponent(args.map_name, args.opponent_raceline)
+    opponent = RacelineFollower(args.map_name, args.opponent_raceline)
     tracker_steps = opponent.conf.tracker_steps
     previous_speed = initial_speed
     control_step = 0
@@ -187,12 +187,9 @@ def evaluate_segment(model, device, vehicle, args):
             previous_speed = obs["linear_vels_x"][0]
 
         if tracker_count == 0:
-            opponent_trajectory = opponent.plan(
+            opponent_trajectory = opponent.reference_trajectory(
                 obs["poses_x"][1],
                 obs["poses_y"][1],
-                obs["poses_theta"][1],
-                obs["scans"][1],
-                obs["linear_vels_x"][1],
             )
 
         opponent_steer, opponent_speed = opponent.tracker.plan(
@@ -262,10 +259,16 @@ def evaluate_segment(model, device, vehicle, args):
 
     if args.render and video_frames:
         state_prefix = "c" if collision_occurred else final_state[0]
+        outcome_dir = {
+            "c": "collision",
+            "f": "follow",
+            "o": "overtake",
+        }[state_prefix]
         opponent_raceline_number = args.opponent_raceline.replace("raceline", "")
         noise_suffix = f"_noise{int(args.noise * 100)}" if args.noise else ""
-        args.output_dir.mkdir(parents=True, exist_ok=True)
-        video_path = args.output_dir / (
+        video_dir = args.output_dir / outcome_dir
+        video_dir.mkdir(parents=True, exist_ok=True)
+        video_path = video_dir / (
             f"{state_prefix}_ol{opponent_raceline_number}_e{args.ego_idx}"
             f"_o{opp_idx}_s{args.opponent_speed_scale}{noise_suffix}.mp4"
         )

@@ -12,7 +12,8 @@ import imageio
 import numpy as np
 from f110_gym.envs.base_classes import Integrator
 
-from expert.lattice_planner import create_expert_planner, create_opponent
+from expert.controllers import RacelineFollower
+from expert.lattice_planner import create_expert_planner
 from expert.utils import (
     create_planner_render_callback,
     downsample_lidar,
@@ -26,6 +27,7 @@ from f1tenth_sim.utils import load_racetrack_config, simulation_config
 from imitation.model import End2Race
 
 EGO_RACELINE = "raceline1"
+VIDEO_OUTPUT_PARAMS = ["-crf", "12", "-preset", "slow", "-pix_fmt", "yuv420p"]
 
 
 def parse_arguments():
@@ -77,7 +79,14 @@ def save_data(
 
         if video_frames:
             video_path = collision_dir / f"{base_filename}.mp4"
-            imageio.mimwrite(video_path, video_frames, fps=video_fps, macro_block_size=1)
+            imageio.mimwrite(
+                video_path,
+                video_frames,
+                fps=video_fps,
+                codec="libx264",
+                macro_block_size=1,
+                output_params=VIDEO_OUTPUT_PARAMS,
+            )
             print(f"Collision video saved to {video_path}")
 
         print(f"Collision metadata saved to {metadata_path}")
@@ -98,7 +107,14 @@ def save_data(
     print(f"Multi-agent data saved to {csv_path}")
     if video_frames:
         video_path = success_dir / f"{base_filename}.mp4"
-        imageio.mimwrite(video_path, video_frames, fps=video_fps, macro_block_size=1)
+        imageio.mimwrite(
+            video_path,
+            video_frames,
+            fps=video_fps,
+            codec="libx264",
+            macro_block_size=1,
+            output_params=VIDEO_OUTPUT_PARAMS,
+        )
         print(f"Video saved to {video_path}")
 
 
@@ -108,7 +124,7 @@ def collect_scenario(args):
     simulation_steps = total_simulation_steps(args.sim_duration, simulation.timestep)
 
     ego_planner = create_expert_planner(args.map_name, EGO_RACELINE)
-    opponent_planner = create_opponent(args.map_name, args.opponent_raceline)
+    opponent = RacelineFollower(args.map_name, args.opponent_raceline)
     planner_steps = ego_planner.conf.tracker_steps
     if planner_steps != simulation.steps_per_expert_plan:
         raise ValueError(
@@ -137,7 +153,7 @@ def collect_scenario(args):
     )
     ego_position = raceline_pose(ego_waypoints_xytheta, args.ego_idx)
     opponent_waypoints_xytheta = np.column_stack(
-        (opponent_planner.waypoints[:, :2], opponent_planner.waypoints[:, 3])
+        (opponent.waypoints[:, :2], opponent.waypoints[:, 3])
     )
     opponent_idx = find_opponent_start_index(
         ego_waypoints_xytheta, opponent_waypoints_xytheta, args.ego_idx, args.interval_idx
@@ -145,7 +161,7 @@ def collect_scenario(args):
     opponent_position = raceline_pose(opponent_waypoints_xytheta, opponent_idx)
     initial_velocities = np.asarray([
         simulation.ego_initial_speed_fraction * vehicle.maximum_speed,
-        opponent_planner.waypoints[opponent_idx, 2] * args.opponent_speed_scale,
+        opponent.waypoints[opponent_idx, 2] * args.opponent_speed_scale,
     ])
 
     # Progress is measured against the ego raceline for both vehicles
@@ -181,12 +197,9 @@ def collect_scenario(args):
             obs["scans"][0],
             obs["linear_vels_x"][0],
         )
-        opponent_trajectory = opponent_planner.plan(
+        opponent_trajectory = opponent.reference_trajectory(
             obs["poses_x"][1],
             obs["poses_y"][1],
-            obs["poses_theta"][1],
-            obs["scans"][1],
-            obs["linear_vels_x"][1],
         )
 
         for _ in range(planner_steps):
@@ -201,7 +214,7 @@ def collect_scenario(args):
                 ego_trajectory,
             )
             ego_steer = np.clip(ego_steer, -vehicle.steering_limit, vehicle.steering_limit)
-            opponent_steer, opponent_speed = opponent_planner.tracker.plan(
+            opponent_steer, opponent_speed = opponent.tracker.plan(
                 obs["poses_x"][1],
                 obs["poses_y"][1],
                 obs["poses_theta"][1],
@@ -257,7 +270,8 @@ def collect_scenario(args):
                 "overtaking" if current_ego_progress > current_opponent_progress else "following"
             )
 
-            if obs["collisions"][0]:
+            ego_collision = bool(obs["collisions"][0])
+            if ego_collision:
                 done = True
                 collision_occurred = True
 
@@ -266,7 +280,6 @@ def collect_scenario(args):
 
     elapsed_time = simulation_step * simulation.timestep
     print("Sim elapsed time:", elapsed_time)
-
     state_prefix = final_state[0]
     opponent_raceline_number = args.opponent_raceline.removeprefix("raceline")
     base_filename = (
