@@ -9,8 +9,10 @@ class End2RaceTransformer(nn.Module):
     MLP_HIDDEN_SIZE = 128
     SPEED_MASK_PROBABILITY = 0.2
     LIDAR_NORMALIZATION_K = 0.3
-    # One second of history at the 40 Hz control rate.
+    # One second of attention history at the 40 Hz control rate.
     CONTEXT_LENGTH = 40
+    # Episodes are 8 seconds long, so positions never exceed this while training.
+    MAX_POSITIONS = 320
     # One temporal block of 420-dimensional state, matching the single GRU layer.
     NUM_LAYERS = 1
     NUM_HEADS = 2
@@ -55,17 +57,14 @@ class End2RaceTransformer(nn.Module):
             nn.init.xavier_uniform_(layer.self_attn.in_proj_weight)
             nn.init.zeros_(layer.self_attn.in_proj_bias)
 
-        # Positions are relative to the start of the context window, so the encoding a
-        # token receives is the same during training and at any point of an evaluation
-        # run, however long the episode is.
-        positions = torch.arange(self.CONTEXT_LENGTH, dtype=torch.float32)[:, None]
+        positions = torch.arange(self.MAX_POSITIONS, dtype=torch.float32)[:, None]
         frequencies = 10000.0 ** (
             -torch.arange(0, self.GRU_HIDDEN_SIZE, 2, dtype=torch.float32)
             / self.GRU_HIDDEN_SIZE
         )
         angles = positions * frequencies[None]
         position_encoding = torch.empty(
-            self.CONTEXT_LENGTH, self.GRU_HIDDEN_SIZE, dtype=torch.float32
+            self.MAX_POSITIONS, self.GRU_HIDDEN_SIZE, dtype=torch.float32
         )
         position_encoding[:, 0::2] = angles.sin()
         position_encoding[:, 1::2] = angles.cos()
@@ -90,18 +89,25 @@ class End2RaceTransformer(nn.Module):
 
         nn.init.xavier_normal_(self.dummy_embedding)
 
+    def _attention_mask(self, seq_len, device, dtype):
+        # Causal, and additionally limited to the last CONTEXT_LENGTH steps, so a whole
+        # episode can be trained in one pass while each step still decides from one
+        # second of history. With a single layer this is exactly what the policy
+        # computes online from its sliding window.
+        positions = torch.arange(seq_len, device=device)
+        allowed = (positions[None, :] <= positions[:, None]) & (
+            positions[None, :] > positions[:, None] - self.CONTEXT_LENGTH
+        )
+        mask = torch.zeros(seq_len, seq_len, device=device, dtype=dtype)
+        return mask.masked_fill(~allowed, float("-inf"))
+
     def encode(
         self,
         x: torch.Tensor,
         speed_input: torch.Tensor,
-        context: torch.Tensor | None = None,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+        context: tuple[torch.Tensor, int] | None = None,
+    ) -> tuple[torch.Tensor, tuple[torch.Tensor, int]]:
         batch_size, seq_len, _ = x.shape
-        if seq_len > self.CONTEXT_LENGTH:
-            raise ValueError(
-                f"Sequence length {seq_len} exceeds the {self.CONTEXT_LENGTH}-step "
-                "context window; feed sliding windows instead of whole episodes"
-            )
 
         processed_lidar = 2 * torch.sigmoid(-self.lidar_normalization_k * x)
 
@@ -121,35 +127,43 @@ class End2RaceTransformer(nn.Module):
 
         features = torch.cat([processed_lidar, speed_embedding], dim=2)
         tokens = self.input_projection(features)
-        if context is not None:
-            tokens = torch.cat([context, tokens], dim=1)
-        if tokens.shape[1] > self.CONTEXT_LENGTH:
-            tokens = tokens[:, -self.CONTEXT_LENGTH :]
 
+        cached_tokens, window_start = (None, 0) if context is None else context
+        if cached_tokens is not None:
+            tokens = torch.cat([cached_tokens, tokens], dim=1)
+        window_length = tokens.shape[1]
+        if window_length > self.MAX_POSITIONS:
+            raise ValueError(
+                f"Window of {window_length} steps exceeds the {self.MAX_POSITIONS} "
+                "positions covered by the position encoding"
+            )
+
+        # Positions stay absolute so that a step evaluated online receives the encoding
+        # it was trained with. Runs longer than an episode hold at the final window,
+        # which is a position pattern every training episode ends on.
+        encoding_start = max(0, min(window_start, self.MAX_POSITIONS - window_length))
         positioned_tokens = tokens + self.position_encoding[
-            : tokens.shape[1]
+            encoding_start : encoding_start + window_length
         ].to(dtype=tokens.dtype)[None]
-        # The window never exceeds CONTEXT_LENGTH, so a plain causal mask already
-        # limits every step to the last second.
-        causal_mask = nn.Transformer.generate_square_subsequent_mask(
-            tokens.shape[1],
-            device=tokens.device,
-            dtype=tokens.dtype,
-        )
         features = self.transformer(
             positioned_tokens,
-            mask=causal_mask,
-            is_causal=True,
+            mask=self._attention_mask(window_length, tokens.device, tokens.dtype),
         )
         features = self.feature_projection(features)
-        return features[:, -seq_len:], tokens[:, -(self.CONTEXT_LENGTH - 1) :]
+
+        retained = min(window_length, self.CONTEXT_LENGTH - 1)
+        new_context = (
+            tokens[:, window_length - retained :],
+            window_start + window_length - retained,
+        )
+        return features[:, -seq_len:], new_context
 
     def forward(
         self,
         x: torch.Tensor,
         speed_input: torch.Tensor,
-        context: torch.Tensor | None = None,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+        context: tuple[torch.Tensor, int] | None = None,
+    ) -> tuple[torch.Tensor, tuple[torch.Tensor, int]]:
         features, new_context = self.encode(x, speed_input, context)
         actions = self.output_layer(features)
 

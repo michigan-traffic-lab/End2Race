@@ -4,6 +4,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import torch
+import torch.nn.functional as F
 import torch.optim as optim
 from torch.utils.data import DataLoader, Dataset
 
@@ -14,19 +15,13 @@ NUM_EPOCHS = 500
 CHECKPOINT_INTERVAL = 500
 BATCH_SIZE = 1024
 LEARNING_RATE = 1e-4
-# Windows advance one control step at a time, matching how the policy slides its
-# context during evaluation.
-SEQUENCE_STRIDE = 1
-NUM_WORKERS = 4
 
 
 def parse_arguments():
-    parser = argparse.ArgumentParser(description="Train End2Race speed-conditioned model")
+    parser = argparse.ArgumentParser(description="Train the End2Race temporal-backbone ablation")
     parser.add_argument("--dataset_dir", type=Path, default=Path("dataset"))
     parser.add_argument("--output_dir", type=Path, default=Path("checkpoint/ckp_ablation_transformer"))
 
-    parser.add_argument("--epochs", type=int, default=NUM_EPOCHS)
-    parser.add_argument("--checkpoint_interval", type=int, default=CHECKPOINT_INTERVAL)
     parser.add_argument("--speed_loss_weight", type=float, default=0.05)
     parser.add_argument("--gradient_clip_norm", type=float, default=1.0)
 
@@ -41,21 +36,15 @@ class SequenceDataset(Dataset):
         self.speed_column = "current_speed"
         self.action_columns = ["steer", "desired_speed"]
         self.expected_columns = ["time", self.speed_column] + self.action_columns + self.lidar_columns
-        self.sequence_length = End2RaceTransformer.CONTEXT_LENGTH
-        self.episodes = []
-        self.windows = []
+        self.sequence_length = self._determine_sequence_length(data_path)
+        self.sequences = []
         self._load_episodes(data_path)
-        if not self.windows:
+        if not self.sequences:
             raise ValueError(f"No usable training sequences found in {data_path}")
-        print(
-            f"Loaded {len(self.episodes)} episodes as {len(self.windows)} "
-            f"{self.sequence_length}-step windows (stride {SEQUENCE_STRIDE})"
-        )
+        print(f"Loaded {len(self.sequences)} sequences")
 
     def _load_episodes(self, data_path: str | Path):
         csv_files = sorted(Path(data_path).glob("*.csv"))
-        if not csv_files:
-            raise FileNotFoundError(f"No training CSV files found in {data_path}")
         for csv_file in csv_files:
             df = pd.read_csv(csv_file)
             if list(df.columns) != self.expected_columns:
@@ -66,52 +55,46 @@ class SequenceDataset(Dataset):
             if len(df) < self.sequence_length:
                 continue
 
+            lidar_data = df[self.lidar_columns].values.astype(np.float32)
             speed_data = df[[self.speed_column]].values.astype(np.float32)
-            # Shifting the speed over the whole episode keeps the true speed measured at
-            # t-1 available to a window that happens to start at t.
-            self.episodes.append(
+            action_data = df[self.action_columns].values.astype(np.float32)
+
+            self._create_sequences(lidar_data, speed_data, action_data)
+
+    def _determine_sequence_length(self, data_path: str | Path) -> int:
+        csv_files = sorted(Path(data_path).glob("*.csv"))
+        if not csv_files:
+            raise FileNotFoundError(f"No training CSV files found in {data_path}")
+        sequence_length = len(pd.read_csv(csv_files[0]))
+        print(f"Sequence length: {sequence_length}")
+        return sequence_length
+
+    def _create_sequences(
+        self,
+        lidar_data: np.ndarray,
+        speed_data: np.ndarray,
+        action_data: np.ndarray,
+    ):
+        previous_speed = np.concatenate((speed_data[:1], speed_data[:-1]))
+        for end_idx in range(self.sequence_length - 1, len(lidar_data)):
+            start_idx = end_idx - self.sequence_length + 1
+            self.sequences.append(
                 {
-                    "lidar": df[self.lidar_columns].values.astype(np.float32),
-                    "speed": np.concatenate((speed_data[:1], speed_data[:-1])),
-                    "action": df[self.action_columns].values.astype(np.float32),
+                    "lidar": lidar_data[start_idx : end_idx + 1],
+                    "speed": previous_speed[start_idx : end_idx + 1],
+                    "action": action_data[start_idx : end_idx + 1],
                 }
             )
-            self._create_windows(len(self.episodes) - 1, len(df))
-
-    def _create_windows(self, episode_index: int, num_steps: int):
-        # Windows are stored as indices; materialising 40-step copies of every offset
-        # would duplicate each episode about 40 times in memory.
-        for start_idx in range(
-            0, num_steps - self.sequence_length + 1, SEQUENCE_STRIDE
-        ):
-            self.windows.append((episode_index, start_idx))
 
     def __len__(self) -> int:
-        return len(self.windows)
+        return len(self.sequences)
 
-    def __getitem__(
-        self, index: int
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-        episode_index, start_idx = self.windows[index]
-        episode = self.episodes[episode_index]
-        end_idx = start_idx + self.sequence_length
-
-        # Every window predicts the action at its newest step, which is the only one the
-        # policy emits online. The opening window additionally supervises its earlier
-        # positions, because those are the shorter-context states the policy really goes
-        # through during the first second of an episode. Together the windows cover each
-        # expert action exactly once.
-        loss_mask = np.zeros(self.sequence_length, dtype=np.float32)
-        if start_idx == 0:
-            loss_mask[:] = 1.0
-        else:
-            loss_mask[-1] = 1.0
-
+    def __getitem__(self, index: int) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        sequence = self.sequences[index]
         return (
-            torch.from_numpy(episode["lidar"][start_idx:end_idx]),
-            torch.from_numpy(episode["speed"][start_idx:end_idx]),
-            torch.from_numpy(episode["action"][start_idx:end_idx]),
-            torch.from_numpy(loss_mask),
+            torch.from_numpy(sequence["lidar"]),
+            torch.from_numpy(sequence["speed"]),
+            torch.from_numpy(sequence["action"]),
         )
 
 
@@ -125,23 +108,17 @@ def train_epoch(
     device = next(model.parameters()).device
     model.train()
     total_loss = 0.0
-    for lidar_seq, speed_seq, target_actions, loss_mask in train_loader:
+    for lidar_seq, speed_seq, target_actions in train_loader:
         lidar_seq = lidar_seq.to(device, non_blocking=True)
         speed_seq = speed_seq.to(device, non_blocking=True)
         target_actions = target_actions.to(device, non_blocking=True)
-        loss_mask = loss_mask.to(device, non_blocking=True)
         optimizer.zero_grad(set_to_none=True)
 
         predicted_actions, _ = model(lidar_seq, speed_seq)
         predicted_actions_flat = predicted_actions.reshape(-1, predicted_actions.shape[-1])
         target_actions_flat = target_actions.reshape(-1, target_actions.shape[-1])
-        # Averaging over the supervised positions only, so an expert action carries the
-        # same weight whether it came from the opening window or a sliding one.
-        weights = loss_mask.reshape(-1)
-        num_supervised = weights.sum()
-        squared_error = (predicted_actions_flat - target_actions_flat) ** 2
-        steer_loss = (squared_error[:, 0] * weights).sum() / num_supervised
-        speed_loss = (squared_error[:, 1] * weights).sum() / num_supervised
+        steer_loss = F.mse_loss(predicted_actions_flat[:, 0], target_actions_flat[:, 0])
+        speed_loss = F.mse_loss(predicted_actions_flat[:, 1], target_actions_flat[:, 1])
         loss = steer_loss + speed_loss * speed_loss_weight
         loss.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=gradient_clip_norm)
@@ -156,7 +133,7 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
     print(
-        f"Training settings: epochs={args.epochs}, checkpoint_interval={args.checkpoint_interval}, "
+        f"Training settings: epochs={NUM_EPOCHS}, checkpoint_interval={CHECKPOINT_INTERVAL}, "
         f"batch_size={BATCH_SIZE}, learning_rate={LEARNING_RATE}, arguments={vars(args)}"
     )
 
@@ -167,19 +144,14 @@ def main():
         batch_size=BATCH_SIZE,
         shuffle=True,
         pin_memory=device.type == "cuda",
-        num_workers=NUM_WORKERS,
-        persistent_workers=NUM_WORKERS > 0,
     )
 
     model = End2RaceTransformer().to(device)
     optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    print(
-        f"Train batches: {len(train_loader)} per epoch, "
-        f"{len(train_loader) * args.epochs} optimizer steps in total"
-    )
+    print(f"Train batches: {len(train_loader)}")
 
-    for epoch in range(1, args.epochs + 1):
+    for epoch in range(1, NUM_EPOCHS + 1):
         loss = train_epoch(
             model,
             train_loader,
@@ -187,12 +159,12 @@ def main():
             args.speed_loss_weight,
             args.gradient_clip_norm,
         )
-        if epoch % args.checkpoint_interval:
+        if epoch % CHECKPOINT_INTERVAL:
             continue
         checkpoint_path = args.output_dir / f"epoch_{epoch:05d}.pt"
         torch.save(model.state_dict(), checkpoint_path)
         print(
-            f"Epoch {epoch}/{args.epochs}, loss: {loss:.5f}, "
+            f"Epoch {epoch}/{NUM_EPOCHS}, loss: {loss:.5f}, "
             f"saved {checkpoint_path}"
         )
 
