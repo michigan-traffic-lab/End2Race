@@ -10,7 +10,7 @@ class End2RaceTransformer(nn.Module):
     MLP_HIDDEN_SIZE = 128
     SPEED_MASK_PROBABILITY = 0.2
     LIDAR_NORMALIZATION_K = 0.3
-    CONTEXT_LENGTH = 40
+    CONTEXT_LENGTH = 20
     NUM_LAYERS = 2
     NUM_HEADS = 3
 
@@ -121,7 +121,7 @@ class End2RaceTransformer(nn.Module):
         window_length = tokens.shape[1]
         position_encoding = self.position_encoding[:window_length]
         # The window never exceeds CONTEXT_LENGTH, so a plain causal mask already
-        # limits every step to one second of history.
+        # limits every step to half a second of history.
         causal_mask = nn.Transformer.generate_square_subsequent_mask(
             window_length,
             device=tokens.device,

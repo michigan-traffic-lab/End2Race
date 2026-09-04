@@ -94,7 +94,7 @@ class SequenceDataset(Dataset):
     def _loss_mask(self, start_idx: int) -> np.ndarray:
         # A window supervises the action at its newest step, the only one the policy
         # emits online. The opening window also supervises its earlier positions, which
-        # are the shorter-context states of the first second. Together the windows cover
+        # are the shorter-context states of the opening window. Together the windows cover
         # each expert action exactly once.
         loss_mask = np.zeros(self.sequence_length, dtype=np.float32)
         if start_idx == 0:

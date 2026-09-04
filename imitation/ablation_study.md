@@ -18,9 +18,9 @@ Because these experiments are intended to isolate model design rather than cross
 
 ## Run record
 
-Twelve models: four ablations, three seeds each, all trained on `dataset/success` (643 Austin
-episodes of 320 steps) and evaluated on Austin with seed 42. Every one of the twelve head-to-head
-evaluations reported `errors: 0` over the full 720 planned scenarios.
+Twelve models: four ablations, three seeds each, all trained on the same 643 collision-free Austin
+demonstrations of 320 steps and evaluated on Austin with seed 42. Every one of the twelve
+head-to-head evaluations completed all 720 planned scenarios without a simulator error.
 
 ### Per seed
 
@@ -75,18 +75,40 @@ baseline that is stable to an SD of 7.0; dropping normalization altogether drops
 an SD of 14.1 and no seed that finishes a lap. Compressing far measurements toward zero, so that
 LiDAR returns read as obstacle pressure rather than as distance, is what keeps the policy stable.
 
-### Artifacts
+### Cross-track generalization of the Transformer
 
-```
-checkpoint/ablation_{transformer,mlp,linear,nonorm}/run_{1,2,3}/
-    epoch_00500.pt
-    metrics.csv                                  # epoch,total_loss,steering_loss,weighted_speed_loss
-eval_results/ablation_<variant>/run_{1,2,3}/
-    single/results.json
-    multi/epoch_00500/Austin/results.json
-```
+The three Transformer seeds were additionally run through the same head-to-head protocol on the
+three tracks they never saw during training. Only Austin demonstrations were used for behavioural
+cloning, so Hockenheim, MoscowRaceway and Nuerburgring are held out entirely. All twelve
+evaluations completed their 720 planned scenarios without a simulator error.
 
-Training entry points are `imitation/train_transformer.py`, `imitation/train_mlp.py`, and
-`imitation/train_preprocess.py --preprocessing {linear,no_normalization}`. Evaluation entry points
-are `evaluation/evalsingle_ablation_{transformer,mlp,preprocess}.py` and the matching
-`evaluation/evalmulti_ablation_*.sh`, run with `WORKERS=12` on Austin.
+| | Austin (trained) | Hockenheim | MoscowRaceway | Nuerburgring |
+| --- | ---: | ---: | ---: | ---: |
+| **overtake %** | | | | |
+| seed 1 | 83.9 | 83.6 | 76.5 | 89.9 |
+| seed 2 | 82.9 | 83.8 | 68.1 | 80.3 |
+| seed 3 | 81.7 | 85.0 | 78.1 | 88.6 |
+| mean | 82.8 | 84.1 | 74.2 | 86.2 |
+| SD | 1.1 | 0.8 | 5.4 | 5.2 |
+| **safety %** | | | | |
+| seed 1 | 87.4 | 84.7 | 78.1 | 90.4 |
+| seed 2 | 87.4 | 85.0 | 69.4 | 80.8 |
+| seed 3 | 86.1 | 87.2 | 80.3 | 89.6 |
+| mean | 86.9 | 85.6 | 75.9 | 86.9 |
+| SD | 0.7 | 1.4 | 5.7 | 5.3 |
+| **collisions /720, mean** | 94 | 103 | 173 | 94 |
+
+Averaged over the nine held-out evaluations the policy overtakes in 81.5 % of scenarios and is safe
+in 82.8 %, against 82.8 % and 86.9 % on the track it was trained on: a drop of 1.3 and 4.1 points.
+The policy is therefore not fitting the Austin centreline. What it transfers is a local rule for
+reading obstacle pressure out of the LiDAR return and acting on it, which is the same quantity on
+any track. Nuerburgring is in fact the easiest of the four at 86.2 % overtake and 94 mean collisions,
+and Hockenheim matches Austin; MoscowRaceway is the hard one at 74.2 % and 173 collisions.
+
+The seed spread behaves differently off-distribution, and this is the more useful observation. On
+Austin the three seeds are within 2.2 points of one another, so the training track cannot tell them
+apart. Held out, seed 2 falls 5.6 points below its own Austin score while seeds 1 and 3 move by
+-0.6 and +2.2, and the whole gap concentrates on the two harder tracks, where seed 2 loses 8.4
+points on MoscowRaceway and 9.6 on Nuerburgring relative to the other two. In-distribution score is
+thus a poor predictor of which seed will transfer, which argues for selecting checkpoints on a
+held-out track rather than on the training one.
