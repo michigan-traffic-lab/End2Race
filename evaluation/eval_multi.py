@@ -36,6 +36,7 @@ def parse_arguments():
     parser.add_argument("--checkpoint_path", type=Path, required=True)
     parser.add_argument("--output_dir", type=Path, default=Path("eval_results"))
     parser.add_argument("--render", action="store_true")
+    parser.add_argument("--device", default=None)
 
     # Scenario settings
     parser.add_argument("--ego_raceline", default="raceline1")
@@ -122,8 +123,7 @@ def evaluate_segment(model, device, vehicle, args):
     video_frames = []
     opponent = RacelineFollower(args.map_name, args.opponent_raceline)
     tracker_steps = opponent.conf.tracker_steps
-    hidden_size = model.gru.hidden_size
-    hidden_state = torch.zeros((1, 1, hidden_size), device=device)
+    hidden_state = torch.zeros((1, 1, model.gru.hidden_size), device=device)
     previous_speed = initial_speed
     control_step = 0
     ego_steer = 0.0
@@ -309,7 +309,7 @@ def main():
     require_end2race_runtime()
     vehicle = load_racetrack_config().vehicle
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device(args.device or ("cuda" if torch.cuda.is_available() else "cpu"))
     model = End2Race().to(device)
     model.load_state_dict(
         torch.load(args.checkpoint_path, map_location=device, weights_only=True)

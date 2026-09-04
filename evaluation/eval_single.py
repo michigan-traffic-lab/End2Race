@@ -1,4 +1,5 @@
 import argparse
+import json
 from contextlib import redirect_stderr
 from io import StringIO
 from pathlib import Path
@@ -37,6 +38,8 @@ def parse_arguments():
     parser.add_argument("--checkpoint_path", type=Path, default=Path("checkpoint/epoch_00500.pt"))
     parser.add_argument("--output_dir", type=Path, default=Path("eval_results"))
     parser.add_argument("--render", action="store_true")
+    parser.add_argument("--device", default=None)
+    parser.add_argument("--results_path", type=Path)
 
     # Evaluation settings
     parser.add_argument("--noise", type=float, default=0.0)
@@ -93,8 +96,7 @@ def evaluate_laps(model, device, vehicle, args):
         velocities=np.array([initial_speed]),
     )
 
-    hidden_size = model.gru.hidden_size
-    hidden_state = torch.zeros((1, 1, hidden_size), device=device)
+    hidden_state = torch.zeros((1, 1, model.gru.hidden_size), device=device)
     previous_speed = initial_speed
     control_step = 0
     ego_steer = 0.0
@@ -317,7 +319,7 @@ def main():
     require_end2race_runtime()
     vehicle = load_racetrack_config().vehicle
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device(args.device or ("cuda" if torch.cuda.is_available() else "cpu"))
     model = End2Race().to(device)
     model.load_state_dict(
         torch.load(args.checkpoint_path, map_location=device, weights_only=True)
@@ -325,6 +327,9 @@ def main():
     model.eval()
 
     result = evaluate_laps(model, device, vehicle, args)
+    if args.results_path:
+        args.results_path.parent.mkdir(parents=True, exist_ok=True)
+        args.results_path.write_text(json.dumps(result, indent=2) + "\n")
     print(f"PASSED={int(result['passed'])}")
     print(f"COLLISION={int(result['collision'])}")
     print(f"NEGATIVE_VELOCITY={int(result['negative_velocity'])}")

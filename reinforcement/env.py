@@ -64,7 +64,7 @@ class RaceEnv:
     """Two-agent racing episode stepped at 40 Hz over 120 Hz physics."""
 
     PROGRESS_REWARD_WEIGHT = 0.01
-    COLLISION_PENALTY = -3.0
+    COLLISION_PENALTY = -2.5
     MAXIMUM_EGO_SPEED = 20.0
 
     def __init__(self, settings):

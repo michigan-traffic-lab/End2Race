@@ -17,7 +17,7 @@ The environment reward is:
 
 ```text
 0.01 * ego_progress_delta
-- 3.0 on ego collision
+- 2.5 on ego collision
 ```
 
 An overtake is classified when the ego center reaches at least one full vehicle length (`0.58 m`) ahead of the opponent center in wrapped Frenet progress. The policy observes 180 ego LiDAR values and the previous ego speed. A trajectory ends on ego collision or at the configured time limit. Opponent ground-truth poses support outcome classification.

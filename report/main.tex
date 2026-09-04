@@ -513,20 +513,22 @@ Fig.~\ref{fig:scenario-examples}(b) depicts an outside pass through a sharp curv
 \multirow{2}{*}{\textbf{Variant}} & \multicolumn{2}{c|}{\textbf{Single-Vehicle}} & \multicolumn{2}{c}{\textbf{Head-to-Head}} \\
 & Speed (m/s) & Lap Time (s) & Overtake (\%) & Safety (\%) \\
 \hline
-MLP           & --  & --   & --   & --   \\
-Transformer   & --  & --   & --   & --   \\
-Linear Norm.  & --  & --   & --   & --   \\
-No Norm.      & --  & --   & --   & --   \\
+MLP           & 6.9 & 60.9 & 67.6 & 70.4 \\
+Transformer   & 6.6 & 63.8 & 73.1 & 80.6 \\
+Linear Norm.  & 6.4 & 64.9 & 47.0 & 73.3 \\
+No Norm.      & --  & --   & 16.3 & 21.1 \\
 Baseline (BC) & 6.7 & 62.7 & 62.8 & 82.8 \\
 \hline
 \end{tabular*}
 \end{table}
 
-% This section presents ablation studies on key architectural design choices. We evaluate two GRU variants with hidden sizes of \(2\times\) (End2Race-Small) and \(8\times\) (End2Race-Large) the input dimensionality, as well as a variant that omits the ego-speed input (End2Race-LiDAR). Evaluations are conducted on the Hockenheim track as a representative example. 
+This ablation study examines the effects of removing recurrent memory and changing the LiDAR proximity encoding. The MLP variant replaces the GRU with a feedforward \(210 \rightarrow 420\) layer with a \(\tanh\) activation, retaining the original action decoder. The other two variants retain the GRU and replace the proximity encoding with linear normalization, \(\min(x,10)/10\), or truncated distances without normalization, \(\min(x,10)\). All three variants are trained using behavioral cloning on the Austin demonstrations.
 
-This section presents ablation studies on key architectural design choices. We evaluate two GRU variants with hidden sizes of \(2\times\) (small) and \(8\times\) (large) the input dimensionality, as well as a variant that omits the ego-speed input (LiDAR-only). Evaluations are conducted on the Hockenheim track as a representative example. 
+We additionally evaluate a Transformer with two encoder layers, three attention heads, a 20-step history window, and a \(210 \rightarrow 64 \rightarrow 2\) action head. This variant uses bidirectional attention within the available history, a linear speed projection without ReLU, and no speed masking during training. Five seeds are trained for 36 epochs, and the checkpoint with the highest Austin safety rate among these five runs is reported.
 
-The small variant achieves an overtaking rate of 55.0\%, similar to the baseline, but its safety rate drops to 86.2\%, indicating insufficient model capacity to reliably learn car-following and overtaking behavior. The large variant maintains a high safety rate of 92.7\% but is overly conservative, with an overtaking rate of only 48.2\%. This suggests possible overfitting to training and limited generalization of overtaking skills. The LiDAR-only variant yields higher overtaking rates (60.3\%) but at the cost of safety (90.2\%). Without explicit ego-speed input, the network issues impulsive commands that deviate from the current state, leading to riskier maneuvers. Since safety is paramount in autonomous racing, we retain ego-speed input to ensure a more balanced policy.
+Table~\ref{tab:ablation} reports Austin results, with head-to-head rates for the MLP and the two normalization variants averaged over three training seeds, each evaluated on all 720 scenarios. Single-vehicle speed and lap time for these variants are averaged only over seeds that complete the lap: three for the MLP, two for linear normalization, and none for the unnormalized variant. The Transformer row reports the selected checkpoint, with a safety rate of 80.6\% and an overtake rate of 73.1\%; it is not a seed average. The baseline values are those reported in Table~\ref{tab:racing_performance}.
+
+The MLP completes single-vehicle laps faster than the baseline and achieves a higher overtake rate, but its safety rate falls from 82.8\% to 70.4\%. Linear normalization reduces both the overtake rate and safety rate to 47.0\% and 73.3\%, respectively. Without normalization, these rates fall further to 16.3\% and 21.1\%, and no seed completes the single-vehicle lap. These results support retaining recurrent memory over the tested feedforward replacement and using the proposed LiDAR proximity encoding.
 
 \section{Conclusion}
 
