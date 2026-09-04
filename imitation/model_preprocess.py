@@ -13,6 +13,7 @@ class End2Race(nn.Module):
 
     def __init__(self, preprocessing: str):
         super().__init__()
+
         if preprocessing not in self.PREPROCESSING_OPTIONS:
             raise ValueError(f"Unsupported LiDAR preprocessing: {preprocessing}")
         self.preprocessing = preprocessing
@@ -59,9 +60,9 @@ class End2Race(nn.Module):
         speed_input: torch.Tensor,
         hidden: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
+        # Distance ordering, instead of the baseline obstacle-pressure ordering.
         truncated_lidar = torch.clamp(x, max=self.LIDAR_MAX_RANGE)
         if self.preprocessing == "linear":
-            # Preserve distance ordering instead of the baseline obstacle-pressure ordering.
             processed_lidar = truncated_lidar / self.LIDAR_MAX_RANGE
         else:
             processed_lidar = truncated_lidar

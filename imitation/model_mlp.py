@@ -78,5 +78,7 @@ class End2RaceMLP(nn.Module):
         x: torch.Tensor,
         speed_input: torch.Tensor,
     ) -> torch.Tensor:
-        features = self.encode(x, speed_input)
-        return self.output_layer(features)
+        mlp_out = self.encode(x, speed_input)
+        actions = self.output_layer(mlp_out)
+
+        return actions

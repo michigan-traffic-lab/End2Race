@@ -1,4 +1,5 @@
 import argparse
+import json
 from contextlib import redirect_stderr
 from io import StringIO
 from pathlib import Path
@@ -321,6 +322,19 @@ def main():
     model.eval()
 
     result = evaluate_laps(model, device, vehicle, args)
+    args.output_dir.mkdir(parents=True, exist_ok=True)
+    results_path = args.output_dir / "results.json"
+    summary = {
+        "checkpoint_path": str(args.checkpoint_path),
+        "map_name": args.map_name,
+        "seed": args.seed,
+        "noise": args.noise,
+        "lap_num": args.lap_num,
+        "start_idx": args.start_idx,
+        **result,
+    }
+    results_path.write_text(json.dumps(summary, indent=1) + "\n", encoding="utf-8")
+    print(f"Summary saved to {results_path}")
     print(f"PASSED={int(result['passed'])}")
     print(f"COLLISION={int(result['collision'])}")
     print(f"NEGATIVE_VELOCITY={int(result['negative_velocity'])}")

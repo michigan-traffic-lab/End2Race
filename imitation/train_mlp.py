@@ -1,4 +1,5 @@
 import argparse
+import csv
 from pathlib import Path
 
 import numpy as np
@@ -108,6 +109,8 @@ def train_epoch(
     device = next(model.parameters()).device
     model.train()
     total_loss = 0.0
+    total_steering_loss = 0.0
+    total_weighted_speed_loss = 0.0
     for lidar_seq, speed_seq, target_actions in train_loader:
         lidar_seq = lidar_seq.to(device, non_blocking=True)
         speed_seq = speed_seq.to(device, non_blocking=True)
@@ -117,14 +120,23 @@ def train_epoch(
         predicted_actions = model(lidar_seq, speed_seq)
         predicted_actions_flat = predicted_actions.reshape(-1, predicted_actions.shape[-1])
         target_actions_flat = target_actions.reshape(-1, target_actions.shape[-1])
-        steer_loss = F.mse_loss(predicted_actions_flat[:, 0], target_actions_flat[:, 0])
-        speed_loss = F.mse_loss(predicted_actions_flat[:, 1], target_actions_flat[:, 1])
-        loss = steer_loss + speed_loss * speed_loss_weight
+        steering_loss = F.mse_loss(predicted_actions_flat[:, 0], target_actions_flat[:, 0])
+        weighted_speed_loss = speed_loss_weight * F.mse_loss(
+            predicted_actions_flat[:, 1], target_actions_flat[:, 1]
+        )
+        loss = steering_loss + weighted_speed_loss
         loss.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=gradient_clip_norm)
         optimizer.step()
         total_loss += loss.item()
-    return total_loss / len(train_loader)
+        total_steering_loss += steering_loss.item()
+        total_weighted_speed_loss += weighted_speed_loss.item()
+    batches = len(train_loader)
+    return (
+        total_loss / batches,
+        total_steering_loss / batches,
+        total_weighted_speed_loss / batches,
+    )
 
 
 def main():
@@ -151,22 +163,38 @@ def main():
     args.output_dir.mkdir(parents=True, exist_ok=True)
     print(f"Train batches: {len(train_loader)}")
 
+    records = []
     for epoch in range(1, NUM_EPOCHS + 1):
-        loss = train_epoch(
+        total_loss, steering_loss, weighted_speed_loss = train_epoch(
             model,
             train_loader,
             optimizer,
             args.speed_loss_weight,
             args.gradient_clip_norm,
         )
+        records.append(
+            {
+                "epoch": epoch,
+                "total_loss": total_loss,
+                "steering_loss": steering_loss,
+                "weighted_speed_loss": weighted_speed_loss,
+            }
+        )
         if epoch % CHECKPOINT_INTERVAL:
             continue
         checkpoint_path = args.output_dir / f"epoch_{epoch:05d}.pt"
         torch.save(model.state_dict(), checkpoint_path)
         print(
-            f"Epoch {epoch}/{NUM_EPOCHS}, loss: {loss:.5f}, "
+            f"Epoch {epoch}/{NUM_EPOCHS}, loss: {total_loss:.5f}, "
             f"saved {checkpoint_path}"
         )
+
+    metrics_path = args.output_dir / "metrics.csv"
+    with metrics_path.open("w", newline="", encoding="utf-8") as stream:
+        writer = csv.DictWriter(stream, fieldnames=records[0].keys())
+        writer.writeheader()
+        writer.writerows(records)
+    print(f"Saved {metrics_path}")
 
 
 if __name__ == "__main__":
