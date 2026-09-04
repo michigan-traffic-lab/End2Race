@@ -151,7 +151,7 @@ Each year, competitions are held at venues worldwide and attract broad participa
 \begin{figure}[!t]
     \centering
     \vspace{0.15cm}
-    \includegraphics[width=0.7\linewidth]{figures/fig1/scenario.pdf}
+    \includegraphics[width=0.95\linewidth]{figures/fig1/scenario.pdf}
     \caption{Simple overtake scenario illustration.}
     \label{fig:example}
     \vspace{-0.3cm}
@@ -203,7 +203,7 @@ The main contributions of this work are as follows:
     \centering
     \vspace{0.15cm}
     \includegraphics[width=\textwidth]{figures/fig2/overview.jpg}
-    \caption{System overview. The F1TENTH vehicle photograph in panel 1 is adapted from the official F1TENTH documentation under CC BY-NC-SA 4.0.}
+    \caption{End2Race system overview: (a) racing scenarios, (b) expert demonstration, (c) imitation learning, and (d) reinforcement learning.}
     \label{fig:overview}
     \vspace{-0.1cm}
 \end{figure*}
@@ -249,27 +249,25 @@ The following sections describe each stage in detail (Fig.~\ref{fig:overview}).
 
 \subsection{Overtaking Scenario Setup}
 
-Each overtaking scenario pairs an ego vehicle with an opponent initially positioned ahead of it and has a duration of 8 seconds. Vehicle placement is expressed in Frenet coordinates~\cite{werling2010optimal}, in which the longitudinal direction measures progress around the circuit and the lateral direction specifies position across the track width. We specify each scenario using four parameters, \(\left(s_0,\,d_0,\,r_{\mathrm{opp}},\,\alpha_{\mathrm{opp}}\right)\), as detailed below.
+Each overtaking scenario pairs an ego vehicle with an opponent initially positioned ahead of it and has a duration of 8 seconds. Vehicle placement is expressed in Frenet coordinates~\cite{werling2010optimal}, in which the longitudinal direction measures progress around the circuit and the lateral direction specifies position across the track width. We specify each scenario using four parameters, \(\left(s_0,\,\Delta s_0,\,r_{\mathrm{opp}},\,\alpha_{\mathrm{opp}}\right)\).
 
 \subsubsection{Ego Starting Position (\(s_0\))}
 For each track, we define \(N_s\) ego starting positions equally spaced in the longitudinal direction, with \(N_s=80\) fixed across all tracks. For example, on the 420~m Austin track, adjacent starting positions are separated by approximately 5.2~m.
 
-\subsubsection{Initial Distance (\(d_0\))}
-The initial distance \(d_0\) specifies how far the opponent is positioned longitudinally ahead of the ego vehicle at the start of a scenario. A short distance provides insufficient starting space for the ego vehicle to maneuver, while a long distance requires the ego vehicle to spend more time catching the opponent, leaving less time for interaction. We therefore set \(d_0=3\)~m to balance these considerations.
+\subsubsection{Longitudinal Gap (\(\Delta s_0\))}
+The longitudinal gap \(\Delta s_0\) specifies how far the opponent is positioned ahead of the ego vehicle along the track at the start of a scenario. A small gap provides insufficient starting space for the ego vehicle to maneuver, while a large gap requires the ego vehicle to spend more time catching the opponent, leaving less time for interaction. We therefore set \(\Delta s_0=3\)~m to balance these considerations.
 
 \subsubsection{Opponent Raceline (\(r_{\mathrm{opp}}\))}
-Beyond their longitudinal placement, the relative lateral positions of the ego vehicle and opponent are critical to the overtaking geometry. We represent this configuration using racelines, which define the reference paths followed by the vehicles around the circuit. Using the trajectory-generation framework of Heilmeier et al.~\cite{Heilmeier02102020}, we construct left, center, and right racelines at \(35\%\), \(50\%\), and \(65\%\) of the local track width, respectively. For Austin, an average track width of \(1.64\)~m yields approximately \(0.25\)~m of lateral separation between the center and each side raceline.
-The ego vehicle starts on the center raceline but may temporarily deviate from it to overtake or take a faster line through a corner. The opponent, by contrast, follows the raceline specified by \(r_{\mathrm{opp}}\), with all three choices equally represented across the scenarios. An opponent on the center raceline leaves limited clearance on both sides and is therefore harder to pass, whereas one on a side raceline leaves wider passing space.
+Beyond longitudinal placement, the lateral positions of the ego vehicle and opponent are critical to the overtaking geometry. We represent this lateral configuration using the opponent raceline \(r_{\mathrm{opp}}\), which assigns the opponent to one of three reference paths. Raceline generation follows the framework of Heilmeier et al.~\cite{Heilmeier02102020}, positioning left, center, and right paths at \(35\%\), \(50\%\), and \(65\%\) across the track width from the left boundary. On the Austin circuit, this yields approximately \(0.25\)~m of lateral separation between the center and each side raceline. An opponent on the center raceline restricts lateral clearance on both sides and is harder to pass, whereas one on a side raceline leaves a wider passing corridor. Meanwhile, the ego vehicle always uses the center raceline as its reference, but may temporarily deviate from it as needed.
 
 \subsubsection{Opponent Speed Scale (\(\alpha_{\mathrm{opp}}\))}
-To facilitate effective overtaking behavior, the ego vehicle must have a speed advantage over the opponent. Here, we define a maximum vehicle speed of 7.5~m/s, equivalent to approximately 168~mph at full scale. This limit is based on empirical testing, which showed that higher speeds compromise control stability under the vehicle's dynamic constraints. The ego vehicle retains this limit, while the opponent's raceline speed profile is scaled by a factor of \(\alpha_{\mathrm{opp}}\).
-We use \(\alpha_{\mathrm{opp}}\in\{0.4,0.6,0.8\}\), corresponding to maximum opponent reference speeds of \(\{3.0,4.5,6.0\}\)~m/s, respectively. Values below 0.4 make the opponent unrealistically slow for competitive racing, while values above 0.8 often prevent the ego vehicle from catching up to the opponent within the 8-second scenario.
+Each reference raceline provides an optimized speed profile based on track curvature and vehicle dynamics. Here, we set a maximum speed of 7.5~m/s, as empirical testing showed that higher values risk compromising tracking and control stability. Crucially, if the opponent follows this profile directly, the ego vehicle sharing the same profile cannot catch up or overtake. To create overtaking opportunities, we scale down the opponent's speed by a factor of \(\alpha_{\mathrm{opp}}\in\{0.4,0.6,0.8\}\). Scales below 0.4 make the opponent unrealistically slow, while those above 0.8 often prevent the ego vehicle from catching up in time. Meanwhile, the ego vehicle always operates under the full speed limit.
 
-Together, \(s_0\) and \(d_0\) determine the vehicles' initial longitudinal configuration, while \(r_{\mathrm{opp}}\) and \(\alpha_{\mathrm{opp}}\) specify the opponent's path and speed profile. The opponent passively tracks its assigned raceline using a Pure Pursuit controller and does not engage in adversarial behavior, such as active blocking or abrupt acceleration~\cite{zheng2023gametheoreticobjectivespaceplanning}. With \(d_0\) fixed, the 80 starting positions, three opponent racelines, and three speed scales yield 720 scenarios per track, each lasting 8 seconds.
+Combining 80 ego starting positions \(s_0\), a fixed longitudinal gap \(\Delta s_0\), three opponent racelines \(r_{\mathrm{opp}}\), and three opponent speed scales \(\alpha_{\mathrm{opp}}\) yields 720 scenarios per track. During each 8-second scenario, the opponent passively tracks its assigned raceline with a Pure Pursuit controller. It does not react to the ego vehicle, nor does it actively engage in adversarial behavior, such as defensive blocking or erratic speed changes~\cite{zheng2023gametheoreticobjectivespaceplanning}.
 
 \subsection{Expert Demonstration}
 
-To generate demonstrations for the ego vehicle, we design a map-based expert that combines a lattice planner with a Pure Pursuit controller. The lattice planner, adapted from the Frenet Optimal Trajectory implementation in PythonRobotics~\cite{sakai2018pythonrobotics}, converts each LiDAR scan into obstacle points and generates candidate trajectories across a range of lateral positions and terminal speeds. It then discards candidates that violate the vehicle's dynamic constraints and, among the remaining candidates, selects the trajectory \(\tau\) that minimizes the trajectory cost \(\mathcal{J}(\tau)\):
+We design a map-based lattice planner to generate overtaking demonstrations for the ego vehicle. The lattice planner, adapted from the Frenet Optimal Trajectory framework~\cite{sakai2018pythonrobotics}, converts each LiDAR scan into obstacle points and generates candidate trajectories across a range of lateral positions and terminal speeds. It then discards candidates that violate dynamic constraints and selects the trajectory \(\tau\) that minimizes the cost \(\mathcal{J}(\tau)\):
 \begin{equation}
     \mathcal{J}(\tau)
     =
@@ -282,39 +280,14 @@ To generate demonstrations for the ego vehicle, we design a map-based expert tha
         \max\left(0,1-\frac{d_i}{d_c}\right)
     \right]^2
 \end{equation}
-where
-\begin{itemize}
-    \item \(N=6\) is the number of future trajectory points sampled at 0.1~s intervals over the 0.6~s planning horizon;
-    \item \(v_i\) is the projected vehicle speed at point \(i\);
-    \item \(v_{\max}=7.5\)~m/s is the speed limit for the ego vehicle;
-    \item \(d_i\) is the distance from point \(i\) to the nearest obstacle;
-    \item \(d_c=0.5\)~m is the clearance threshold for applying the collision penalty;
-    \item \(\lambda_c=5\) is the collision-avoidance penalty weight.
-\end{itemize}
-
-The first term favors trajectories with higher mean speeds, while the second penalizes the maximum clearance deficit along the trajectory. After selecting a trajectory, the Pure Pursuit controller identifies a lookahead point, computes the steering command from its lateral displacement relative to the ego vehicle, and uses the trajectory speed at that point as the desired speed.
+where \(N\) is the number of future trajectory points sampled at 0.1~s intervals (\(N=6\)); \(v_i\) is the projected vehicle speed at point \(i\), favoring trajectories with higher mean speeds; \(v_{\max}=7.5\)~m/s is the speed limit; \(d_i\) is the distance from point \(i\) to the nearest obstacle; \(d_c=0.5\)~m is the clearance threshold for applying the collision penalty; and \(\lambda_c=5\) balances vehicle speed and obstacle clearance. The ego vehicle then tracks the selected trajectory using a Pure Pursuit controller.
 
 \subsection{Training Dataset}
 \label{sec:training-dataset}
 
-Using the procedure described above, we generate 720 eight-second overtaking scenarios on each track. The Austin track provides the training demonstrations, while the remaining tracks are reserved for evaluation (Fig.~\ref{fig:overview}(a)). Training data are recorded at 40~Hz to reflect the onboard LiDAR-to-control update cycle (Fig.~\ref{fig:overview}(b)). Each complete scenario contains 320 observation-action pairs, yielding up to 230,400 samples. Among the 720 Austin scenarios, 620 (86.1\%) result in successful overtakes, 23 (3.2\%) in collision-free car-following, and 77 (10.7\%) in collisions.
+We collect 720 eight-second overtaking demonstrations on the Austin track. Training data are recorded at 40~Hz to reflect the onboard LiDAR-to-control update cycle, yielding 320 observation-action pairs per scenario. Among these scenarios, 620 (86.1\%) result in successful overtakes, 23 (3.2\%) in collision-free car-following, and 77 (10.7\%) in collisions. These collisions stem primarily from the lattice planner's forward-only obstacle evaluation, which does not account for a moving opponent alongside or behind the ego vehicle. Consequently, the planner may return to the center raceline before the ego vehicle has fully cleared the opponent. Collision risk increases as the speed difference between the two vehicles decreases, with most failures occurring at an opponent speed scale of 0.8. Figure~\ref{fig:expert-failure} illustrates one such failure: during overtaking, the planned ego trajectory returns toward the center raceline while the vehicles still overlap longitudinally, resulting in a sideswipe collision.
 
-The expert's failure mode stems primarily from the lattice planner's forward-only obstacle evaluation, which does not account for a moving opponent alongside or behind the ego vehicle. Consequently, the planner may return to the center lane before the ego vehicle has fully cleared the opponent. The number of failures increases as the speed difference decreases, from 4 cases at a speed scale of 0.4 to 15 at 0.6 and 58 at 0.8. Figure~\ref{fig:expert-failure} illustrates a scenario in which this failure occurs, with the opponent following the right raceline at a speed scale of 0.8. During overtaking, the planned trajectory of the ego vehicle shifts toward the center lane while the ego and the opponent still overlap longitudinally, resulting in a rear sideswipe collision.
-
-For behavioral-cloning training (Sec.~\ref{sec:behavioral-cloning}), we exclude demonstrations from the 77 ego-collision scenarios and retain 643 collision-free sequences (89.3\%), yielding 205,760 training samples. However, filtering alone does not provide the model with the experience needed to learn safe responses in such scenarios. Such failures can be mitigated by combining explicit opponent detection and motion prediction with interaction-aware planning as in~\cite{baumann2025predictive}. The approach, however, requires considerable manual design and cost adjustment, incurs additional computation, and suffers from error propagation across modules. We instead address this failure mode through direct end-to-end RL fine-tuning (Sec.~\ref{sec:rl-finetuning}), keeping the model intentionally lightweight while enhancing its opponent-interaction capabilities.
-
-\begin{figure}[!t]
-    \centering
-    \setlength{\fboxsep}{0pt}
-    \setlength{\fboxrule}{0.2pt}
-    \begin{tabular}{@{}c@{\hspace{0.8mm}}c@{\hspace{0.8mm}}c@{}}
-        \fcolorbox{black!10}{white}{\includegraphics[width=0.315\linewidth]{figures/fig3/expert-demo-1.png}} &
-        \fcolorbox{black!10}{white}{\includegraphics[width=0.315\linewidth]{figures/fig3/expert-demo-2.png}} &
-        \fcolorbox{black!10}{white}{\includegraphics[width=0.315\linewidth]{figures/fig3/expert-demo-3.png}}
-    \end{tabular}
-    \caption{Expert-planner failure during overtaking, shown in temporal order from (I) to (III). In this scenario, the opponent follows the right raceline with a speed scale of 0.8. Each frame shows the planned ego trajectory and both vehicle speeds; blue denotes the ego vehicle and red the opponent. (I) The ego approaches the opponent. (II) The vehicles travel side by side during overtaking. (III) The ego returns to the center lane prematurely, leading to a sideswipe collision.}
-    \label{fig:expert-failure}
-\end{figure}
+These collisions can be mitigated by incorporating explicit opponent trajectory prediction and interaction modeling, as demonstrated in Predictive Spliner~\cite{baumann2025predictive}. However, such approaches remain fundamentally constrained by hand-crafted heuristics and rigid safety margins that struggle to generalize across diverse head-to-head overtaking scenarios. We instead exclude the 77 collision scenarios from BC training and rely on downstream PPO fine-tuning (Sec.~\ref{sec:policy-training}) to learn safe interactive behavior.
 
 \subsection{Model Architecture}
 
@@ -335,6 +308,19 @@ To emulate this aspect of human spatial cognition in our model design, we transf
 \end{equation}
 Here, $x$ denotes the distance measured by a single LiDAR beam, $\sigma(x)$ denotes its normalized value, and $k$ controls the effective sensing range. We set $k=0.3$, for which the normalized value decreases to 0.1 at approximately 10~m (Fig.~\ref{fig:overview}(c)), matching the maximum range of the onboard LiDAR sensor.
 With this design, the encoded value increases rapidly and nonlinearly as obstacles become closer, while asymptotically approaching zero as they become more distant. The resulting representation enables the model to learn effective driving behavior, as demonstrated by the experimental results in Sec.~\ref{sec:experiments}. The ablation study further shows that alternative LiDAR normalization methods can converge numerically without yielding a viable driving policy.
+
+\begin{figure}[!t]
+    \centering
+    \setlength{\fboxsep}{0pt}
+    \setlength{\fboxrule}{0.2pt}
+    \begin{tabular}{@{}c@{\hspace{0.8mm}}c@{\hspace{0.8mm}}c@{}}
+        \fcolorbox{black!10}{white}{\includegraphics[width=0.315\linewidth]{figures/fig3/expert-demo-1.png}} &
+        \fcolorbox{black!10}{white}{\includegraphics[width=0.315\linewidth]{figures/fig3/expert-demo-2.png}} &
+        \fcolorbox{black!10}{white}{\includegraphics[width=0.315\linewidth]{figures/fig3/expert-demo-3.png}}
+    \end{tabular}
+    \caption{Expert-planner failure during overtaking, shown in temporal order from (I) to (III). In this scenario, the opponent follows the right raceline with a speed scale of 0.8. Each frame shows the planned ego trajectory and both vehicle speeds; blue denotes the ego vehicle and red the opponent. (I) The ego approaches the opponent. (II) The vehicles travel side by side during overtaking. (III) The ego returns to the center lane prematurely, leading to a sideswipe collision.}
+    \label{fig:expert-failure}
+\end{figure}
 
 \subsubsection{Ego-Speed Embedding}
 
@@ -358,6 +344,7 @@ We concatenate the 180-dimensional proximity-encoded LiDAR representation with t
 where the hidden-state dimension is 420, twice that of the input. A linear decoder (\(420 \rightarrow 128 \rightarrow 2\)) then maps \(\mathbf{h}_{t+1}\) to the next steering-angle and desired-speed commands. In total, the policy contains 850,556 trainable parameters.
 
 \subsection{Policy Training}
+\label{sec:policy-training}
 
 Policy training proceeds in two stages. We first use BC to learn car-following and overtaking behavior from expert demonstrations, producing a functional end-to-end racing policy whose performance remains bounded by that of the expert. RL then addresses this limitation by refining the policy's racing behavior through direct environment interaction.
 

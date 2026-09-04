@@ -53,29 +53,30 @@
 \citation{Heilmeier02102020}
 \citation{zheng2023gametheoreticobjectivespaceplanning}
 \citation{sakai2018pythonrobotics}
-\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces System overview. The F1TENTH vehicle photograph in panel 1 is adapted from the official F1TENTH documentation under CC BY-NC-SA 4.0.}}{3}{}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces End2Race system overview: (a) racing scenarios, (b) expert demonstration, (c) imitation learning, and (d) reinforcement learning.}}{3}{}\protected@file@percent }
 \newlabel{fig:overview}{{2}{3}{}{}{}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {III-A}Overtaking Scenario Setup}{3}{}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsubsection}{\numberline {III-A.1}Ego Starting Position (\(s_0\))}{3}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {III-A.2}Initial Distance (\(d_0\))}{3}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {III-A.2}Longitudinal Gap (\(\Delta s_0\))}{3}{}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsubsection}{\numberline {III-A.3}Opponent Raceline (\(r_{\mathrm  {opp}}\))}{3}{}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsubsection}{\numberline {III-A.4}Opponent Speed Scale (\(\alpha _{\mathrm  {opp}}\))}{3}{}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {III-B}Expert Demonstration}{3}{}\protected@file@percent }
 \citation{baumann2025predictive}
 \citation{bufacchi2018action}
+\citation{shortcut}
 \@writefile{toc}{\contentsline {subsection}{\numberline {III-C}Training Dataset}{4}{}\protected@file@percent }
 \newlabel{sec:training-dataset}{{III-C}{4}{}{}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces Expert-planner failure during overtaking, shown in temporal order from (I) to (III). In this scenario, the opponent follows the right raceline with a speed scale of 0.8. Each frame shows the planned ego trajectory and both vehicle speeds; blue denotes the ego vehicle and red the opponent. (I) The ego approaches the opponent. (II) The vehicles travel side by side during overtaking. (III) The ego returns to the center lane prematurely, leading to a sideswipe collision.}}{4}{}\protected@file@percent }
-\newlabel{fig:expert-failure}{{3}{4}{}{}{}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {III-D}Model Architecture}{4}{}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsubsection}{\numberline {III-D.1}LiDAR Proximity Encoding}{4}{}\protected@file@percent }
-\citation{shortcut}
+\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces Expert-planner failure during overtaking, shown in temporal order from (I) to (III). In this scenario, the opponent follows the right raceline with a speed scale of 0.8. Each frame shows the planned ego trajectory and both vehicle speeds; blue denotes the ego vehicle and red the opponent. (I) The ego approaches the opponent. (II) The vehicles travel side by side during overtaking. (III) The ego returns to the center lane prematurely, leading to a sideswipe collision.}}{4}{}\protected@file@percent }
+\newlabel{fig:expert-failure}{{3}{4}{}{}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {III-D.2}Ego-Speed Embedding}{4}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {III-D.3}Recurrent Control Prediction}{4}{}\protected@file@percent }
 \citation{ppo}
 \@writefile{lof}{\contentsline {figure}{\numberline {4}{\ignorespaces Training curves for the two-stage policy optimization, with each stage trained for 500 epochs. (a) BC loss, with the speed loss weighted by 0.05. (b) PPO safety and overtake rates on the 720 Austin scenarios.}}{5}{}\protected@file@percent }
 \newlabel{fig:training-curves}{{4}{5}{}{}{}}
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {III-D.2}Ego-Speed Embedding}{5}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {III-D.3}Recurrent Control Prediction}{5}{}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {III-E}Policy Training}{5}{}\protected@file@percent }
+\newlabel{sec:policy-training}{{III-E}{5}{}{}{}}
 \newlabel{sec:behavioral-cloning}{{III-E.1}{5}{}{}{}}
 \@writefile{toc}{\contentsline {subsubsection}{\numberline {III-E.1}Behavioral Cloning}{5}{}\protected@file@percent }
 \newlabel{sec:rl-finetuning}{{III-E.2}{5}{}{}{}}
@@ -83,22 +84,15 @@
 \@writefile{toc}{\contentsline {section}{\numberline {IV}Experiments}{5}{}\protected@file@percent }
 \newlabel{sec:experiments}{{IV}{5}{}{}{}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {IV-A}Training Setup}{5}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {IV-B}Single-Vehicle Racing}{5}{}\protected@file@percent }
 \citation{mitchell2004driving}
 \citation{dagger}
 \@writefile{lot}{\contentsline {table}{\numberline {I}{\ignorespaces Benchmark Evaluation: Single-Vehicle and Head-to-Head Racing Performance}}{6}{}\protected@file@percent }
 \newlabel{tab:racing_performance}{{I}{6}{}{}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {IV-B}Single-Vehicle Racing}{6}{}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {IV-C}Head-to-Head Racing}{6}{}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {IV-D}Scenario Illustration}{6}{}\protected@file@percent }
 \bibstyle{ieeetr}
 \bibdata{F1Tenth}
-\@writefile{lof}{\contentsline {figure}{\numberline {5}{\ignorespaces Representative head-to-head interaction scenarios across time on the Austin circuit. Blue denotes the ego vehicle and red denotes the opponent, with historical trajectories rendered in matching colors. Each frame indicates the elapsed time and vehicle speeds.}}{7}{}\protected@file@percent }
-\newlabel{fig:scenario-examples}{{5}{7}{}{}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {IV-E}Ablation Studies}{7}{}\protected@file@percent }
-\newlabel{sec:ablation}{{IV-E}{7}{}{}{}}
-\@writefile{lot}{\contentsline {table}{\numberline {II}{\ignorespaces Ablation Study on the Austin Circuit}}{7}{}\protected@file@percent }
-\newlabel{tab:ablation}{{II}{7}{}{}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {V}Conclusion}{7}{}\protected@file@percent }
 \bibcite{o2020f1tenth}{1}
 \bibcite{hokuyoUST10LX}{2}
 \bibcite{intelRealSenseD435i}{3}
@@ -111,6 +105,14 @@
 \bibcite{falcone2007predictive}{10}
 \bibcite{zang2023localinn}{11}
 \bibcite{muzzini2024gpu}{12}
+\@writefile{lof}{\contentsline {figure}{\numberline {5}{\ignorespaces Representative head-to-head interaction scenarios across time on the Austin circuit. Blue denotes the ego vehicle and red denotes the opponent, with historical trajectories rendered in matching colors. Each frame indicates the elapsed time and vehicle speeds.}}{7}{}\protected@file@percent }
+\newlabel{fig:scenario-examples}{{5}{7}{}{}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {II}{\ignorespaces Ablation Study on the Austin Circuit}}{7}{}\protected@file@percent }
+\newlabel{tab:ablation}{{II}{7}{}{}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {IV-E}Ablation Studies}{7}{}\protected@file@percent }
+\newlabel{sec:ablation}{{IV-E}{7}{}{}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {V}Conclusion}{7}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{References}{7}{}\protected@file@percent }
 \bibcite{SEZER20121123}{13}
 \bibcite{hossain2022local}{14}
 \bibcite{10186780}{15}
@@ -141,5 +143,4 @@
 \bibcite{bufacchi2018action}{40}
 \bibcite{shortcut}{41}
 \bibcite{mitchell2004driving}{42}
-\@writefile{toc}{\contentsline {section}{References}{8}{}\protected@file@percent }
 \gdef \@abspage@last{8}
