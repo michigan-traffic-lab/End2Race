@@ -217,4 +217,9 @@ R.~Geirhos, J.~Jörn-Henrik, C.~Michaelis, R.~Zemel, B.~Wieland, B.~Matthias,
 W.~C. Mitchell, R.~Schroer, and D.~B. Grisez, ``Driving the traction circle,''
   Tech. Rep. 2004-01-3545, SAE International, 2004.
 
+\bibitem{vaswani2017attention}
+A.~Vaswani, N.~Shazeer, N.~Parmar, J.~Uszkoreit, L.~Jones, A.~N. Gomez,
+  {\L}.~Kaiser, and I.~Polosukhin, ``Attention is all you need,'' in {\em
+  Advances in Neural Information Processing Systems}, vol.~30, 2017.
+
 \end{thebibliography}
