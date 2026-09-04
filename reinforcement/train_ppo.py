@@ -141,8 +141,17 @@ def _synchronize_gradients(model):
             dist.all_reduce(parameter.grad)
 
 
-def _update_full_pool(model, optimizer, batches, args, device, epoch, update):
-    """Take one optimizer step from every trajectory in the scenario pool."""
+def _update_policy(
+    model,
+    optimizer,
+    batches,
+    args,
+    device,
+    epoch,
+    update,
+    total_updates,
+):
+    """Take one optimizer step from the supplied trajectory batches."""
     advantage_values = np.concatenate([
         trajectory["advantages"]
         for batch in batches
@@ -209,7 +218,7 @@ def _update_full_pool(model, optimizer, batches, args, device, epoch, update):
     )
     if not dist.is_initialized() or dist.get_rank() == 0:
         print(
-            f"Epoch {epoch} ppo update {update}/{UPDATE_EPOCHS} | "
+            f"Epoch {epoch} ppo update {update}/{total_updates} | "
             f"value loss {value_loss:.4f} | "
             f"kl {approx_kl:.6f} clip {clip_fraction:.3f} | "
             f"grad preclip {grad_norm:.3f} applied {applied_grad_norm:.3f}",
@@ -334,7 +343,7 @@ def train_epoch(model, optimizer, envs, scenarios, rng, args, device, epoch):
         )
 
     for update in range(1, UPDATE_EPOCHS + 1):
-        update_statistics = _update_full_pool(
+        update_statistics = _update_policy(
             model,
             optimizer,
             batches,
@@ -342,6 +351,7 @@ def train_epoch(model, optimizer, envs, scenarios, rng, args, device, epoch):
             device,
             epoch,
             update,
+            UPDATE_EPOCHS,
         )
         for name, value in update_statistics.items():
             statistics[name].append(value)

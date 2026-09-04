@@ -327,7 +327,7 @@ class VectorEnv:
 def collect_batch(envs, model, scenarios, device):
     """Roll one trajectory for each scenario under a frozen policy."""
     observations = envs.reset_scenarios(scenarios)
-    hidden = model.initial_hidden(len(scenarios), device)
+    state = model.initial_state(len(scenarios), device)
     active = [True] * len(scenarios)
     trajectories = [
         {
@@ -346,7 +346,7 @@ def collect_batch(envs, model, scenarios, device):
     while any(active):
         with torch.no_grad():
             observation_batch = torch.as_tensor(observations, device=device)
-            actions, policy_means, log_probs, values, next_hidden = model.act(observation_batch, hidden)
+            actions, policy_means, log_probs, values, next_state = model.act(observation_batch, state)
         actions = actions.cpu().numpy()
         policy_means = policy_means.cpu().numpy()
         log_probs = log_probs.cpu().numpy()
@@ -375,15 +375,15 @@ def collect_batch(envs, model, scenarios, device):
         if bootstrap_ranks:
             with torch.no_grad():
                 tail_observations = torch.as_tensor(observations[bootstrap_ranks], device=device)
-                tail_hidden = next_hidden[:, bootstrap_ranks].contiguous()
+                tail_state = model.select_state(next_state, bootstrap_ranks)
                 _, tail_values, _ = model.evaluate(
-                    tail_observations[:, None], hidden=tail_hidden
+                    tail_observations[:, None], hidden=tail_state
                 )
                 tail_values = tail_values[:, 0].cpu().numpy()
             for slot, rank in enumerate(bootstrap_ranks):
                 trajectories[rank]["bootstrap"] = float(tail_values[slot])
 
-        hidden = next_hidden
+        state = next_state
 
     batch = []
     for trajectory, record in zip(trajectories, records):

@@ -36,6 +36,13 @@ class ActorCritic(nn.Module):
             device=device,
         )
 
+    def initial_state(self, batch_size, device):
+        return self.initial_hidden(batch_size, device)
+
+    @staticmethod
+    def select_state(state, indices):
+        return state[:, indices].contiguous()
+
     def _outputs(self, observations, hidden=None):
         lidar = observations[..., :End2Race.NUM_LIDAR_FEATURES]
         speed = observations[..., End2Race.NUM_LIDAR_FEATURES:]

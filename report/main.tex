@@ -282,6 +282,19 @@ We design a map-based lattice planner to generate overtaking demonstrations for 
 \end{equation}
 where \(N\) is the number of future trajectory points sampled at 0.1~s intervals (\(N=6\)); \(v_i\) is the projected vehicle speed at point \(i\), favoring trajectories with higher mean speeds; \(v_{\max}=7.5\)~m/s is the speed limit; \(d_i\) is the distance from point \(i\) to the nearest obstacle; \(d_c=0.5\)~m is the clearance threshold for applying the collision penalty; and \(\lambda_c=5\) balances vehicle speed and obstacle clearance. The ego vehicle then tracks the selected trajectory using a Pure Pursuit controller.
 
+\begin{figure}[!t]
+    \centering
+    \setlength{\fboxsep}{0pt}
+    \setlength{\fboxrule}{0.2pt}
+    \begin{tabular}{@{}c@{\hspace{0.8mm}}c@{\hspace{0.8mm}}c@{}}
+        \fcolorbox{black!10}{white}{\includegraphics[width=0.315\linewidth]{figures/fig3/expert-demo-1.png}} &
+        \fcolorbox{black!10}{white}{\includegraphics[width=0.315\linewidth]{figures/fig3/expert-demo-2.png}} &
+        \fcolorbox{black!10}{white}{\includegraphics[width=0.315\linewidth]{figures/fig3/expert-demo-3.png}}
+    \end{tabular}
+    \caption{Expert-planner failure during overtaking, shown in temporal order from (I) to (III). Blue denotes the ego vehicle and red denotes the opponent. In this scenario, the opponent follows the right raceline with a speed scale of 0.8, and each frame shows the planned ego trajectory. (I) The ego approaches the opponent, preparing to overtake. (II) The vehicles travel side by side. (III) The ego returns to the center raceline prematurely, leading to a sideswipe collision.}
+    \label{fig:expert-failure}
+\end{figure}
+
 \subsection{Training Dataset}
 \label{sec:training-dataset}
 
@@ -309,18 +322,6 @@ To emulate this aspect of human spatial cognition in our model design, we transf
 Here, $x$ denotes the distance measured by a single LiDAR beam, $\sigma(x)$ denotes its normalized value, and $k$ controls the effective sensing range. We set $k=0.3$, for which the normalized value decreases to 0.1 at approximately 10~m (Fig.~\ref{fig:overview}(c)), matching the maximum range of the onboard LiDAR sensor.
 With this design, the encoded value increases rapidly and nonlinearly as obstacles become closer, while asymptotically approaching zero as they become more distant. The resulting representation enables the model to learn effective driving behavior, as demonstrated by the experimental results in Sec.~\ref{sec:experiments}. The ablation study further shows that alternative LiDAR normalization methods can converge numerically without yielding a viable driving policy.
 
-\begin{figure}[!t]
-    \centering
-    \setlength{\fboxsep}{0pt}
-    \setlength{\fboxrule}{0.2pt}
-    \begin{tabular}{@{}c@{\hspace{0.8mm}}c@{\hspace{0.8mm}}c@{}}
-        \fcolorbox{black!10}{white}{\includegraphics[width=0.315\linewidth]{figures/fig3/expert-demo-1.png}} &
-        \fcolorbox{black!10}{white}{\includegraphics[width=0.315\linewidth]{figures/fig3/expert-demo-2.png}} &
-        \fcolorbox{black!10}{white}{\includegraphics[width=0.315\linewidth]{figures/fig3/expert-demo-3.png}}
-    \end{tabular}
-    \caption{Expert-planner failure during overtaking, shown in temporal order from (I) to (III). In this scenario, the opponent follows the right raceline with a speed scale of 0.8. Each frame shows the planned ego trajectory and both vehicle speeds; blue denotes the ego vehicle and red the opponent. (I) The ego approaches the opponent. (II) The vehicles travel side by side during overtaking. (III) The ego returns to the center lane prematurely, leading to a sideswipe collision.}
-    \label{fig:expert-failure}
-\end{figure}
 
 \subsubsection{Ego-Speed Embedding}
 
@@ -348,21 +349,6 @@ where the hidden-state dimension is 420, twice that of the input. A linear decod
 
 Policy training proceeds in two stages. We first use BC to learn car-following and overtaking behavior from expert demonstrations, producing a functional end-to-end racing policy whose performance remains bounded by that of the expert. RL then addresses this limitation by refining the policy's racing behavior through direct environment interaction.
 
-\begin{figure}[!t]
-    \centering
-    \begin{minipage}[t]{0.49\columnwidth}
-        \centering
-        \includegraphics[width=\linewidth]{figures/fig4/bc-training.pdf}
-    \end{minipage}%
-    \hfill
-    \begin{minipage}[t]{0.49\columnwidth}
-        \centering
-        \includegraphics[width=\linewidth]{figures/fig4/ppo-training.pdf}
-    \end{minipage}
-    \vspace{-1.5mm}
-    \caption{Training curves for the two-stage policy optimization, with each stage trained for 500 epochs. (a) BC loss, with the speed loss weighted by 0.05. (b) PPO safety and overtake rates on the 720 Austin scenarios.}
-    \label{fig:training-curves}
-\end{figure}
 
 \subsubsection{Behavioral Cloning}
 \label{sec:behavioral-cloning}
@@ -416,6 +402,22 @@ Here, \(d_t\) is the distance in meters traveled by the ego vehicle along the ra
 This section provides implementation details and reports experimental results on the training track as well as three unseen test tracks. We first present model performance in the single-vehicle setting, showing detailed driving metrics. Next, we evaluate policy behavior across overtaking scenarios spanning all four tracks, analyzing outcomes under diverse conditions. Four representative examples are shown in Fig.~\ref{fig:scenario-examples}: two successful overtakes, safe car-following, and a collision.
 
 \subsection{Training Setup}
+
+\begin{figure}[!t]
+    \centering
+    \begin{minipage}[t]{0.49\columnwidth}
+        \centering
+        \includegraphics[width=\linewidth]{figures/fig4/bc-training.pdf}
+    \end{minipage}%
+    \hfill
+    \begin{minipage}[t]{0.49\columnwidth}
+        \centering
+        \includegraphics[width=\linewidth]{figures/fig4/ppo-training.pdf}
+    \end{minipage}
+    \vspace{-1.5mm}
+    \caption{Training curves for the two-stage policy optimization, with each stage trained for 500 epochs. (a) BC loss, with the speed loss weighted by 0.05. (b) PPO safety and overtake rates on the 720 Austin scenarios.}
+    \label{fig:training-curves}
+\end{figure}
 
 For BC, we train the policy for 500 epochs using the Adam optimizer at a learning rate of \(10^{-4}\), processing the full dataset as a single batch in each epoch. Training incurs minimal computational cost, requiring less than five minutes on a single NVIDIA L40S GPU. As shown in Fig.~\ref{fig:training-curves}(a), the training loss decreases rapidly during the early epochs and then gradually converges. Although additional training further reduces loss, empirical testing indicates that doing so leads to overfitting without improving closed-loop driving performance.
 

@@ -8,14 +8,14 @@ from .env import shard_scenarios
 
 def _evaluate_group(envs, model, scenarios, device):
     observations = envs.reset_scenarios(scenarios)
-    hidden = model.initial_hidden(len(scenarios), device)
+    state = model.initial_state(len(scenarios), device)
     active = [True] * len(scenarios)
     records = [None] * len(scenarios)
 
     while any(active):
         with torch.no_grad():
             observation_batch = torch.as_tensor(observations, device=device)
-            actions, next_hidden = model.predict(observation_batch, hidden)
+            actions, next_state = model.predict(observation_batch, state)
         actions = actions.cpu().numpy()
 
         for slot, result in enumerate(envs.step(actions, active)):
@@ -26,7 +26,7 @@ def _evaluate_group(envs, model, scenarios, device):
             if done:
                 active[slot] = False
                 records[slot] = info
-        hidden = next_hidden
+        state = next_state
     return records
 
 
