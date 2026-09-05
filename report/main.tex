@@ -304,29 +304,26 @@ These collisions can be mitigated by incorporating explicit opponent trajectory 
 
 \subsection{Model Architecture}
 
-We adopt an end-to-end policy that maps sensory inputs and the current vehicle state directly to control outputs.
-At each timestep~\(t\), the policy receives a 360-degree 2D LiDAR scan comprising 180 beams at an angular resolution of 2 degrees.
-The current ego speed is also provided as input to maintain dynamic consistency across consecutive model predictions.
-The policy outputs the desired vehicle speed in meters per second and the steering angle in radians.
-To capture temporal dependencies in ego and opponent motion, we adopt a GRU architecture that employs reset and update gates to selectively retain relevant history and incorporate new observations over time.
-In End2Race, the hidden state summarizes previous observations and provides temporal context for each control prediction.
+We use a GRU network that maps sequential observations directly to vehicle control commands.
+At each timestep, the observation comprises a 360-degree 2D LiDAR scan of 180 beams and the current ego speed, while the control output specifies the desired speed and steering angle.
 
-\subsubsection{LiDAR Proximity Encoding}
+\subsubsection{LiDAR Normalization}
 
-Research by Bufacchi and Iannetti shows that human interaction with surrounding space is proximity-dependent and that behavioral responses strengthen progressively as object distance decreases~\cite{bufacchi2018action}.
-The same principle can be applied to autonomous racing, as the influence of track boundaries and competing vehicles on ego motion similarly depends on their distance.
-To emulate this aspect of human spatial cognition in our model design, we transform each LiDAR beam using a sigmoid function that maps each raw scan value, \(x \in [0,\infty)\), to a proximity-encoded value within \([0,1]\):
+Bufacchi and Iannetti show that human interaction with surrounding space is proximity-dependent, with behavioral responses strengthening progressively as object distance decreases~\cite{bufacchi2018action}.
+The same principle can be applied to autonomous racing, where the influence of track boundaries and competing vehicles on ego motion similarly depends on their distance.
+To emulate this aspect of human spatial cognition, we transform each of the 180 LiDAR beams using a sigmoid function that maps the raw scan value, \(x \in [0, 10]\), to a normalized value, \(\sigma(x) \in [0,1]\):
 \begin{equation}
     \sigma(x) = \left(-\frac{1}{1 + e^{-k x}} + 1\right) \cdot 2
 \end{equation}
-Here, $x$ denotes the distance measured by a single LiDAR beam, $\sigma(x)$ denotes its normalized value, and $k$ controls the effective sensing range. We set $k=0.3$, for which the normalized value decreases to 0.1 at approximately 10~m (Fig.~\ref{fig:overview}(c)), matching the maximum range of the onboard LiDAR sensor.
-With this design, the encoded value increases rapidly and nonlinearly as obstacles become closer, while asymptotically approaching zero as they become more distant. The resulting representation enables the model to learn effective driving behavior, as demonstrated by the experimental results in Sec.~\ref{sec:experiments}. The ablation study further shows that alternative LiDAR normalization methods can converge numerically without yielding a viable driving policy.
+Here, the decay parameter $k$ controls the effective sensing range and is set to $0.3$.
+With this design, the normalized value increases sharply and nonlinearly as obstacles approach, while asymptotically decaying to zero with distance.
 
 
 \subsubsection{Ego-Speed Embedding}
 
-To maintain dynamic consistency across consecutive control predictions, we project the current ego speed \(v_t\) through a linear layer into a 30-dimensional embedding \(\psi(v_t)\).
-To prevent shortcut learning~\cite{shortcut}, in which the model simply copies the current ego-speed input into its desired-speed prediction, we randomly mask the projected ego speed using a learnable embedding:
+To maintain dynamic consistency, we incorporate the current ego speed into the policy.
+Specifically, the scalar speed \(v_t\) is projected through a linear layer into a 30-dimensional embedding \(\psi(v_t)\).
+To prevent shortcut learning~\cite{shortcut}, in which the model simply copies the current speed into its speed prediction, we mask the projected speed with a learnable embedding $\mathbf{e}_{\mathrm{mask}}$ with probability $p$:
 \begin{equation}
 \widetilde{\psi}(v_t) =
 \begin{cases}
@@ -334,15 +331,14 @@ To prevent shortcut learning~\cite{shortcut}, in which the model simply copies t
     \mathbf{e}_{\mathrm{mask}}, & \text{with probability } p,
 \end{cases}
 \end{equation}
-Here, we set \(p=0.2\), encouraging the model to determine an appropriate desired speed from the LiDAR observation when the ego-speed embedding is masked and to incorporate the current ego speed when it is available.
+Here, we set \(p=0.2\), encouraging the model to determine desired speed from LiDAR observations when the current speed is masked and to incorporate it when available.
 
-\subsubsection{Recurrent Control Prediction}
+\subsubsection{Policy Network}
 
-We concatenate the 180-dimensional proximity-encoded LiDAR representation with the 30-dimensional ego-speed embedding to form a 210-dimensional input vector. At each timestep, the GRU combines this vector with the preceding hidden state \(\mathbf{h}_t\) to produce the updated hidden state \(\mathbf{h}_{t+1}\):
-\begin{equation}
-    \mathbf{h}_{t+1} = \mathrm{GRU}_\theta\left([\sigma(x_{t,i})]_{i=1}^{180} \Vert \widetilde{\psi}(v_t),\, \mathbf{h}_t\right),
-\end{equation}
-where the hidden-state dimension is 420, twice that of the input. An action head (\(420 \rightarrow 128 \rightarrow 2\)) then maps \(\mathbf{h}_{t+1}\) to the next steering-angle and desired-speed commands. In total, the policy contains 850,556 trainable parameters.
+The 180-dimensional normalized LiDAR scan and the 30-dimensional speed embedding are concatenated to form a 210-dimensional input vector.
+This input is passed to a single-layer GRU network, which maintains a 420-dimensional hidden state and updates it at each timestep.
+This hidden state is then passed to an MLP action head to produce the desired speed and steering angle.
+In total, the network has 850,556 trainable parameters.
 
 \subsection{Policy Training}
 \label{sec:policy-training}
