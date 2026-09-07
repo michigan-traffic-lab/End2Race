@@ -4,45 +4,45 @@ The top-level auxiliary file: main.aux
 The style file: ieeetr.bst
 Database file #1: F1Tenth.bib
 Warning--empty journal in bc
-You've used 43 entries,
+You've used 39 entries,
             1876 wiz_defined-function locations,
-            716 strings with 12649 characters,
-and the built_in function-call counts, 12365 in all, are:
-= -- 1107
-> -- 649
+            699 strings with 12051 characters,
+and the built_in function-call counts, 11761 in all, are:
+= -- 1062
+> -- 604
 < -- 2
-+ -- 232
-- -- 189
-* -- 911
-:= -- 1758
-add.period$ -- 44
-call.type$ -- 43
-change.case$ -- 40
++ -- 215
+- -- 176
+* -- 868
+:= -- 1664
+add.period$ -- 39
+call.type$ -- 39
+change.case$ -- 39
 chr.to.int$ -- 0
-cite$ -- 44
-duplicate$ -- 615
-empty$ -- 1145
-format.name$ -- 189
-if$ -- 2980
+cite$ -- 40
+duplicate$ -- 585
+empty$ -- 1082
+format.name$ -- 176
+if$ -- 2839
 int.to.chr$ -- 0
-int.to.str$ -- 43
-missing$ -- 34
-newline$ -- 133
-num.names$ -- 41
-pop$ -- 196
+int.to.str$ -- 39
+missing$ -- 31
+newline$ -- 120
+num.names$ -- 39
+pop$ -- 180
 preamble$ -- 1
 purify$ -- 0
 quote$ -- 0
-skip$ -- 427
+skip$ -- 420
 stack$ -- 0
 substring$ -- 755
-swap$ -- 248
+swap$ -- 244
 text.length$ -- 2
 text.prefix$ -- 0
 top$ -- 0
 type$ -- 0
 warning$ -- 1
-while$ -- 100
-width$ -- 45
-write$ -- 391
+while$ -- 98
+width$ -- 41
+write$ -- 360
 (There was 1 warning)

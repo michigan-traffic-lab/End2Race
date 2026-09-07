@@ -5,19 +5,6 @@ M.~O'Kelly, H.~Zheng, D.~Karthik, and R.~Mangharam, ``F1tenth: An open-source
   evaluation environment for continuous control and reinforcement learning,''
   {\em Proceedings of Machine Learning Research}, vol.~123, 2020.
 
-\bibitem{hokuyoUST10LX}
-Hokuyo Automatic Co., Ltd., {\em UST-10LX Specification}, 2015.
-
-\bibitem{intelRealSenseD435i}
-Intel Corporation, {\em Intel RealSense D400 Series Product Family Datasheet},
-  2022.
-
-\bibitem{o2019f1}
-M.~O'Kelly, V.~Sukhil, H.~Abbas, J.~Harkins, C.~Kao, Y.~V. Pant, R.~Mangharam,
-  D.~Agarwal, M.~Behl, P.~Burgio, and M.~Bertogna, ``F1/10: An open-source
-  autonomous cyber-physical platform,'' {\em arXiv preprint arXiv:1901.08567},
-  2019.
-
 \bibitem{Macenski2021}
 S.~Macenski and I.~Jambrecic, ``Slam toolbox: Slam for the dynamic world,''
   {\em Journal of Open Source Software}, vol.~6, no.~61, p.~2783, 2021.
@@ -105,10 +92,6 @@ K.~Cho, B.~Van~Merri{\"e}nboer, C.~Gulcehre, D.~Bahdanau, F.~Bougares,
   H.~Schwenk, and Y.~Bengio, ``Learning phrase representations using rnn
   encoder-decoder for statistical machine translation,'' {\em arXiv preprint
   arXiv:1406.1078}, 2014.
-
-\bibitem{sutton2018reinforcement}
-R.~S. Sutton and A.~G. Barto, {\em Reinforcement learning: An introduction}.
-\newblock MIT press, 2018.
 
 \bibitem{bc}
 C.~Sammut, ``Behavioral cloning,'' 01 2011.
