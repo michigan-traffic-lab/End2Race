@@ -157,14 +157,6 @@ Annual competitions held worldwide attract broad participation from the communit
     \vspace{-0.2cm}
 \end{figure}
 
-\begin{figure*}[!t]
-    \centering
-    \vspace{0.15cm}
-    \includegraphics[width=\textwidth]{figures/fig2/overview.jpg}
-    \caption{End2Race system overview: (a) racing scenarios, (b) expert demonstration, (c) imitation learning, and (d) reinforcement learning.}
-    \label{fig:overview}
-    \vspace{-0.1cm}
-\end{figure*}
 
 Existing approaches for autonomous racing can be broadly grouped into map-based, reactive, and learning-based methods.
 Among them, map-based pipelines are the most widely used, relying on a pre-constructed map to follow a globally optimized raceline.
@@ -206,6 +198,15 @@ The main contributions of this work are as follows:
 \item We demonstrate that our learned policy generalizes effectively to novel tracks, achieving high racing speeds, robust safety, and competitive overtaking maneuvers.
 \end{enumerate}
 
+
+\begin{figure*}[!t]
+    \centering
+    \vspace{0.15cm}
+    \includegraphics[width=\textwidth]{figures/fig2/overview.jpg}
+    \caption{End2Race system overview: (a) racing scenarios, (b) expert demonstration, (c) imitation learning, and (d) reinforcement learning.}
+    \label{fig:overview}
+    \vspace{-0.1cm}
+\end{figure*}
 
 \section{Related Work}
 
@@ -258,18 +259,6 @@ Here, \(\Delta s_0\) specifies how far the opponent is positioned ahead of the e
 \subsubsection{Opponent Raceline (\(r_{\mathrm{opp}}\))}
 Beyond longitudinal placement, the lateral positions of the ego vehicle and opponent are critical to the overtaking outcome. We represent this configuration using the opponent raceline \(r_{\mathrm{opp}}\), which assigns the opponent to one of three reference paths. Following the framework of Heilmeier et al.~\cite{Heilmeier02102020}, we define left, center, and right paths positioned at \(35\%\), \(50\%\), and \(65\%\) across the track width from the left boundary. On the Austin circuit, this yields approximately \(0.25\)~m of lateral separation between the center and each side raceline. An opponent on the center raceline restricts clearance on both sides, whereas one on a side raceline leaves a wider passing corridor.
 
-\begin{figure}[!t]
-    \centering
-    \setlength{\fboxsep}{0pt}
-    \setlength{\fboxrule}{0.2pt}
-    \begin{tabular}{@{}c@{\hspace{0.8mm}}c@{\hspace{0.8mm}}c@{}}
-        \fcolorbox{black!10}{white}{\includegraphics[width=0.315\linewidth]{figures/fig3/expert-demo-1.png}} &
-        \fcolorbox{black!10}{white}{\includegraphics[width=0.315\linewidth]{figures/fig3/expert-demo-2.png}} &
-        \fcolorbox{black!10}{white}{\includegraphics[width=0.315\linewidth]{figures/fig3/expert-demo-3.png}}
-    \end{tabular}
-    \caption{Expert-planner failure during overtaking, shown in temporal order from (I) to (III). Blue denotes the ego vehicle and its planned trajectory, and red denotes the opponent. In this scenario, the opponent follows the right raceline with a speed scale of 0.8. (I) The ego approaches the opponent, preparing to overtake. (II) The vehicles travel side by side. (III) The ego returns to the center raceline prematurely, leading to a sideswipe collision.}
-    \label{fig:expert-failure}
-\end{figure}
 
 \subsubsection{Opponent Speed Scale (\(\alpha_{\mathrm{opp}}\))}
 Each reference raceline provides an optimized speed profile based on track curvature and vehicle dynamics. Here, we set a maximum speed of 7.5~m/s, as empirical testing showed that higher values risk compromising control stability. Note that if the opponent follows this profile directly, an ego vehicle driving at the same speed cannot catch up or overtake. To create overtaking opportunities, we multiply the opponent's reference speed by a factor \(\alpha_{\mathrm{opp}}\in\{0.4,0.6,0.8\}\). Values below 0.4 make the opponent unrealistically slow, while those above 0.8 often prevent the ego vehicle from catching up in time.
@@ -295,35 +284,48 @@ At each timestep, the lattice planner generates a set of candidate trajectories 
 \end{equation}
 where \(N=6\) is the number of future trajectory points sampled at 0.1~s intervals; \(v_i\) is the projected vehicle speed at point \(i\); \(v_{\max}=7.5\)~m/s is the speed limit; \(d_i\) is the distance from point \(i\) to the nearest obstacle detected by the LiDAR scan; and \(d_c=0.5\)~m is the clearance threshold. The first term encourages the vehicle to travel at higher speeds up to the speed limit, while the second term penalizes proximity to obstacles. They are balanced by the collision weight \(\lambda_c=5\), determined empirically. The selected local trajectory is then tracked using a Pure Pursuit controller.
 
+\begin{figure}[!t]
+    \centering
+    \setlength{\fboxsep}{0pt}
+    \setlength{\fboxrule}{0.2pt}
+    \begin{tabular}{@{}c@{\hspace{0.8mm}}c@{\hspace{0.8mm}}c@{}}
+        \fcolorbox{black!10}{white}{\includegraphics[width=0.315\linewidth]{figures/fig3/expert-demo-1.png}} &
+        \fcolorbox{black!10}{white}{\includegraphics[width=0.315\linewidth]{figures/fig3/expert-demo-2.png}} &
+        \fcolorbox{black!10}{white}{\includegraphics[width=0.315\linewidth]{figures/fig3/expert-demo-3.png}}
+    \end{tabular}
+    \caption{Expert-planner failure during overtaking, shown in temporal order from (I) to (III). Blue denotes the ego vehicle and its planned trajectory, and red denotes the opponent. In this scenario, the opponent follows the right raceline with a speed scale of 0.8. (I) The ego approaches the opponent, preparing to overtake. (II) The vehicles travel side by side. (III) The ego returns to the center raceline prematurely, leading to a sideswipe collision.}
+    \label{fig:expert-failure}
+\end{figure}
+
 \subsection{Training Dataset}
 \label{sec:training-dataset}
 
-We collect 720 eight-second overtaking demonstrations on the Austin track. Training data are recorded at 40~Hz to reflect the onboard LiDAR-to-control update cycle, yielding 320 observation-action pairs per scenario. Among these scenarios, 620 (86.1\%) result in successful overtakes, 23 (3.2\%) in collision-free car-following, and 77 (10.7\%) in collisions. These collisions stem primarily from the lattice planner's forward-only obstacle evaluation, which does not account for a moving opponent alongside or behind the ego vehicle. Consequently, the planner may return to the center raceline before the ego vehicle has fully cleared the opponent. Collision risk increases as the speed difference between the two vehicles decreases, with most failures occurring at an opponent speed scale of 0.8. Figure~\ref{fig:expert-failure} illustrates one such failure: during overtaking, the planned ego trajectory returns toward the center raceline while the vehicles still overlap longitudinally, resulting in a sideswipe collision.
+We collect 720 eight-second expert demonstrations on the Austin track. Training data is recorded at 40~Hz to match the onboard LiDAR frequency, yielding 320 observation-action pairs per scenario. Of these, 620 result in successful overtakes, 23 in car-following, and 77 in collisions. Notably, these collisions stem primarily from the lattice planner's forward-only obstacle avoidance, which does not account for a moving opponent alongside the ego vehicle. Consequently, the ego vehicle may return to the center raceline before it has fully cleared the opponent, causing a sideswipe collision. This risk increases as the speed difference between the two vehicles decreases, with most failures occurring at an opponent speed scale of 0.8. Figure~\ref{fig:expert-failure} illustrates one such failure, where the ego prematurely returns to the centerline during the overtake and collides with the opponent.
 
-These collisions can be mitigated by incorporating explicit opponent trajectory prediction and interaction modeling, as demonstrated in Predictive Spliner~\cite{baumann2025predictive}. However, such approaches remain fundamentally constrained by hand-crafted heuristics and rigid safety margins that struggle to generalize across diverse head-to-head overtaking scenarios. We instead exclude the 77 collision scenarios from BC training and rely on downstream PPO fine-tuning (Sec.~\ref{sec:policy-training}) to learn safe interactive behavior.
+These collisions can be mitigated with explicit opponent detection, trajectory prediction, and interaction modeling, as shown in Predictive Spliner~\cite{baumann2025predictive}. However, such approaches remain fundamentally constrained by hand-crafted heuristics and rigid safety margins that struggle to accommodate different scenarios. Furthermore, executing such multi-stage inference chains at runtime introduces substantial latency and suffers from error propagation across modules. We instead exclude the collision demonstrations from BC training and rely on downstream PPO fine-tuning to learn safe interactive behavior (Sec.~\ref{sec:policy-training}).
 
 \subsection{Model Architecture}
 
-We use a GRU network that maps sequential observations directly to vehicle control commands.
-At each timestep, the observation comprises a 360-degree 2D LiDAR scan of 180 beams and the current ego speed, while the control output specifies the desired speed and steering angle.
+We use a GRU-based network to capture temporal dependencies and map sequential observations to vehicle control commands.
+At each timestep, the observation comprises a 360-degree 2D LiDAR scan of 180 beams and the current ego speed. The control output specifies the desired speed and steering angle.
+The following introduces key design details, including LiDAR normalization, ego-speed projection, and the network design.
 
 \subsubsection{LiDAR Normalization}
 
 Bufacchi and Iannetti show that human interaction with surrounding space is proximity-dependent, with behavioral responses strengthening progressively as object distance decreases~\cite{bufacchi2018action}.
-The same principle can be applied to autonomous racing, where the influence of track boundaries and competing vehicles on ego motion similarly depends on their distance.
+The same principle can be applied to autonomous racing, where the influence of surrounding obstacles on ego motion similarly depends on their distance.
 To emulate this aspect of human spatial cognition, we transform each of the 180 LiDAR beams using a sigmoid function that maps the raw scan value, \(x \in [0, 10]\), to a normalized value, \(\sigma(x) \in [0,1]\):
 \begin{equation}
     \sigma(x) = \left(-\frac{1}{1 + e^{-k x}} + 1\right) \cdot 2
 \end{equation}
-Here, the decay parameter $k$ controls the effective sensing range and is set to $0.3$.
-With this design, the normalized value increases sharply and nonlinearly as obstacles approach, while asymptotically decaying to zero with distance.
+Here, the parameter $k$ controls the effective sensing range and is set to $0.3$.
+Under this transformation, the normalized scan value increases nonlinearly as obstacles approach and asymptotically decays to zero with distance.
 
 
-\subsubsection{Ego-Speed Embedding}
+\subsubsection{Ego-Speed Projection}
 
-To maintain dynamic consistency, we incorporate the current ego speed into the policy.
-Specifically, the scalar speed \(v_t\) is projected through a linear layer into a 30-dimensional embedding \(\psi(v_t)\).
-To prevent shortcut learning~\cite{shortcut}, in which the model simply copies the current speed into its speed prediction, we mask the projected speed with a learnable embedding $\mathbf{e}_{\mathrm{mask}}$ with probability $p$:
+To maintain dynamic consistency, we incorporate the current ego speed as a policy input, projecting the scalar speed \(v_t\) through a linear layer into a 30-dimensional vector \(\psi(v_t)\).
+To prevent shortcut learning~\cite{shortcut}, in which the model simply copies the current speed into its prediction, we randomly mask the projected speed with a learnable embedding $\mathbf{e}_{\mathrm{mask}}$ as follows:
 \begin{equation}
 \widetilde{\psi}(v_t) =
 \begin{cases}
@@ -333,12 +335,12 @@ To prevent shortcut learning~\cite{shortcut}, in which the model simply copies t
 \end{equation}
 Here, we set \(p=0.2\), encouraging the model to determine desired speed from LiDAR observations when the current speed is masked and to incorporate it when available.
 
-\subsubsection{Policy Network}
+\subsubsection{Network Design}
 
-The 180-dimensional normalized LiDAR scan and the 30-dimensional speed embedding are concatenated to form a 210-dimensional input vector.
+The 180-dimensional normalized LiDAR scan and the 30-dimensional speed projection are concatenated to form a 210-dimensional input vector.
 This input is passed to a single-layer GRU network, which maintains a 420-dimensional hidden state and updates it at each timestep.
 This hidden state is then passed to an MLP action head to produce the desired speed and steering angle.
-In total, the network has 850,556 trainable parameters.
+In total, the model has 850,556 trainable parameters.
 
 \begin{figure}[!t]
     \centering
@@ -386,12 +388,12 @@ In total, the network has 850,556 trainable parameters.
 \subsection{Policy Training}
 \label{sec:policy-training}
 
-Policy training consists of two stages: we first use BC to learn an initial policy from expert demonstrations, and then fine-tune it with PPO via direct environment interaction.
+Training consists of two stages: we first use BC to learn a policy from expert demonstrations, and then fine-tune it with PPO via direct environment interaction.
 
 \subsubsection{Behavioral Cloning}
 \label{sec:behavioral-cloning}
 
-Each 8-second scenario is processed as a complete input sequence, generating a control prediction at every timestep and aggregating the losses across the full temporal horizon. The loss function combines speed and steering mean squared errors (MSE), weighting the speed loss by 0.05 to balance their scales:
+Each 8-second scenario is processed as a whole, generating a control prediction at every timestep and aggregating the loss across the full sequence. The loss function combines the mean squared errors (MSE) of speed (m/s) and steering angle (rad), weighting the speed loss by 0.05 to balance their scales:
 \begin{equation}
 \mathcal{L} = 0.05\, \mathcal{L}_{\text{speed}} + \mathcal{L}_{\text{steer}}.
 \end{equation}
@@ -399,11 +401,11 @@ Each 8-second scenario is processed as a complete input sequence, generating a c
 \subsubsection{Proximal Policy Optimization}
 \label{sec:rl-finetuning}
 
-The policy is fine-tuned across the 720 training scenarios on the Austin track. During each rollout, the policy collects one trajectory per scenario, combining all 720 trajectories into a single batch to perform one policy update. At each timestep $t$, the reward function $r_t$ combines a raceline-progress term with a collision penalty:
+The policy is fine-tuned across the 720 scenarios on the Austin track. In each training iteration, we collect one trajectory per scenario, combining them into a single batch to perform a policy update. At each timestep $t$, the reward function $r_t$ combines a raceline-progress term with a collision penalty:
 \begin{equation}
 r_t = 0.01d_t - 3c_t,
 \end{equation}
-where \(d_t\) denotes the distance traveled along the raceline during timestep \(t\), encouraging higher vehicle speed, and \(c_t\) is a binary indicator equal to 1 if the ego vehicle collides and 0 otherwise. Together, these terms encourage the ego vehicle to prioritize safety while exploiting overtaking opportunities.
+where \(d_t\) denotes the distance traveled along the raceline, and \(c_t\) is a binary collision indicator. Together, these terms encourage the ego vehicle to pursue high racing speeds while prioritizing safety during overtaking maneuvers.
 
 \section{Experiments}
 \label{sec:experiments}

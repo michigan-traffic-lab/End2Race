@@ -36,37 +36,37 @@
 \citation{10003698}
 \citation{bhargav2021offline}
 \citation{10801657}
-\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces End2Race system overview: (a) racing scenarios, (b) expert demonstration, (c) imitation learning, and (d) reinforcement learning.}}{2}{}\protected@file@percent }
-\newlabel{fig:overview}{{2}{2}{}{}{}}
+\citation{ppo}
 \@writefile{toc}{\contentsline {section}{\numberline {II}Related Work}{2}{}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {II-A}Imitation Learning}{2}{}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {II-B}Model-Free Reinforcement Learning}{2}{}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {II-C}Model-Based Reinforcement Learning}{2}{}\protected@file@percent }
-\citation{ppo}
+\@writefile{toc}{\contentsline {subsection}{\numberline {II-D}Hybrid Learning Methods}{2}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {III}Methodology}{2}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {III-A}Overtaking Scenario Setup}{2}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {III-A.1}Ego Starting Position (\(s_0\))}{2}{}\protected@file@percent }
 \citation{Heilmeier02102020}
 \citation{zheng2023gametheoreticobjectivespaceplanning}
 \citation{sakai2018pythonrobotics}
-\@writefile{toc}{\contentsline {subsection}{\numberline {II-D}Hybrid Learning Methods}{3}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {III}Methodology}{3}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {III-A}Overtaking Scenario Setup}{3}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {III-A.1}Ego Starting Position (\(s_0\))}{3}{}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces End2Race system overview: (a) racing scenarios, (b) expert demonstration, (c) imitation learning, and (d) reinforcement learning.}}{3}{}\protected@file@percent }
+\newlabel{fig:overview}{{2}{3}{}{}{}}
 \@writefile{toc}{\contentsline {subsubsection}{\numberline {III-A.2}Longitudinal Gap (\(\Delta s_0\))}{3}{}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsubsection}{\numberline {III-A.3}Opponent Raceline (\(r_{\mathrm  {opp}}\))}{3}{}\protected@file@percent }
-\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces Expert-planner failure during overtaking, shown in temporal order from (I) to (III). Blue denotes the ego vehicle and its planned trajectory, and red denotes the opponent. In this scenario, the opponent follows the right raceline with a speed scale of 0.8. (I) The ego approaches the opponent, preparing to overtake. (II) The vehicles travel side by side. (III) The ego returns to the center raceline prematurely, leading to a sideswipe collision.}}{3}{}\protected@file@percent }
-\newlabel{fig:expert-failure}{{3}{3}{}{}{}}
 \@writefile{toc}{\contentsline {subsubsection}{\numberline {III-A.4}Opponent Speed Scale (\(\alpha _{\mathrm  {opp}}\))}{3}{}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {III-B}Expert Demonstration}{3}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {III-C}Training Dataset}{3}{}\protected@file@percent }
+\newlabel{sec:training-dataset}{{III-C}{3}{}{}{}}
 \citation{baumann2025predictive}
 \citation{bufacchi2018action}
 \citation{shortcut}
-\@writefile{toc}{\contentsline {subsection}{\numberline {III-C}Training Dataset}{4}{}\protected@file@percent }
-\newlabel{sec:training-dataset}{{III-C}{4}{}{}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces Expert-planner failure during overtaking, shown in temporal order from (I) to (III). Blue denotes the ego vehicle and its planned trajectory, and red denotes the opponent. In this scenario, the opponent follows the right raceline with a speed scale of 0.8. (I) The ego approaches the opponent, preparing to overtake. (II) The vehicles travel side by side. (III) The ego returns to the center raceline prematurely, leading to a sideswipe collision.}}{4}{}\protected@file@percent }
+\newlabel{fig:expert-failure}{{3}{4}{}{}{}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {III-D}Model Architecture}{4}{}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsubsection}{\numberline {III-D.1}LiDAR Normalization}{4}{}\protected@file@percent }
 \@writefile{lof}{\contentsline {figure}{\numberline {4}{\ignorespaces Training curves for the two-stage policy optimization, with each stage trained for 500 epochs. (a) BC loss, with the speed loss weighted by 0.05. (b) PPO safety and overtake rates on the 720 Austin scenarios.}}{4}{}\protected@file@percent }
 \newlabel{fig:training-curves}{{4}{4}{}{}{}}
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {III-D.2}Ego-Speed Embedding}{4}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {III-D.3}Policy Network}{4}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {III-D.2}Ego-Speed Projection}{4}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {III-D.3}Network Design}{4}{}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {III-E}Policy Training}{4}{}\protected@file@percent }
 \newlabel{sec:policy-training}{{III-E}{4}{}{}{}}
 \newlabel{sec:behavioral-cloning}{{III-E.1}{4}{}{}{}}
@@ -92,7 +92,6 @@
 \@writefile{lot}{\contentsline {table}{\numberline {II}{\ignorespaces Ablation Study on the Austin Circuit}}{6}{}\protected@file@percent }
 \newlabel{tab:ablation}{{II}{6}{}{}{}}
 \@writefile{toc}{\contentsline {subsubsection}{\numberline {IV-E.3}Temporal Modeling}{6}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {V}Conclusion}{6}{}\protected@file@percent }
 \bibstyle{ieeetr}
 \bibdata{F1Tenth}
 \bibcite{o2020f1tenth}{1}
@@ -133,5 +132,6 @@
 \bibcite{shortcut}{36}
 \bibcite{mitchell2004driving}{37}
 \bibcite{vaswani2017attention}{38}
+\@writefile{toc}{\contentsline {section}{\numberline {V}Conclusion}{7}{}\protected@file@percent }
 \@writefile{toc}{\contentsline {section}{References}{7}{}\protected@file@percent }
 \gdef \@abspage@last{7}
