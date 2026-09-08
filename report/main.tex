@@ -256,7 +256,7 @@ For each track, we define 80 ego starting positions equally spaced along the cir
 Here, \(\Delta s_0\) specifies how far the opponent is positioned ahead of the ego vehicle at the start of a scenario. A small gap provides insufficient starting space for the ego vehicle to maneuver, while a large gap requires the ego vehicle to spend more time catching the opponent, leaving less time for interaction. We therefore set \(\Delta s_0=3\)~m to balance these considerations.
 
 \subsubsection{Opponent Raceline (\(r_{\mathrm{opp}}\))}
-Beyond longitudinal placement, the lateral positions of the ego vehicle and opponent are critical to the overtaking outcome. We represent this configuration using the opponent raceline \(r_{\mathrm{opp}}\), which assigns the opponent to one of three reference paths. Following the framework of Heilmeier et al.~\cite{Heilmeier02102020}, we define left, center, and right paths positioned at \(35\%\), \(50\%\), and \(65\%\) across the track width from the left boundary. On the Austin circuit, this yields approximately \(0.25\)~m of lateral separation between the center and each side raceline. An opponent on the center raceline restricts clearance on both sides, whereas one on a side raceline leaves a wider passing corridor. The ego vehicle always uses the center raceline as its reference, but may temporarily deviate from it as needed.
+Beyond longitudinal placement, the lateral positions of the ego vehicle and opponent are critical to the overtaking outcome. We represent this configuration using the opponent raceline \(r_{\mathrm{opp}}\), which assigns the opponent to one of three reference paths. Following the framework of Heilmeier et al.~\cite{Heilmeier02102020}, we define left, center, and right paths positioned at \(35\%\), \(50\%\), and \(65\%\) across the track width from the left boundary. On the Austin circuit, this yields approximately \(0.25\)~m of lateral separation between the center and each side raceline. An opponent on the center raceline restricts clearance on both sides, whereas one on a side raceline leaves a wider passing corridor.
 
 \begin{figure}[!t]
     \centering
@@ -272,13 +272,15 @@ Beyond longitudinal placement, the lateral positions of the ego vehicle and oppo
 \end{figure}
 
 \subsubsection{Opponent Speed Scale (\(\alpha_{\mathrm{opp}}\))}
-Each reference raceline provides an optimized speed profile based on track curvature and vehicle dynamics. Here, we set a maximum speed of 7.5~m/s, as empirical testing showed that higher values risk compromising control stability. Note that if the opponent follows this profile directly, an ego vehicle driving at the same speed cannot catch up or overtake. To create overtaking opportunities, we multiply the opponent's reference speed by a factor \(\alpha_{\mathrm{opp}}\in\{0.4,0.6,0.8\}\). Values below 0.4 make the opponent unrealistically slow, while those above 0.8 often prevent the ego vehicle from catching up in time. The ego vehicle always operates under the full speed profile.
+Each reference raceline provides an optimized speed profile based on track curvature and vehicle dynamics. Here, we set a maximum speed of 7.5~m/s, as empirical testing showed that higher values risk compromising control stability. Note that if the opponent follows this profile directly, an ego vehicle driving at the same speed cannot catch up or overtake. To create overtaking opportunities, we multiply the opponent's reference speed by a factor \(\alpha_{\mathrm{opp}}\in\{0.4,0.6,0.8\}\). Values below 0.4 make the opponent unrealistically slow, while those above 0.8 often prevent the ego vehicle from catching up in time.
 
 Combining 80 ego starting positions, a fixed longitudinal gap, three opponent racelines, and three opponent speed scales yields 720 scenarios per track. During each 8-second scenario, the opponent passively tracks its assigned raceline using Pure Pursuit. It does not react to the ego vehicle, nor does it engage in any adversarial behavior, such as defensive blocking or erratic speed changes~\cite{zheng2023gametheoreticobjectivespaceplanning}.
 
 \subsection{Expert Demonstration}
 
-We design a map-based lattice planner to generate overtaking demonstrations for the ego vehicle. The lattice planner, adapted from the Frenet Optimal Trajectory framework~\cite{sakai2018pythonrobotics}, converts each LiDAR scan into obstacle points and generates candidate trajectories across a range of lateral positions and terminal speeds. It then discards candidates that violate dynamic constraints and selects the trajectory \(\tau\) that minimizes the cost \(\mathcal{J}(\tau)\):
+We use a map-based lattice planner to generate overtaking demonstrations for the ego vehicle. Here, the ego uses the center raceline as its global reference path and operates under the full speed profile. The lattice planner, adapted from the Frenet optimal trajectory framework~\cite{sakai2018pythonrobotics}, generates local candidate trajectories across a range of lateral offsets and terminal speeds relative to this reference. This allows the ego vehicle to temporarily deviate from the centerline to avoid obstacles and execute overtaking maneuvers.
+
+At each timestep, the lattice planner generates a set of candidate trajectories around the reference path, discards those that violate vehicle dynamic constraints, and selects the trajectory \(\tau\) that minimizes the cost function \(\mathcal{J}(\tau)\):
 \begin{equation}
     \mathcal{J}(\tau)
     =
@@ -291,7 +293,7 @@ We design a map-based lattice planner to generate overtaking demonstrations for 
         \max\left(0,1-\frac{d_i}{d_c}\right)
     \right]^2
 \end{equation}
-where \(N\) is the number of future trajectory points sampled at 0.1~s intervals (\(N=6\)); \(v_i\) is the projected vehicle speed at point \(i\), favoring trajectories with higher mean speeds; \(v_{\max}=7.5\)~m/s is the speed limit; \(d_i\) is the distance from point \(i\) to the nearest obstacle; \(d_c=0.5\)~m is the clearance threshold for applying the collision penalty; and \(\lambda_c=5\) balances vehicle speed and obstacle clearance. The ego vehicle then tracks the selected trajectory using a Pure Pursuit controller.
+where \(N=6\) is the number of future trajectory points sampled at 0.1~s intervals; \(v_i\) is the projected vehicle speed at point \(i\); \(v_{\max}=7.5\)~m/s is the speed limit; \(d_i\) is the distance from point \(i\) to the nearest obstacle detected by the LiDAR scan; and \(d_c=0.5\)~m is the clearance threshold. The first term encourages the vehicle to travel at higher speeds up to the speed limit, while the second term penalizes proximity to obstacles. They are balanced by the collision weight \(\lambda_c=5\), determined empirically. The selected local trajectory is then tracked using a Pure Pursuit controller.
 
 \subsection{Training Dataset}
 \label{sec:training-dataset}
