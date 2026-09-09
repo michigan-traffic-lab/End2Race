@@ -152,7 +152,7 @@ Annual competitions held worldwide attract broad participation from the communit
     \centering
     \vspace{0.15cm}
     \includegraphics[width=0.95\linewidth]{figures/fig1/scenario.pdf}
-    \caption{Simple overtake scenario illustration.}
+    \caption{Illustration of the five-stage overtaking process.}
     \label{fig:example}
     \vspace{-0.2cm}
 \end{figure}
@@ -203,7 +203,7 @@ The main contributions of this work are as follows:
     \centering
     \vspace{0.15cm}
     \includegraphics[width=\textwidth]{figures/fig2/overview.jpg}
-    \caption{End2Race system overview: (a) racing scenarios, (b) expert demonstration, (c) imitation learning, and (d) reinforcement learning.}
+    \caption{End2Race system architecture.}
     \label{fig:overview}
     \vspace{-0.1cm}
 \end{figure*}
@@ -293,7 +293,7 @@ where \(N=6\) is the number of future trajectory points sampled at 0.1~s interva
         \fcolorbox{black!10}{white}{\includegraphics[width=0.315\linewidth]{figures/fig3/expert-demo-2.png}} &
         \fcolorbox{black!10}{white}{\includegraphics[width=0.315\linewidth]{figures/fig3/expert-demo-3.png}}
     \end{tabular}
-    \caption{Expert-planner failure during overtaking, shown in temporal order from (I) to (III). Blue denotes the ego vehicle and its planned trajectory, and red denotes the opponent. In this scenario, the opponent follows the right raceline with a speed scale of 0.8. (I) The ego approaches the opponent, preparing to overtake. (II) The vehicles travel side by side. (III) The ego returns to the center raceline prematurely, leading to a sideswipe collision.}
+    \caption{Expert-planner failure during overtaking, shown in temporal order from (a) to (c). Blue denotes the ego vehicle and its planned trajectory, and red denotes the opponent. In this scenario, the opponent follows the right raceline with a speed scale of 0.8.}
     \label{fig:expert-failure}
 \end{figure}
 
@@ -302,7 +302,8 @@ where \(N=6\) is the number of future trajectory points sampled at 0.1~s interva
 
 We collect 720 eight-second expert demonstrations on the Austin track. Training data is recorded at 40~Hz to match the onboard LiDAR frequency, yielding 320 observation-action pairs per scenario. Of these, 620 result in successful overtakes, 23 in car-following, and 77 in collisions. Notably, these collisions stem primarily from the lattice planner's forward-only obstacle avoidance, which does not account for a moving opponent alongside the ego vehicle. Consequently, the ego vehicle may return to the center raceline before it has fully cleared the opponent, causing a sideswipe collision. This risk increases as the speed difference between the two vehicles decreases, with most failures occurring at an opponent speed scale of 0.8. Figure~\ref{fig:expert-failure} illustrates one such failure, where the ego prematurely returns to the centerline during the overtake and collides with the opponent.
 
-These collisions can be mitigated with explicit opponent detection, trajectory prediction, and interaction modeling, as shown in Predictive Spliner~\cite{baumann2025predictive}. However, such approaches remain fundamentally constrained by hand-crafted heuristics and rigid safety margins that struggle to accommodate different scenarios. Furthermore, executing such multi-stage inference chains at runtime introduces substantial latency and suffers from error propagation across modules. We instead exclude the collision demonstrations from BC training and rely on downstream PPO fine-tuning to learn safe interactive behavior (Sec.~\ref{sec:policy-training}).
+These collisions can be mitigated with explicit opponent detection, trajectory prediction, and interaction modeling, as shown in Predictive Spliner~\cite{baumann2025predictive}. However, such approaches remain fundamentally constrained by hand-crafted heuristics and rigid safety margins that struggle to accommodate different scenarios. % Furthermore, executing such multi-stage inference chains at runtime introduces substantial latency and suffers from error propagation across modules.
+We instead exclude the collision demonstrations from BC training and rely on downstream PPO fine-tuning to learn safe interactive behavior (Sec.~\ref{sec:policy-training}).
 
 \subsection{Model Architecture}
 
@@ -385,7 +386,7 @@ In total, the model has 850,556 trainable parameters.
 \label{tab:racing_performance}
 \end{table*}
 
-\subsection{Policy Training}
+\subsection{Policy Optimization}
 \label{sec:policy-training}
 
 Training consists of two stages: we first use BC to learn a policy from expert demonstrations, and then fine-tune it with PPO via direct environment interaction.
@@ -410,21 +411,22 @@ where \(d_t\) denotes the distance traveled along the raceline, and \(c_t\) is a
 \section{Experiments}
 \label{sec:experiments}
 
-We evaluate End2Race across the training track and three test tracks.
-The evaluation includes single-vehicle driving and head-to-head overtaking (Table~\ref{tab:racing_performance}).
-Visual illustrations further demonstrate representative policy behaviors (Fig.~\ref{fig:scenario-examples}).
+We evaluate End2Race across the training and three test tracks.
+The evaluation includes both single-vehicle timed trials and head-to-head scenarios.
+Visual illustrations further demonstrate representative policy behaviors.
 
-\subsection{Training Setup}
+\subsection{Training Details}
 
-The BC policy is trained for 500 epochs using the Adam optimizer at a learning rate of \(10^{-4}\). Training completes in less than five minutes on a single L40S GPU. The loss decreases rapidly during early epochs and then gradually converges (Fig.~\ref{fig:training-curves}(a)). Additional training further reduces loss, but risks overfitting.
+The BC policy is trained for 500 epochs using the Adam optimizer with a learning rate of \(10^{-4}\). Training completes in five minutes on a single L40S GPU. The loss decreases rapidly during early epochs and then gradually converges (Fig.~\ref{fig:training-curves}(a)). Additional training would further reduce loss, but risk overfitting and yield no performance gains.
 
-PPO starts from the trained BC checkpoint with a randomly initialized value head. Training runs for 500 epochs with a learning rate of \(10^{-5}\) and a clipping range of \([0.8, 1.2]\). Since online simulation is time-consuming, training is accelerated with 64 CPU cores and four L40S GPUs, requiring approximately 16 hours in total. During early epochs, the safety rate rises sharply while the overtake rate drops, reflecting conservative driving. As training progresses, the overtake rate steadily increases while maintaining high safety, indicating that the policy learns to execute overtaking maneuvers without compromising collision avoidance (Fig.~\ref{fig:training-curves}(b)).
+PPO starts from the BC checkpoint with a newly initialized value head. Training runs for 500 epochs with a learning rate of \(10^{-5}\) and a clipping range of \([0.8, 1.2]\). Since online simulation is time-consuming, we use sixty-four CPU cores and four L40S GPUs, requiring approximately 16 hours in total. During early epochs, the safety rate rises sharply while the overtake rate drops, reflecting conservative driving. As training progresses, the overtake rate steadily increases while maintaining high safety, demonstrating the acquisition of adaptive driving skills (Fig.~\ref{fig:training-curves}(b)).
 
-\subsection{Single-Vehicle Driving}
+\subsection{Single-Vehicle Timed Trials}
+\label{sec:single-vehicle-timed-trials}
 
-We first evaluate End2Race in a single-vehicle setting to test whether the policy can complete the track at high speeds. Table~\ref{tab:racing_performance} reports the mean speed and lap time of three methods: the map-based expert, BC policy, and PPO policy, all of which complete the evaluation without collision. Compared to the expert, which relies on explicit track knowledge and an optimized reference raceline, the map-free BC policy achieves comparable mean speeds and lap times across all four tracks, demonstrating effective learning and generalization.
+We first evaluate End2Race in single-vehicle timed trials to test whether the policy can complete the track at high speeds. Table~\ref{tab:racing_performance} reports the mean speed and lap time of three methods: the map-based expert, BC, and PPO, all of which complete the evaluation without collision. Compared to the expert, which relies on explicit track knowledge and an optimized reference raceline, the map-free BC policy achieves comparable mean speeds and lap times across all four tracks, demonstrating effective learning and generalization.
 
-The PPO policy achieves higher mean speeds and shorter lap times on every track. These gains arise from continued interactive exploration, through which the policy discovers racing strategies that are often more competitive than those demonstrated by the expert and closely resemble techniques used by human racers. One example is corner-exit track-out, in which the vehicle moves from the inside to the outside of a curve to reduce speed loss. Another example is corner-exit acceleration and corner-entry braking, in which the vehicle accelerates immediately upon exiting a curve, maintains high speed along the following straight, and brakes sharply just before entering the next curve~\cite{mitchell2004driving}.
+The PPO policy achieves significantly higher mean speeds and shorter lap times on every track. These gains arise from continued interactive exploration, through which the policy discovers racing strategies that often resemble techniques used by human racers. One example is corner-exit track-out, in which the vehicle moves from the inside to the outside of a curve to reduce speed loss. Another example is corner-exit acceleration and corner-entry braking, in which the vehicle accelerates immediately upon exiting a curve, maintains high speed along the following straight, and brakes sharply just before entering the next curve~\cite{mitchell2004driving}.
 
 \begin{figure*}[!t]
     \centering
@@ -437,7 +439,7 @@ The PPO policy achieves higher mean speeds and shorter lap times on every track.
         \fcolorbox{black!10}{white}{\includegraphics[width=0.322\linewidth]{figures/fig5/overtake-1-frame-2.png}}%
         \hfill
         \fcolorbox{black!10}{white}{\includegraphics[width=0.322\linewidth]{figures/fig5/overtake-1-frame-3.png}}
-        \par\vspace{0.4mm}{\footnotesize (a) Overtaking ($r_{\mathrm{opp}}=\text{center},\, \alpha_{\mathrm{opp}}=0.8$)}
+        \par\vspace{0.4mm}{\footnotesize (1) Overtaking ($r_{\mathrm{opp}}=\text{center},\, \alpha_{\mathrm{opp}}=0.8$)}
     \end{minipage}%
     \hfill
     \begin{minipage}[t]{0.485\textwidth}
@@ -447,7 +449,7 @@ The PPO policy achieves higher mean speeds and shorter lap times on every track.
         \fcolorbox{black!10}{white}{\includegraphics[width=0.322\linewidth]{figures/fig5/overtake-2-frame-2.png}}%
         \hfill
         \fcolorbox{black!10}{white}{\includegraphics[width=0.322\linewidth]{figures/fig5/overtake-2-frame-3.png}}
-        \par\vspace{0.4mm}{\footnotesize (b) Overtaking ($r_{\mathrm{opp}}=\text{center},\, \alpha_{\mathrm{opp}}=0.8$)}
+        \par\vspace{0.4mm}{\footnotesize (2) Overtaking ($r_{\mathrm{opp}}=\text{center},\, \alpha_{\mathrm{opp}}=0.8$)}
     \end{minipage}
 
     \vspace{1.5mm}
@@ -459,7 +461,7 @@ The PPO policy achieves higher mean speeds and shorter lap times on every track.
         \fcolorbox{black!10}{white}{\includegraphics[width=0.322\linewidth]{figures/fig5/follow-frame-2.png}}%
         \hfill
         \fcolorbox{black!10}{white}{\includegraphics[width=0.322\linewidth]{figures/fig5/follow-frame-3.png}}
-        \par\vspace{0.4mm}{\footnotesize (c) Car-following ($r_{\mathrm{opp}}=\text{right},\, \alpha_{\mathrm{opp}}=0.8$)}
+        \par\vspace{0.4mm}{\footnotesize (3) Car-following ($r_{\mathrm{opp}}=\text{right},\, \alpha_{\mathrm{opp}}=0.8$)}
     \end{minipage}%
     \hfill
     \begin{minipage}[t]{0.485\textwidth}
@@ -469,7 +471,7 @@ The PPO policy achieves higher mean speeds and shorter lap times on every track.
         \fcolorbox{black!10}{white}{\includegraphics[width=0.322\linewidth]{figures/fig5/collision-frame-2.png}}%
         \hfill
         \fcolorbox{black!10}{white}{\includegraphics[width=0.322\linewidth]{figures/fig5/collision-frame-3.png}}
-        \par\vspace{0.4mm}{\footnotesize (d) Collision ($r_{\mathrm{opp}}=\text{center},\, \alpha_{\mathrm{opp}}=0.8$)}
+        \par\vspace{0.4mm}{\footnotesize (4) Collision ($r_{\mathrm{opp}}=\text{center},\, \alpha_{\mathrm{opp}}=0.8$)}
     \end{minipage}
     \caption{Representative head-to-head interaction scenarios across time on the Austin circuit. Blue denotes the ego vehicle and red denotes the opponent, with historical trajectories rendered in matching colors. Each frame indicates the elapsed time and vehicle speeds.}
     \label{fig:scenario-examples}
@@ -478,36 +480,38 @@ The PPO policy achieves higher mean speeds and shorter lap times on every track.
 
 \subsection{Head-to-Head Racing}
 
-We evaluate head-to-head racing performance using the overtake and safety rates. The overtake rate is defined as the proportion of scenarios ending in a successful overtake, while the safety rate includes both successful overtakes and collision-free car-following outcomes. The map-based expert achieves a safety rate of approximately 90\% across all tracks, with the vast majority being successful overtakes.
+We evaluate head-to-head performance using the overtake and safety rates. The former is defined as the proportion of scenarios ending in a successful overtake, while the latter includes both successful overtakes and collision-free car-following outcomes. The map-based expert achieves a safety rate of approximately 90\% across all tracks, with the majority being successful overtakes (Table~\ref{tab:racing_performance}).
 
-Compared to the expert, the BC policy adopts a more conservative racing strategy, achieving lower overtake rates. However, this conservatism does not translate into improved safety. We attribute this outcome to the imitation learning objective itself: while the network mimics demonstrated control commands, supervised action matching does not establish the internal representations and tactical reasoning essential for vehicle interactions. Consequently, the policy remains effective for single-vehicle driving but struggles in more complex head-to-head scenarios.
+Compared to the expert, the BC policy adopts a more conservative racing strategy, achieving lower overtake rates. However, this conservatism does not translate into improved safety. We attribute this outcome to the imitation learning objective itself: while the network can mimic demonstrated control commands, it does not establish the internal representations and tactical reasoning essential for vehicle interactions. Consequently, the policy remains effective for single-vehicle trials but struggles under more complex conditions.
 
-This limitation is resolved during the PPO fine-tuning stage, which bridges the performance gap and even exceeds the expert, achieving higher safety and overtake rates across all tracks. This demonstrates that PPO not only develops adaptive interactive behaviors, but also overcomes the limitations of the expert demonstration data.
+This limitation is resolved during the PPO stage, which substantially outperforms the expert in both safety and overtake rates. This demonstrates that PPO not only bridges the performance gap, but also overcomes the limitations of the expert demonstration data.
 
 \subsection{Scenario Illustration}
 
-Figure~\ref{fig:scenario-examples} illustrates four head-to-head scenarios that highlight the model's behavior during overtaking encounters. All episodes evaluate the PPO policy on the Austin circuit.
+Figure~\ref{fig:scenario-examples} illustrates four cases that highlight the model's behavior during overtaking encounters. All examples are rollouts generated by the PPO policy on the Austin circuit.
 
-\textbf{Overtaking:} Fig.~\ref{fig:scenario-examples}(a) illustrates a nominal overtaking sequence along a straight segment. Upon observing the slower opponent ahead, the ego vehicle initiates a lateral shift while sustaining cruising speed. Alongside the opponent, the ego vehicle maintains a stable lateral margin throughout the pass. Once past the opponent, the ego vehicle smoothly returns to the track center, avoiding an abrupt cut-back.
+\textbf{Overtaking:} Fig.~\ref{fig:scenario-examples}(1) illustrates an overtaking sequence along a straight segment. Upon observing a slower opponent ahead, the ego vehicle initiates a lateral shift while sustaining cruising speed. It maintains a stable lateral clearance alongside the opponent, then smoothly returns to the track center without an abrupt cut-back.
 
-Fig.~\ref{fig:scenario-examples}(b) depicts a pass through a sharp curve. The ego vehicle follows the outside line behind the slower opponent, preparing the pass on approach to the turn. Entering the curve, it maintains this line under moderate braking, leveraging its speed advantage to execute the maneuver. Early acceleration before corner exit builds speed to pull ahead of the opponent and complete the pass.
+Fig.~\ref{fig:scenario-examples}(2) depicts a cornering overtake. The ego vehicle initially follows the opponent, preparing to pass. When an unexpected sharp curve emerges, it applies moderate braking to sustain higher speed through the turn, then accelerates early at corner exit to complete the pass.
 
-\textbf{Car-Following:} Fig.~\ref{fig:scenario-examples}(c) depicts car-following behavior under spatial constraints. The ego vehicle initially prepares an overtake behind the opponent. However, upon entering the curve, the opponent completely blocks the inner corridor, forcing the ego vehicle to brake heavily and almost come to a complete stop. After the opponent advances through the curve, the ego vehicle accelerates to resume speed.
+\textbf{Car-Following:} Fig.~\ref{fig:scenario-examples}(3) shows a car-following case. During an overtaking maneuver, the ego vehicle is blocked at the inner corridor by the opponent, forcing it to brake heavily and almost come to a complete stop. Once the opponent proceeds, the ego vehicle accelerates to resume driving.
 
-\textbf{Collision:} Fig.~\ref{fig:scenario-examples}(d) depicts a collision case. The ego vehicle prepares to overtake behind the opponent, and the vehicles travel side by side as the track suddenly narrows. Left with no room along the boundary side, the ego vehicle has no choice but to steer toward the opponent, resulting in a collision.
+\textbf{Collision:} Fig.~\ref{fig:scenario-examples}(4) captures a failure case. As the vehicles travel side by side, the track suddenly narrows. Left with no room along the boundary, the ego vehicle steers toward the opponent, resulting in a collision.
 
-\subsection{Ablation Studies}
+Together, these cases demonstrate the tactical racing and overtaking capabilities of the learned policy. Nevertheless, as the policy operates without a map, it cannot predict forward track geometry, which can lead to unfavorable conditions under sudden track constrictions.
+
+\subsection{Ablation Study}
 \label{sec:ablation}
 
-We conduct an ablation study to examine the effect of different design choices in the model architecture (Table~\ref{tab:ablation}). The evaluation covers four variants across LiDAR normalization and temporal sequence modeling. All models are trained under identical behavior cloning settings and evaluated on the Austin circuit.
+We conduct an ablation study to examine the effect of design choices in our model architecture, covering two key components: LiDAR normalization and temporal sequence modeling (Table~\ref{tab:ablation}). All variants are trained using behavioral cloning and evaluated on the Austin circuit.
 
 \subsubsection{LiDAR Normalization}
 
-We compare the proposed sigmoid normalization with two alternatives: no normalization and linear normalization, all sharing the same GRU architecture. The unnormalized model fails to complete a single-vehicle lap. Linear normalization provides a viable policy, but leaves a large performance gap in head-to-head racing, with marked drops in both overtake and safety rates. This comparison reveals that the sigmoid formulation uniquely provides the proximity representation required for safe and effective racing.
+We compare the proposed sigmoid normalization with two alternatives: no normalization and linear normalization, all sharing the same GRU architecture. The unnormalized model fails to complete a single-vehicle lap. Linear normalization provides a viable policy, but leaves a large performance gap in head-to-head racing. This shows that the sigmoid formulation is crucial in our design for effective driving.
 
 \subsubsection{Temporal Information}
 
-To assess the importance of temporal information, we evaluate an MLP that operates only on the latest observation. The MLP replaces the recurrent unit with a \(210 \rightarrow 420\) linear layer, followed by the action head. The resulting policy exhibits heuristic driving behavior, achieving a higher vehicle speed and overtake rate at the cost of a substantial drop in safety. This demonstrates that temporal cues are essential for continuous interaction modeling and adaptive racing behavior.
+To assess the importance of temporal information, we evaluate an MLP that operates only on the latest observation. The MLP replaces the GRU with a \(210 \rightarrow 420\) linear layer, followed by the action head. The resulting policy exhibits heuristic driving behavior, achieving a higher vehicle speed and overtake rate at the cost of a substantial drop in safety. These results confirm that temporal cues are essential for continuous interaction modeling.
 
 \begin{table}[!t]
 \caption{Ablation Study on the Austin Circuit}
@@ -531,11 +535,11 @@ GRU (BC)      & 6.7          & 62.7         & 62.8          & \textbf{82.8} \\
 
 \subsubsection{Temporal Modeling}
 
-We evaluate a Transformer~\cite{vaswani2017attention} as an alternative temporal model. The model operates on a maximum history sequence of 20 tokens, which corresponds to a span of 0.5~s. Each token represents one timestep and has a dimension of 210. The tokens are processed through two encoder layers with bidirectional self-attention. The number of attention heads is set to three, and the feedforward network has a hidden dimension of 420. The output of the latest token feeds into the action head to produce the control commands. The resulting policy achieves a higher overtake rate than the baseline, but with a slightly lower safety rate. Additionally, the Transformer model incurs \textit{four times the inference latency} of the GRU. To balance safety, overtaking, and real-time responsiveness, we retain the GRU as our default architecture. Meanwhile, we recognize the Transformer as a practical alternative.
+We evaluate a Transformer~\cite{vaswani2017attention} as an alternative temporal model. The model operates on a maximum history sequence of 20 tokens, which corresponds to a span of 0.5~s. Each token represents one timestep and has a dimension of 210. The tokens are processed through two encoder layers with bidirectional self-attention, three attention heads, and a feedforward dimension of 420. The output of the latest token feeds into the action head to produce the control commands. The resulting policy achieves a higher overtake rate, but with a lower safety rate. Additionally, the Transformer incurs four times the inference latency of the GRU. To balance overtaking, safety, and real-time responsiveness, we retain the GRU as our default architecture. Meanwhile, we recognize the Transformer as a practical alternative.
 
 \section{Conclusion}
 
-In this work, we introduce \textbf{End2Race}, an end-to-end learning framework for autonomous racing that supports scalable overtaking scenario generation, policy training, and benchmark evaluation. Our proposed policy achieves low inference latency and delivers competitive racing performance across novel tracks. Future work will focus on deploying the policy to a physical vehicle and participating in F1Tenth competitions.
+In this work, we introduce End2Race, an end-to-end learning framework for head-to-head autonomous racing. Our proposed policy achieves low inference latency and delivers competitive racing performance. Future work will focus on deploying the policy to a physical vehicle and participating in F1Tenth competitions.
 
 \bibliographystyle{ieeetr}
 \bibliography{F1Tenth}

@@ -170,7 +170,7 @@ def plot_figures(bc_records, ppo_records, output_dir):
     )
     bc_axis.set_yscale("log")
     bc_axis.yaxis.set_minor_locator(NullLocator())
-    bc_axis.set_ylabel("MSE")
+    bc_axis.set_ylabel("Loss")
     bc_axis.set_xlim(0, 520)
     bc_axis.legend(
         handles=[
