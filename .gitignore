@@ -10,3 +10,14 @@ eval_results/
 
 f1tenth_sim/f1tenth_gym/docs/html/
 f1tenth_sim/f1tenth_gym/docs/xml/
+
+# LaTeX intermediate build files
+*.aux
+*.bbl
+*.blg
+*.log
+*.out
+*.toc
+*.fls
+*.fdb_latexmk
+*.synctex.gz
