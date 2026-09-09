@@ -361,7 +361,7 @@ In total, the model has 850,556 trainable parameters.
 
 \begin{table*}[!t]
 \vspace{0.15cm}
-\caption{Benchmark Evaluation: Single-Vehicle and Head-to-Head Racing Performance}
+\caption{Single-Vehicle Timed Trials and Head-to-Head Racing Performance}
 \centering
 \small
 \setlength{\tabcolsep}{4.5pt}
@@ -514,7 +514,7 @@ We compare the proposed sigmoid normalization with two alternatives: no normaliz
 To assess the importance of temporal information, we evaluate an MLP that operates only on the latest observation. The MLP replaces the GRU with a \(210 \rightarrow 420\) linear layer, followed by the action head. The resulting policy exhibits heuristic driving behavior, achieving a higher vehicle speed and overtake rate at the cost of a substantial drop in safety. These results confirm that temporal cues are essential for continuous interaction modeling.
 
 \begin{table}[!t]
-\caption{Ablation Study on the Austin Circuit}
+\caption{Ablation Study on Model Design Choices}
 \label{tab:ablation}
 \centering
 \footnotesize
