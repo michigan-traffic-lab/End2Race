@@ -202,7 +202,7 @@ The main contributions of this work are as follows:
 \begin{figure*}[!t]
     \centering
     \vspace{0.15cm}
-    \includegraphics[width=\textwidth]{figures/fig2/overview.jpg}
+    \includegraphics[width=\textwidth]{figures/fig2/architecture.png}
     \caption{End2Race system architecture.}
     \label{fig:overview}
     \vspace{-0.1cm}
@@ -254,7 +254,7 @@ Each overtaking scenario pairs an ego vehicle with an opponent initially positio
 For each track, we define 80 ego starting positions equally spaced along the circuit. On the 420~m Austin track, for example, adjacent starting positions are separated by approximately 5.2~m.
 
 \subsubsection{Longitudinal Gap (\(\Delta s_0\))}
-Here, \(\Delta s_0\) specifies how far the opponent is positioned ahead of the ego vehicle at the start of a scenario. A small gap provides insufficient starting space for the ego vehicle to maneuver, while a large gap requires the ego vehicle to spend more time catching the opponent, leaving less time for interaction. We therefore set \(\Delta s_0=3\)~m to balance these considerations.
+Here, \(\Delta s_0\) specifies how far the opponent is positioned ahead of the ego vehicle at the start of a scenario. A small gap provides insufficient maneuvering space, while a large gap requires more time to catch the opponent, leaving less time for interaction. We therefore set \(\Delta s_0=3\)~m to balance these considerations.
 
 \subsubsection{Opponent Raceline (\(r_{\mathrm{opp}}\))}
 Beyond longitudinal placement, the lateral positions of the ego vehicle and opponent are critical to the overtaking outcome. We represent this configuration using the opponent raceline \(r_{\mathrm{opp}}\), which assigns the opponent to one of three reference paths. Following the framework of Heilmeier et al.~\cite{Heilmeier02102020}, we define left, center, and right paths positioned at \(35\%\), \(50\%\), and \(65\%\) across the track width from the left boundary. On the Austin circuit, this yields approximately \(0.25\)~m of lateral separation between the center and each side raceline. An opponent on the center raceline restricts clearance on both sides, whereas one on a side raceline leaves a wider passing corridor.
@@ -295,6 +295,7 @@ where \(N=6\) is the number of future trajectory points sampled at 0.1~s interva
     \end{tabular}
     \caption{Expert-planner failure during overtaking, shown in temporal order from (a) to (c). Blue denotes the ego vehicle and its planned trajectory, and red denotes the opponent. In this scenario, the opponent follows the right raceline with a speed scale of 0.8.}
     \label{fig:expert-failure}
+    \vspace{-0.2cm}
 \end{figure}
 
 \subsection{Training Dataset}
@@ -357,6 +358,7 @@ In total, the model has 850,556 trainable parameters.
     \vspace{-1.5mm}
     \caption{Training curves for the two-stage policy optimization, with each stage trained for 500 epochs. (a) BC loss, with the speed loss weighted by 0.05. (b) PPO safety and overtake rates on the 720 Austin scenarios.}
     \label{fig:training-curves}
+    \vspace{-0.2cm}
 \end{figure}
 
 \begin{table*}[!t]
@@ -535,11 +537,11 @@ GRU (BC)      & 6.7          & 62.7         & 62.8          & \textbf{82.8} \\
 
 \subsubsection{Temporal Modeling}
 
-We evaluate a Transformer~\cite{vaswani2017attention} as an alternative temporal model. The model operates on a maximum history sequence of 20 tokens, which corresponds to a span of 0.5~s. Each token represents one timestep and has a dimension of 210. The tokens are processed through two encoder layers with bidirectional self-attention, three attention heads, and a feedforward dimension of 420. The output of the latest token feeds into the action head to produce the control commands. The resulting policy achieves a higher overtake rate, but with a lower safety rate. Additionally, the Transformer incurs four times the inference latency of the GRU. To balance overtaking, safety, and real-time responsiveness, we retain the GRU as our default architecture. Meanwhile, we recognize the Transformer as a practical alternative.
+We evaluate a Transformer~\cite{vaswani2017attention} as an alternative temporal model. The model operates on a 20-token history, corresponding to a span of 0.5~s. Each token represents one timestep and has a dimension of 210. The tokens are processed through two encoder layers with bidirectional self-attention, three attention heads, and a feedforward dimension of 420. The output of the latest token feeds into the action head to produce the control commands. The resulting policy achieves a higher overtake rate, but with a lower safety rate. Additionally, the Transformer incurs four times the inference latency of the GRU. To balance overtaking, safety, and real-time responsiveness, we retain the GRU as our default architecture. Meanwhile, we recognize the Transformer as a practical alternative.
 
 \section{Conclusion}
 
-In this work, we introduce End2Race, an end-to-end learning framework for head-to-head autonomous racing. Our proposed policy achieves low inference latency and delivers competitive racing performance. Future work will focus on deploying the policy to a physical vehicle and participating in F1Tenth competitions.
+In this work, we introduce End2Race, an end-to-end learning framework for head-to-head autonomous racing. Our proposed policy achieves low inference latency and delivers competitive racing performance. Future work will focus on addressing the sim-to-real gap, deploying the learned policy to a physical vehicle, and competing against real opponents in F1Tenth competitions.
 
 \bibliographystyle{ieeetr}
 \bibliography{F1Tenth}
