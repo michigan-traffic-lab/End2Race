@@ -78,7 +78,8 @@
 \newcommand{\cmark}{\ding{51}} % ✓
 \newcommand{\xmark}{\ding{55}} % ✗
 
-\renewcommand{\arraystretch}{1.4}
+\renewcommand{\arraystretch}{1.3}
+\newcolumntype{Y}{>{\centering\arraybackslash}X}
 
 \begin{document}
 
@@ -133,7 +134,7 @@
 % in the abstract or keywords.
 \begin{abstract}
 
-Autonomous racing serves as a compelling testbed for advancing autonomous vehicle systems. F1Tenth, a 1/10-scale vehicular platform, has been widely adopted for autonomous racing education and research. Annual competitions held worldwide bring teams together to compete in intense, head-to-head racing. Yet, leading solutions in these tournaments remain dominated by rule-based approaches. While learning-based methods have been proposed, they focus primarily on single-vehicle settings, leaving challenging multi-vehicle interactions largely unexplored. To address this gap, we introduce \textbf{End2Race}, an end-to-end learning framework specifically designed for head-to-head autonomous racing. Using this framework, we develop a computationally efficient policy network that achieves an inference time below 1~ms on an F1Tenth onboard computer. Extensive evaluations show that the policy generalizes effectively to novel tracks, demonstrating high racing speeds, advanced overtaking capabilities, and robust safety. These results significantly surpass established rule-based baselines. The codebase will be made publicly available.
+Autonomous racing serves as a compelling testbed for advancing autonomous vehicle systems. F1Tenth, a 1/10-scale vehicular platform, has been widely adopted for autonomous racing education and research. Annual competitions held worldwide bring teams together to compete in intense, head-to-head racing. Yet, leading solutions in these tournaments remain dominated by rule-based approaches. While learning-based methods have been proposed, they focus primarily on single-vehicle settings, leaving challenging multi-vehicle interactions largely unexplored. To address this gap, we introduce \textbf{End2Race}, an end-to-end learning framework specifically designed for head-to-head autonomous racing. Using this framework, we develop a computationally efficient policy network that achieves an inference latency below 1~ms on an F1Tenth onboard computer. Extensive evaluations show that the policy achieves state-of-the-art performance, outperforming prior learning-based methods. It generalizes effectively to both novel tracks and unseen opponent behaviors, demonstrating high racing speeds, robust safety, and adaptive overtaking maneuvers. The codebase will be made publicly available.
 
 \end{abstract}
 
@@ -165,7 +166,7 @@ A minimum-curvature raceline is then computed to serve as the global reference p
 During racing, a particle filter~\cite{walsh2017cddt} tracks the vehicle's position, enabling a lattice planner~\cite{Pivtoraiko-2009-10176} to evaluate feasible local trajectories.
 Motion controllers such as Pure Pursuit~\cite{coulter1992implementation} or model predictive control (MPC)~\cite{falcone2007predictive} then execute the selected trajectory.
 However, map-based methods have two limitations.
-First, they require preprocessing and cannot operate on unseen tracks.
+First, they require preprocessing and cannot operate on novel tracks.
 Second, the multi-stage pipeline incurs a runtime delay of approximately 30~ms on onboard hardware~\cite{zang2023localinn,muzzini2024gpu}.
 Combined with sensor latency, the vehicle can travel up to half a meter before updated control commands take effect.
 This delay is non-critical under most conditions, but becomes consequential when a high-speed straight segment leads directly into a sharp curve, leaving the vehicle susceptible to boundary collisions.
@@ -184,18 +185,18 @@ This requires sufficient model capacity and low inference latency, two conflicti
 To address these limitations, we propose \textbf{End2Race}, an end-to-end learning framework for real-time, head-to-head autonomous racing.
 The framework supports the automatic generation of overtaking scenarios under diverse conditions, enabling systematic policy training and evaluation at scale.
 Utilizing this framework, we train a racing policy based on a Gated Recurrent Unit (GRU) architecture~\cite{cho2014learning}, which takes a 360-degree 2D LiDAR scan and the current ego speed as inputs and directly outputs steering and speed commands.
-The policy is lightweight and efficient, achieving an inference time below 1~ms on an F1Tenth onboard computer.
+On an F1Tenth onboard computer (NVIDIA Jetson Xavier NX), the policy achieves an inference latency below 1~ms.
 Training follows a two-stage pipeline that initializes the policy through imitation learning and then fine-tunes it using reinforcement learning.
-Across training and test tracks, the resulting policy demonstrates high racing speeds, strong safety performance, and competitive overtaking skills.
+Across extensive evaluations, the resulting policy demonstrates competitive racing performance.
 
 The main contributions of this work are as follows:
 
 \begin{enumerate}
-\item We introduce End2Race, an end-to-end learning framework for autonomous racing that supports the automatic generation of overtaking scenarios, enabling policy training and evaluation at scale.
+\item We introduce End2Race, an end-to-end learning framework for autonomous racing that automatically generates overtaking scenarios at scale for policy training and evaluation.
 
-\item We design a computationally efficient recurrent policy network with a sensing-to-control latency below 1~ms, supporting real-time operation at high racing speeds.
+\item We design a computationally efficient recurrent policy network with an inference latency below 1~ms, supporting real-time operation at high racing speeds.
 
-\item We demonstrate that our learned policy generalizes effectively to novel tracks, achieving high racing speeds, robust safety, and competitive overtaking maneuvers.
+\item Our learned policy generalizes to novel tracks and unseen opponent behaviors, showing high racing speeds, robust safety, and adaptive overtaking maneuvers.
 \end{enumerate}
 
 
@@ -203,9 +204,8 @@ The main contributions of this work are as follows:
     \centering
     \vspace{0.15cm}
     \includegraphics[width=\textwidth]{figures/fig2/architecture.png}
-    \caption{End2Race system architecture.}
+    \caption{End2Race system architecture.} 
     \label{fig:overview}
-    \vspace{-0.1cm}
 \end{figure*}
 
 \section{Related Work}
@@ -213,7 +213,7 @@ The main contributions of this work are as follows:
 \subsection{Imitation Learning}
 
 Imitation learning (IL) trains a driving policy from expert demonstrations.
-Sun et al.~\cite{10186780} generated training data using Pure Pursuit and evaluated Behavioral Cloning (BC)~\cite{bc}, DAgger~\cite{dagger}, HG-DAgger~\cite{hgdagger}, and EIL~\cite{eil}. They found that all policies completed the training track but failed to generalize to unseen tracks.
+Sun et al.~\cite{10186780} generated training data using Pure Pursuit and evaluated Behavioral Cloning (BC)~\cite{bc}, DAgger~\cite{dagger}, HG-DAgger~\cite{hgdagger}, and EIL~\cite{eil}. They found that all policies completed the training track but failed to generalize to novel tracks.
 Paluch et al.~\cite{paluch2024fpga} trained a feedforward policy to imitate nonlinear MPC along a raceline, achieving faster lap times than Pure Pursuit.
 TinyLidarNet~\cite{zarrar2024tinylidarnet} trained a compact convolutional network to avoid static obstacles and evaluated it against dynamic opponents.
 Zhang and Loidl~\cite{10275226} trained driving policies from human overtaking demonstrations, but relied on limited training and evaluation scenarios.
@@ -239,8 +239,8 @@ Similarly, Trumpp et al.~\cite{10801657} used an artificial potential field plan
 
 \section{Methodology}
 
-We develop End2Race using the F1TENTH simulator, which provides high-fidelity vehicle dynamics and accurate 2D LiDAR simulation.
-Four tracks are selected: Austin, Hockenheim, MoscowRaceway, and Nuerburgring, each reflecting a real-world circuit layout.
+We develop End2Race using the F1Tenth simulator, which provides high-fidelity vehicle dynamics and accurate 2D LiDAR simulation.
+Four tracks are selected: Austin, Hockenheim, MoscowRaceway, and Nuerburgring, each reflecting a real-world track layout.
 Among these, Austin is used for training, while the rest are held out for evaluation.
 For each track, an automated workflow generates diverse overtaking scenarios that pair an ego vehicle with a leading opponent.
 Using demonstrations from a map-based expert, we first train a GRU-based network through BC, and then fine-tune the resulting policy with Proximal Policy Optimization (PPO)~\cite{ppo}.
@@ -248,26 +248,26 @@ The following sections describe each stage in detail (Fig.~\ref{fig:overview}).
 
 \subsection{Overtaking Scenario Setup}
 
-Each overtaking scenario pairs an ego vehicle with an opponent initially positioned ahead of it and has a duration of 8 seconds. Vehicle placement is expressed in Frenet coordinates, in which the longitudinal direction measures progress around the circuit and the lateral direction denotes position across the track width. We specify each scenario using four parameters, \(\left(s_0,\,\Delta s_0,\,r_{\mathrm{opp}},\,\alpha_{\mathrm{opp}}\right)\).
+Each overtaking scenario pairs an ego vehicle with an opponent initially positioned ahead of it and has a duration of 8 seconds. Vehicle placement is expressed in Frenet coordinates, in which the longitudinal direction measures progress along the track and the lateral direction denotes position across the track width. We specify each scenario using four parameters, \(\left(s_0,\,\Delta s_0,\,r_{\mathrm{opp}},\,\alpha_{\mathrm{opp}}\right)\).
 
 \subsubsection{Ego Starting Position (\(s_0\))}
-For each track, we define 80 ego starting positions equally spaced along the circuit. On the 420~m Austin track, for example, adjacent starting positions are separated by approximately 5.2~m.
+For each track, we define 80 ego starting positions equally spaced along the track. On the 420~m Austin track, for example, adjacent starting positions are separated by approximately 5.2~m.
 
 \subsubsection{Longitudinal Gap (\(\Delta s_0\))}
 Here, \(\Delta s_0\) specifies how far the opponent is positioned ahead of the ego vehicle at the start of a scenario. A small gap provides insufficient maneuvering space, while a large gap requires more time to catch the opponent, leaving less time for interaction. We therefore set \(\Delta s_0=3\)~m to balance these considerations.
 
 \subsubsection{Opponent Raceline (\(r_{\mathrm{opp}}\))}
-Beyond longitudinal placement, the lateral positions of the ego vehicle and opponent are critical to the overtaking outcome. We represent this configuration using the opponent raceline \(r_{\mathrm{opp}}\), which assigns the opponent to one of three reference paths. Following the framework of Heilmeier et al.~\cite{Heilmeier02102020}, we define left, center, and right paths positioned at \(35\%\), \(50\%\), and \(65\%\) across the track width from the left boundary. On the Austin circuit, this yields approximately \(0.25\)~m of lateral separation between the center and each side raceline. An opponent on the center raceline restricts clearance on both sides, whereas one on a side raceline leaves a wider passing corridor.
+Beyond longitudinal placement, the lateral positions of the ego vehicle and opponent are critical to the overtaking outcome. We represent this configuration using the opponent raceline \(r_{\mathrm{opp}}\), which assigns the opponent to one of three reference paths. Following the framework of Heilmeier et al.~\cite{Heilmeier02102020}, we define left, center, and right paths positioned at \(35\%\), \(50\%\), and \(65\%\) across the track width from the left boundary. On the Austin track, this yields approximately \(0.25\)~m of lateral separation between the center and each side raceline. An opponent on the center raceline restricts clearance on both sides, whereas one on a side raceline leaves a wider passing corridor.
 
 
 \subsubsection{Opponent Speed Scale (\(\alpha_{\mathrm{opp}}\))}
 Each reference raceline provides an optimized speed profile based on track curvature and vehicle dynamics. Here, we set a maximum speed of 7.5~m/s, as empirical testing showed that higher values risk compromising control stability. Note that if the opponent follows this profile directly, an ego vehicle driving at the same speed cannot catch up or overtake. To create overtaking opportunities, we multiply the opponent's reference speed by a factor \(\alpha_{\mathrm{opp}}\in\{0.4,0.6,0.8\}\). Values below 0.4 make the opponent unrealistically slow, while those above 0.8 often prevent the ego vehicle from catching up in time.
 
-Combining 80 ego starting positions, a fixed longitudinal gap, three opponent racelines, and three opponent speed scales yields 720 scenarios per track. During each 8-second scenario, the opponent passively tracks its assigned raceline using Pure Pursuit. It does not react to the ego vehicle, nor does it engage in any adversarial behavior, such as defensive blocking or erratic speed changes~\cite{zheng2023gametheoreticobjectivespaceplanning}.
+Combining 80 ego starting positions, a fixed longitudinal gap, three opponent racelines, and three opponent speed scales yields 720 scenarios per track. During each 8-second scenario, the opponent tracks its assigned reference raceline and speed profile using Pure Pursuit, maintaining consistent trajectory tracking across the scenario.
 
 \subsection{Expert Demonstration}
 
-We use a map-based lattice planner to generate overtaking demonstrations for the ego vehicle. Here, the ego uses the center raceline as its global reference path and operates under the full speed profile. The lattice planner, adapted from the Frenet optimal trajectory framework~\cite{sakai2018pythonrobotics}, generates local candidate trajectories across a range of lateral offsets and terminal speeds relative to this reference. This allows the ego vehicle to temporarily deviate from the centerline to avoid obstacles and execute overtaking maneuvers.
+We use a map-based lattice planner to generate overtaking demonstrations for the ego vehicle. Here, the ego vehicle uses the center raceline as its global reference path and operates under the full speed profile. The lattice planner, adapted from the Frenet optimal trajectory framework~\cite{sakai2018pythonrobotics}, generates local candidate trajectories across a range of lateral offsets and terminal speeds relative to this reference. This allows the ego vehicle to temporarily deviate from the centerline to avoid obstacles and execute overtaking maneuvers.
 
 At each timestep, the lattice planner generates a set of candidate trajectories around the reference path, discards those that violate vehicle dynamic constraints, and selects the trajectory \(\tau\) that minimizes the cost function \(\mathcal{J}(\tau)\):
 \begin{equation}
@@ -295,7 +295,7 @@ where \(N=6\) is the number of future trajectory points sampled at 0.1~s interva
     \end{tabular}
     \caption{Expert-planner failure during overtaking, shown in temporal order from (a) to (c). Blue denotes the ego vehicle and its planned trajectory, and red denotes the opponent. In this scenario, the opponent follows the right raceline with a speed scale of 0.8.}
     \label{fig:expert-failure}
-    \vspace{-0.2cm}
+    \vspace{-2mm}
 \end{figure}
 
 \subsection{Training Dataset}
@@ -358,34 +358,55 @@ In total, the model has 850,556 trainable parameters.
     \vspace{-1.5mm}
     \caption{Training curves for the two-stage policy optimization, with each stage trained for 500 epochs. (a) BC loss, with the speed loss weighted by 0.05. (b) PPO safety and overtake rates on the 720 Austin scenarios.}
     \label{fig:training-curves}
-    \vspace{-0.2cm}
+    \vspace{-2mm}
 \end{figure}
 
 \begin{table*}[!t]
 \vspace{0.15cm}
-\caption{Single-Vehicle Timed Trials and Head-to-Head Racing Performance}
+\caption{Single-Vehicle Timed Trials Performance}
 \centering
 \small
-\setlength{\tabcolsep}{4.5pt}
-\begin{tabular*}{\textwidth}{@{\extracolsep{\fill}}ll|ccc|ccc|ccc|ccc@{}}
+\setlength{\tabcolsep}{2.0pt}
+\begin{tabularx}{\textwidth}{l|YY|YY|YY|YY}
 \hline
-\multirow{2}{*}{\textbf{Setting}} & \multirow{2}{*}{\textbf{Metric}} &
-\multicolumn{3}{c|}{\textbf{Austin (Train)}} &
-\multicolumn{3}{c|}{\textbf{Hockenheim}} &
-\multicolumn{3}{c|}{\textbf{MoscowRaceway}} &
-\multicolumn{3}{c}{\textbf{Nuerburgring}} \\[-0.65ex]
-& & Expert & BC & PPO & Expert & BC & PPO & Expert & BC & PPO & Expert & BC & PPO \\
+\multirow{2}{*}{\textbf{Method}} &
+\multicolumn{2}{c|}{\textbf{Austin (Train)}} &
+\multicolumn{2}{c|}{\textbf{Hockenheim}} &
+\multicolumn{2}{c|}{\textbf{MoscowRaceway}} &
+\multicolumn{2}{c}{\textbf{Nuerburgring}} \\[-0.65ex]
+& Time (s) & Speed (m/s) & Time (s) & Speed (m/s) & Time (s) & Speed (m/s) & Time (s) & Speed (m/s) \\
 \hline
-\multirow{2}{*}{\textbf{Single-Vehicle}} 
-& Mean Speed (m/s)  & 6.7 & 6.7 & \textbf{8.7} & 6.8 & 6.9 & \textbf{8.8} & 6.5 & 6.8 & \textbf{8.5} & 6.9 & 7.0 & \textbf{8.9} \\
-& Mean Lap Time (s) & 63.2 & 62.7 & \textbf{48.7} & 53.2 & 52.5 & \textbf{41.1} & 50.6 & 47.7 & \textbf{38.5} & 64.7 & 63.7 & \textbf{50.2} \\
+Dreamer~\cite{9811650} & 140.2 & 3.0 & 118.2 & 3.0 & 112.8 & 2.8 & 141.0 & 3.1 \\
+TinyLidarNet~\cite{zarrar2024tinylidarnet} & 79.8 & 5.2 & 65.8 & 5.5 & 59.8 & 5.3 & 78.2 & 5.7 \\
+Zhang--Loidl~\cite{10275226} & -- & -- & -- & -- & -- & -- & 66.4 & 6.6 \\
+End2Race (Expert) & 63.2 & 6.7 & 53.2 & 6.8 & 50.6 & 6.5 & 64.7 & 6.9 \\
+End2Race (BC) & 62.7 & 6.7 & 52.5 & 6.9 & 47.7 & 6.8 & 63.7 & 7.0 \\
+\textbf{End2Race (PPO)} & \textbf{48.7} & \textbf{8.7} & \textbf{41.1} & \textbf{8.8} & \textbf{38.5} & \textbf{8.5} & \textbf{50.2} & \textbf{8.9} \\
 \hline
-\multirow{2}{*}{\textbf{Head-to-Head}} 
-& Safety Rate (\%)   & 89.3 & 82.8 & \textbf{98.1} & 91.8 & 78.6 & \textbf{97.5} & 87.2 & 76.7 & \textbf{97.1} & 92.8 & 81.5 & \textbf{97.9} \\
-& Overtake Rate (\%) & 86.1 & 62.8 & \textbf{96.1} & 90.6 & 66.1 & \textbf{97.1} & 83.5 & 69.0 & \textbf{96.8} & 92.4 & 74.6 & \textbf{97.5} \\
+\end{tabularx}
+\label{tab:single_vehicle}
+\par\vspace{2.0mm}
+\caption{Head-to-Head Racing Performance}
+\centering
+\small
+\setlength{\tabcolsep}{2.0pt}
+\begin{tabularx}{\textwidth}{l|YY|YY|YY|YY}
 \hline
-\end{tabular*}
-\label{tab:racing_performance}
+\multirow{2}{*}{\textbf{Method}} &
+\multicolumn{2}{c|}{\textbf{Austin (Train)}} &
+\multicolumn{2}{c|}{\textbf{Hockenheim}} &
+\multicolumn{2}{c|}{\textbf{MoscowRaceway}} &
+\multicolumn{2}{c}{\textbf{Nuerburgring}} \\[-0.65ex]
+& Safety (\%) & Overtake (\%) & Safety (\%) & Overtake (\%) & Safety (\%) & Overtake (\%) & Safety (\%) & Overtake (\%) \\
+\hline
+Dreamer~\cite{9811650} & 93.8 & 6.8 & 96.5 & 12.9 & 96.9 & 11.3 & 98.2 & 13.9 \\
+TinyLidarNet~\cite{zarrar2024tinylidarnet} & 80.3 & 28.9 & 81.3 & 39.3 & 85.8 & 46.4 & 78.6 & 37.5 \\
+End2Race (Expert) & 89.3 & 86.1 & 91.8 & 90.6 & 87.2 & 83.5 & 92.8 & 92.4 \\
+End2Race (BC) & 82.8 & 62.8 & 78.6 & 66.1 & 76.7 & 69.0 & 81.5 & 74.6 \\
+\textbf{End2Race (PPO)} & \textbf{98.1} & \textbf{96.1} & \textbf{97.5} & \textbf{97.1} & \textbf{97.1} & \textbf{96.8} & \textbf{97.9} & \textbf{97.5} \\
+\hline
+\end{tabularx}
+\label{tab:head_to_head}
 \end{table*}
 
 \subsection{Policy Optimization}
@@ -413,22 +434,20 @@ where \(d_t\) denotes the distance traveled along the raceline, and \(c_t\) is a
 \section{Experiments}
 \label{sec:experiments}
 
-We evaluate End2Race across the training and three test tracks.
-The evaluation includes both single-vehicle timed trials and head-to-head scenarios.
-Visual illustrations further demonstrate representative policy behaviors.
+We evaluate End2Race on the training and three novel test tracks, comparing it against learning-based methods from the literature. Evaluations of prior methods use their best-performing released checkpoints. Experiments cover two racing setups: single-vehicle timed trials and interactive head-to-head scenarios. In addition to performance metrics, trajectory analysis examines representative policy behaviors.
 
 \subsection{Training Details}
 
-The BC policy is trained for 500 epochs using the Adam optimizer with a learning rate of \(10^{-4}\). Training completes in five minutes on a single L40S GPU. The loss decreases rapidly during early epochs and then gradually converges (Fig.~\ref{fig:training-curves}(a)). Additional training would further reduce loss, but risk overfitting and yield no performance gains.
+The BC policy is trained for 500 epochs using the Adam optimizer with a learning rate of \(10^{-4}\). Training completes in five minutes on a single L40S GPU. The loss decreases rapidly during early epochs and then gradually converges (Fig.~\ref{fig:training-curves}(a)). Additional training would further reduce the loss, but risks overfitting without yielding performance gains.
 
-PPO starts from the BC checkpoint with a newly initialized value head. Training runs for 500 epochs with a learning rate of \(10^{-5}\) and a clipping range of \([0.8, 1.2]\). Since online simulation is time-consuming, we use sixty-four CPU cores and four L40S GPUs, requiring approximately 16 hours in total. During early epochs, the safety rate rises sharply while the overtake rate drops, reflecting conservative driving. As training progresses, the overtake rate steadily increases while maintaining high safety, demonstrating the acquisition of adaptive driving skills (Fig.~\ref{fig:training-curves}(b)).
+PPO starts from the BC checkpoint with a newly initialized value head. Training runs for 500 epochs with a learning rate of \(10^{-5}\) and a clipping range of \([0.8, 1.2]\). Since online simulation is time-consuming, we use 64 CPU cores and 4 L40S GPUs, requiring 16 hours in total. During early epochs, the safety rate rises sharply while the overtake rate drops, reflecting conservative driving. As training progresses, the overtake rate steadily increases while maintaining high safety, demonstrating the acquisition of adaptive driving skills (Fig.~\ref{fig:training-curves}(b)).
 
 \subsection{Single-Vehicle Timed Trials}
 \label{sec:single-vehicle-timed-trials}
 
-We first evaluate End2Race in single-vehicle timed trials to test whether the policy can complete the track at high speeds. Table~\ref{tab:racing_performance} reports the mean speed and lap time of three methods: the map-based expert, BC, and PPO, all of which complete the evaluation without collision. Compared to the expert, which relies on explicit track knowledge and an optimized reference raceline, the map-free BC policy achieves comparable mean speeds and lap times across all four tracks, demonstrating effective learning and generalization.
+We first conduct single-vehicle timed trials to benchmark each model's high-speed navigation capability, reporting lap times and mean speeds in Table~\ref{tab:single_vehicle}. Among prior methods, Zhang--Loidl completes only one track and collides on the rest. Dreamer finishes all four tracks without collisions, but operates at low racing speeds around 3.0~m/s. TinyLidarNet is collision-free and notably faster, yet remains slower than our map-based expert.
 
-The PPO policy achieves significantly higher mean speeds and shorter lap times on every track. These gains arise from continued interactive exploration, through which the policy discovers racing strategies that often resemble techniques used by human racers. One example is corner-exit track-out, in which the vehicle moves from the inside to the outside of a curve to reduce speed loss. Another example is corner-exit acceleration and corner-entry braking, in which the vehicle accelerates immediately upon exiting a curve, maintains high speed along the following straight, and brakes sharply just before entering the next curve~\cite{mitchell2004driving}.
+Compared to the expert, which relies on explicit track knowledge and an optimized reference raceline, our map-free BC policy achieves comparable lap times and mean speeds. The PPO policy improves performance even further, setting the fastest overall pace. We attribute these gains to continued interactive exploration, through which the policy discovers behaviors that align with principles established in motorsport driving~\cite{mitchell2004driving}. One example is corner-exit track-out, in which the vehicle moves from the inside to the outside of a curve to reduce speed loss. Another example is corner-exit acceleration and corner-entry braking, in which the vehicle accelerates immediately upon exiting a curve, maintains high speed along the following straight, and brakes sharply just before entering the next curve.
 
 \begin{figure*}[!t]
     \centering
@@ -475,26 +494,51 @@ The PPO policy achieves significantly higher mean speeds and shorter lap times o
         \fcolorbox{black!10}{white}{\includegraphics[width=0.322\linewidth]{figures/fig5/collision-frame-3.png}}
         \par\vspace{0.4mm}{\footnotesize (d) Collision ($r_{\mathrm{opp}}=\text{center},\, \alpha_{\mathrm{opp}}=0.8$)}
     \end{minipage}
-    \caption{Head-to-head scenarios on the Austin circuit. Blue and red denote the ego vehicle and opponent, respectively, with their trajectories rendered in matching colors.}
+    \caption{Head-to-head scenarios on the Austin track. Blue and red denote the ego vehicle and opponent, respectively, with their trajectory history rendered in matching colors.}
     \label{fig:scenario-examples}
     \vspace{-0.2cm}
 \end{figure*}
 
 \subsection{Head-to-Head Racing}
 
-We evaluate head-to-head performance using the overtake and safety rates. The former is defined as the proportion of scenarios ending in a successful overtake, while the latter includes both successful overtakes and collision-free car-following outcomes. The map-based expert achieves a safety rate of approximately 90\% across all tracks, with the majority being successful overtakes (Table~\ref{tab:racing_performance}).
+We evaluate head-to-head performance using safety and overtake rates (Table~\ref{tab:head_to_head}). Safety denotes the proportion of collision-free episodes (encompassing both overtakes and car-following), while the overtake rate measures the percentage of successful passes. Dreamer maintains high safety because it is too slow to catch the opponent. TinyLidarNet overtakes more frequently, but its overall success remains limited. In contrast, our map-based expert maintains high safety alongside high overtake rates.
 
-Compared to the expert, the BC policy adopts a more conservative racing strategy, achieving lower overtake rates. However, this conservatism does not translate into improved safety. We attribute this outcome to the imitation learning objective itself: while the network can mimic demonstrated control commands, it does not establish the internal representations and tactical reasoning essential for vehicle interactions. Consequently, the policy remains effective for single-vehicle trials but struggles under more complex conditions.
+Compared to the expert, the BC policy adopts a more conservative racing strategy, achieving lower overtake rates. However, this conservatism does not translate into improved safety. This can be explained by the imitation learning objective itself: while the network can mimic demonstrated control commands, it does not establish the internal representations and tactical reasoning essential for vehicle interactions. Consequently, the policy remains effective for single-vehicle trials but struggles under more complex conditions.
 
 This limitation is resolved during the PPO stage, which substantially outperforms the expert in both safety and overtake rates. This demonstrates that PPO not only bridges the performance gap, but also overcomes the limitations of the expert demonstration data.
 
+\subsection{Generalization to Unseen Opponents}
+\label{sec:reactive_opponents}
+
+We evaluate End2Race against an unseen reactive opponent running the Follow-the-Gap (FTG) algorithm. The FTG controller was calibrated to complete all four tracks at high speeds. During scenario execution, it operates at three speed scales, $\alpha_{\mathrm{opp}} \in \{0.5, 0.7, 0.9\}$, capped at 7.5~m/s. To facilitate sustained pursuit before an overtake, we extend the initial separation to 10~m and the scenario duration to 12~s.
+
+Table~\ref{tab:ftg_unseen} reports aggregate performance across the three novel tracks. All three methods maintain safety rates above 90\%, with the map-based expert reaching the highest rate at 93.9\%. However, overtaking rates for the expert and BC drop substantially because they cannot catch up to the fast opponent at the 0.9 speed scale. Meanwhile, PPO achieves a high overtake rate due to its much higher speed. These results demonstrate that our learned policy generalizes to both novel tracks and unseen opponent behaviors.
+
 \subsection{Scenario Illustration}
 
-Figure~\ref{fig:scenario-examples} illustrates four cases that highlight the model's behavior during overtaking encounters. All examples are rollouts generated by the PPO policy on the Austin circuit, focusing on the most challenging configuration ($r_{\mathrm{opp}}=\text{center}$ and $\alpha_{\mathrm{opp}}=0.8$), where lateral clearance and the speed difference between vehicles are minimized.
+Figure~\ref{fig:scenario-examples} illustrates four cases that highlight the model's behavior during overtaking encounters. All examples are rollouts generated by the PPO policy on the Austin track, focusing on the most challenging configuration ($r_{\mathrm{opp}}=\text{center}$ and $\alpha_{\mathrm{opp}}=0.8$), where lateral clearance and the speed difference between vehicles are minimized.
 
 \textbf{Overtaking:} Fig.~\ref{fig:scenario-examples}(a) illustrates an overtaking sequence along a straight segment. Upon observing a slower opponent ahead, the ego vehicle initiates a lateral shift while sustaining cruising speed. It maintains a stable lateral clearance alongside the opponent, then smoothly returns to the track center without an abrupt cut-back.
 
 Fig.~\ref{fig:scenario-examples}(b) depicts a cornering overtake. The ego vehicle initially follows the opponent, preparing to pass. When an unexpected sharp curve emerges, it applies moderate braking to sustain higher speed through the turn, then accelerates early at corner exit to complete the pass.
+
+\begin{table}[!t]
+\caption{Performance Against Reactive Opponents on Novel Tracks}
+\label{tab:ftg_unseen}
+\centering
+\footnotesize
+\setlength{\tabcolsep}{3.5pt}
+\begin{tabular*}{\columnwidth}{@{\extracolsep{\fill}}l|ccc@{}}
+\hline
+\textbf{Method} & \textbf{Safety (\%)} & \textbf{Overtake (\%)} & \textbf{Speed (m/s)} \\
+\hline
+End2Race (Expert) & \textbf{93.9} & 59.6 & 6.6 \\
+End2Race (BC)     & 91.0          & 49.0 & 6.5 \\
+\textbf{End2Race (PPO)} & 91.7    & \textbf{85.7} & \textbf{8.3} \\
+\hline
+\end{tabular*}
+    \vspace{-3mm}
+\end{table}
 
 \textbf{Car-Following:} Fig.~\ref{fig:scenario-examples}(c) shows a car-following case. During an overtaking maneuver, the ego vehicle is blocked at the inner corridor by the opponent, forcing it to brake heavily and almost come to a complete stop. Once the opponent proceeds, the ego vehicle accelerates to resume driving.
 
@@ -505,7 +549,7 @@ Together, these cases demonstrate the tactical racing and overtaking capabilitie
 \subsection{Ablation Study}
 \label{sec:ablation}
 
-We conduct an ablation study to examine the effect of design choices in our model architecture, covering two key components: LiDAR normalization and temporal sequence modeling (Table~\ref{tab:ablation}). All variants are trained using behavioral cloning and evaluated on the Austin circuit.
+We conduct an ablation study to examine the effect of design choices in our model architecture, covering two key components: LiDAR normalization and temporal sequence modeling (Table~\ref{tab:ablation}). All variants are trained using behavioral cloning and evaluated on the Austin track.
 
 \subsubsection{LiDAR Normalization}
 
@@ -541,7 +585,7 @@ We evaluate a Transformer~\cite{vaswani2017attention} as an alternative temporal
 
 \section{Conclusion}
 
-In this work, we introduce End2Race, an end-to-end learning framework for head-to-head autonomous racing. Our proposed policy achieves low inference latency and delivers competitive racing performance. Future work will focus on addressing the sim-to-real gap, deploying the learned policy to a physical vehicle, and competing against real opponents in F1Tenth competitions.
+In this work, we introduce End2Race, an end-to-end learning framework for head-to-head autonomous racing. Our proposed policy achieves low inference latency and delivers competitive racing performance. Future work will focus on deploying the policy in F1Tenth competitions against rival teams.
 
 \bibliographystyle{ieeetr}
 \bibliography{F1Tenth}
