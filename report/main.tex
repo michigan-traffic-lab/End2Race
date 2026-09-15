@@ -529,7 +529,7 @@ End2Race (BC)     & 91.0          & 49.0 & 6.5 \\
 
 We evaluate End2Race against an unseen reactive opponent running the Follow-the-Gap (FTG) algorithm. The FTG controller was calibrated to complete all four tracks at high speeds. During scenario execution, it operates at three speed scales, $\alpha_{\mathrm{opp}} \in \{0.5, 0.7, 0.9\}$, capped at 7.5~m/s. To facilitate sustained pursuit before an overtake, we extend the initial separation to 10~m and the scenario duration to 12~s.
 
-Table~\ref{tab:ftg_unseen} reports aggregate performance across the three novel tracks. All three methods maintain safety rates above 90\%, with the map-based expert reaching the highest at 93.9\%. However, overtaking rates for the expert and BC drop because they cannot catch up to the opponent at the 0.9 speed scale. Meanwhile, PPO continues to achieve high overtake rates. Notably, performing overtaking maneuvers at such high speeds is exceptionally challenging due to reduced reaction times and tight stability margins, yet PPO executes them while sustaining high safety. These results demonstrate that our learned policy generalizes to both novel tracks and unseen opponent behaviors under tight dynamic constraints.
+Table~\ref{tab:ftg_unseen} reports aggregate performance across the three novel tracks. All three methods maintain safety rates above 90\%, with the map-based expert reaching the highest at 93.9\%. However, overtaking rates for the expert and BC drop because they cannot catch up to the opponent at the 0.9 speed scale. Meanwhile, PPO continues to achieve high overtake rates. Notably, performing overtaking maneuvers at such high speeds is exceptionally challenging due to reduced reaction times and tight stability margins, yet PPO executes them while sustaining high safety. These results indicate that our learned policy generalizes to both novel tracks and unseen opponent behaviors under tight dynamic constraints.
 
 \subsection{Scenario Illustration}
 
@@ -543,7 +543,7 @@ Fig.~\ref{fig:scenario-examples}(b) depicts a cornering overtake. The ego vehicl
 
 \textbf{Collision:} Fig.~\ref{fig:scenario-examples}(d) captures a failure case. As the vehicles travel side by side, the track suddenly narrows. With no room along the boundary, the ego vehicle steers toward the opponent, resulting in a collision.
 
-Together, these cases demonstrate the tactical racing and overtaking capabilities of the learned policy. Nevertheless, as the policy operates without a map, it cannot predict forward track geometry, which can lead to unfavorable conditions under sudden track constrictions. To address this, future work could explore online adaptation: as the model drives practice laps, it updates its internal neural memory module or adapter weights to encode track layout, and freezes them during the race for more informed decisions~\cite{wijmans2023emergence}.
+Together, these cases show the tactical racing and overtaking capabilities of the learned policy. Nevertheless, as the policy operates without a map, it cannot predict forward track geometry, which can lead to unfavorable conditions under sudden track constrictions. To address this, future work could explore online adaptation: as the model drives practice laps, it updates its internal neural memory module or adapter weights to encode track layout, and freezes them during the race for more informed decisions~\cite{wijmans2023emergence}.
 
 \subsection{Ablation Study}
 \label{sec:ablation}
