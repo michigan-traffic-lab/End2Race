@@ -1,259 +1,152 @@
 # End2Race: Efficient End-to-End Imitation Learning for Real-Time F1Tenth Racing
 
-
 ## Introduction
 
-End2Race is an end-to-end imitation learning framework for autonomous racing on the [F1Tenth platform](https://roboracer.ai/build). By learning from expert demonstrations generated with the established PythonRobotics Frenet Optimal Trajectory (FOT) algorithm, the system captures temporal dependencies in racing dynamics to enable real-time control in competitive scenarios. End2Race addresses key challenges in autonomous racing—strategic planning, reactive control, and safe overtaking—through a unified neural network approach.
+End2Race learns recurrent steering and desired-speed control from LiDAR and measured speed. This repository provides simulation workflows for expert demonstration collection, behavioral cloning (BC), PPO fine-tuning, and racing evaluation.
+
+[Paper](https://arxiv.org/abs/2509.16894)
 
 https://github.com/user-attachments/assets/5369f5ea-13fa-44c3-a6aa-5b3c2b59b10c
 
 ## Table of Contents
+
 - [Code Structure](#code-structure)
-- [Configuration](#configuration)
-- [Environment Setup](#environment-setup)
-- [Evaluation](#evaluation)
-- [Data Collection](#data-collection)
+- [Setup](#setup)
+- [Collecting demonstrations](#collecting-demonstrations)
 - [Training](#training)
-- [PPO Fine-Tuning](#ppo-fine-tuning)
-- [Model Architecture](#model-architecture)
-- [Raceline Generation (Optional)](#raceline-generation-optional)
+- [Evaluation](#evaluation)
+- [Raceline generation](#raceline-generation)
+- [License and citation](#license-and-citation)
 
 ## Code Structure
+
+```text
+End2Race/
+├── config.yaml                          # Training, collection, and evaluation configuration
+├── install.sh                           # Install dependencies and the bundled simulator
+├── checkpoint/                          # Pretrained policy weights
+│   ├── bc.pt                            # Policy trained from expert demonstrations
+│   └── ppo.pt                           # Policy fine-tuned with reinforcement learning
+├── dataset/                             # Expert demonstrations used for behavioral cloning
+├── f1tenth_sim/                         # F1TENTH racing simulation and track resources
+│   ├── config.yaml                      # Vehicle dynamics, simulation timing, and track generation
+│   ├── utils.py                         # Load racelines and shared simulator settings
+│   ├── f1tenth_gym/                     # Vehicle physics, LiDAR, collisions, and rendering
+│   └── f1tenth_racetracks/              # Track maps and pre-generated lanes and racelines
+│       └── generate_raceline.py         # Generate lanes and raceline speed profiles
+├── expert/                              # Lattice-planner expert and demonstration collection
+│   ├── lattice_planner.py               # Generate and select obstacle-aware racing trajectories
+│   ├── controllers.py                   # Pure Pursuit tracking and raceline-following opponent
+│   ├── collect.py                       # Collect scenario batches and save demonstration CSVs
+│   └── utils.py                         # Scenario generation, geometry, rendering, and summaries
+├── imitation/                           # Learn a driving policy from expert demonstrations
+│   ├── model.py                         # GRU mapping LiDAR and speed to steering and desired speed
+│   └── train.py                         # Train the policy on demonstration sequences
+├── reinforcement/                       # Fine-tune the learned policy through racing interaction
+│   ├── run_ppo.py                       # Run training epochs, evaluate policies, and save checkpoints
+│   ├── train_ppo.py                     # Collect rollouts and optimize PPO policy and value losses
+│   ├── eval_ppo.py                      # Measure safety and overtaking after each training epoch
+│   ├── policy.py                        # Extend the driving policy with a value head and action sampling
+│   └── env.py                           # Racing episodes, rewards, and parallel simulation workers
+└── evaluation/                          # Evaluate saved policies across tracks
+    ├── eval_single.py                   # Measure lap completion, lap times, and driving metrics
+    └── eval_multi.py                    # Run opponent scenario batches and report racing outcomes
 ```
-end2race/
-├── f1tenth_sim/
-│   ├── config.yaml            # Simulation timing and initialization
-│   ├── f1tenth_gym/           # F1Tenth simulator environment
-│   └── f1tenth_racetracks/    # Track data, vehicle configuration, and tools
-├── imitation/
-│   ├── model.py               # GRU network architecture
-│   └── train.py               # Imitation-learning training
-├── reinforcement/             # PPO training, evaluation, environment, and policy
-│   ├── run_ppo.py             # Training/evaluation orchestrator
-│   ├── train_ppo.py           # Rollout and optimizer updates
-│   └── eval_ppo.py            # Deterministic policy screening
-├── evaluation/
-│   ├── eval_single.py         # One single-agent lap evaluation
-│   ├── eval_multi.py          # One multi-agent racing evaluation
-│   └── eval_multi.sh          # Parallel multi-agent orchestrator
-├── expert/
-│   ├── collect.py             # One expert collection scenario
-│   ├── collect.sh             # Parallel collection orchestrator
-│   ├── controllers.py         # Pure Pursuit and passive raceline controllers
-│   ├── lattice_planner.py     # PythonRobotics FOT expert
-│   ├── config.yaml            # Expert-planner configuration
-│   └── utils.py               # Shared racing and collection utilities
-├── install.sh                 # Dependency installation
-├── report/
-│   └── literature/            # Reviewed research papers and inventory
-└── doc/                       # Workflow and code guidance
-```
 
-## Configuration
+## Setup
 
-Three YAML files keep simulation, expert-planner, and track-tool settings separate:
+Requires Linux and Python 3.11. Training requires CUDA.
 
-- `f1tenth_sim/config.yaml`: the simulation timing contract and the ego's initial
-  speed fraction
-- `expert/config.yaml`: the expert planner and tracker settings
-- `f1tenth_sim/f1tenth_racetracks/config.yaml`: a `track` section for raceline generation and a
-  `vehicle` section shared by the expert, the evaluators, and the raceline tool
+### Clone the repository
 
-The model dimensions and preprocessing constants live with the model definition
-in `imitation/model.py`. The simulator configuration sets 120 Hz physics, 10 Hz LiDAR-driven FOT
-replanning, and a 40 Hz (25 ms) control rate that carries the expert labels during
-collection and the policy's decisions during evaluation. `expert.tracker_steps` must
-equal the resulting 12 physics steps per plan; collection fails fast when it does not.
-
-## Environment Setup
-
-### Base Requirements
-* **Hardware**: 4-core CPU, 8GB RAM (GPU recommended for training and inference)
-* **System**: Windows or Linux
-* **Python**: 3.11 in the `end2race` Conda environment
-
-### Clone Repository
 ```bash
-git clone https://github.com/li1164733168/end2race.git
-cd end2race
+git clone https://github.com/michigan-traffic-lab/End2Race.git
+cd End2Race
 ```
 
-### Install
+### Create and activate the environment
+
 ```bash
 conda create -y -n end2race python=3.11
 conda activate end2race
+```
+
+### Install dependencies
+
+```bash
 bash install.sh
 ```
 
-`install.sh` installs every dependency into the currently activated environment, so
-activate `end2race` first and run the script from the repository root.
+Configuration: [`config.yaml`](config.yaml) for workflows; [`f1tenth_sim/config.yaml`](f1tenth_sim/config.yaml) for the simulator.
+
+## Collecting demonstrations
+
+```bash
+python expert/collect.py
+```
+
+Collection requires an empty destination. Collision-free episodes produce training CSVs; collisions produce metadata. `summary.json` records the batch outcomes.
+
+## Training
+
+### Behavioral cloning
+
+```bash
+python imitation/train.py
+```
+
+Saves the final policy weights after training.
+
+### PPO fine-tuning
+
+```bash
+python reinforcement/run_ppo.py
+```
+
+The runner alternates training and deterministic evaluation until stopped, saving policies that meet the screening criteria. The output directory must be absent or empty at launch.
 
 ## Evaluation
 
-The evaluation is conducted using the [F1Tenth Gym simulator](https://github.com/f1tenth/f1tenth_gym), a high-fidelity racing environment for autonomous vehicle research. 
-
-### Single-Agent Evaluation
-Evaluates the model's lap completion ability across different track configurations, testing its robustness to varying track layouts and racing line complexities without opponent interaction.
+### Single-agent lap completion
 
 ```bash
-python -m evaluation.eval_single \
-  --map_name Austin \
-  --checkpoint_path checkpoint/epoch_00500.pt \
-  --output_dir eval_results/epoch_00500 \
-  --render
+python evaluation/eval_single.py
 ```
 
-`--checkpoint_path` is required and `--map_name` defaults to `Austin`. `--output_dir`, `--noise`, `--seed`, `--lap_num`, `--start_idx`, and `--minimum_lap_time` default to `eval_results`, `0.0`, `42`, `1`, `0`, and `10.0`. The run exits 0 when the checkpoint completes every lap without a collision or a negative desired-speed prediction and 1 otherwise. A negative desired speed fails immediately before the action reaches the simulator. The evaluator prints `PASSED`, `COLLISION`, `NEGATIVE_VELOCITY`, `NEGATIVE_VELOCITY_VALUE`, `LAPS_COMPLETED`, `LAP_PROGRESS`, `LAP_TIME`, `MEAN_LAP_TIME`, `AVG_SPEED`, `SPEED_VARIANCE`, and `TOTAL_DISTANCE` as `KEY=VALUE` lines. It writes no results file.
+Metrics are saved to `<output_dir>/<checkpoint name>/single.json`.
 
-With `--render` the video lands directly in `--output_dir`, and its name carries the outcome: `[c_]<map>_lap<progress>[_noiseNN].mp4`, where `c_` marks a collision, the progress is the completed laps plus the fraction of the current lap to one decimal with `.` written as `_`, and the noise suffix appears only for a nonzero `--noise` as the percentage. `Austin_lap1_0.mp4` completed the target lap; `c_Austin_lap0_5.mp4` collided halfway around; `c_Austin_lap0_5_noise10.mp4` did the same at `--noise 0.1`.
+### Multi-agent racing
 
-### Multi-Agent Evaluation
-
-Evaluates the model in competitive racing scenarios against an expert opponent. The framework provides 4 pre-configured tracks with raceline files for testing: [Austin](f1tenth_sim/f1tenth_racetracks/Austin/Austin_map.png), [Hockenheim](f1tenth_sim/f1tenth_racetracks/Hockenheim/Hockenheim_map.png), [MoscowRaceway](f1tenth_sim/f1tenth_racetracks/MoscowRaceway/MoscowRaceway_map.png), and [Nuerburgring](f1tenth_sim/f1tenth_racetracks/Nuerburgring/Nuerburgring_map.png), each with 3 raceline options (`raceline0`, `raceline1`, `raceline2`). For tracks without pre-generated racelines, use the [Raceline Generation](#raceline-generation-optional) section to create them first.
-
+Evaluate against a non-reactive raceline follower:
 
 ```bash
-python -m evaluation.eval_multi \
-  --map_name Austin \
-  --checkpoint_path checkpoint/epoch_00500.pt \
-  --output_dir eval_results/epoch_00500/Austin \
-  --ego_idx 0 \
-  --opponent_raceline raceline1 \
-  --opponent_speed_scale 0.8
+python evaluation/eval_multi.py
 ```
 
-`--checkpoint_path` is required; `--map_name`, `--output_dir`, `--ego_raceline`, `--ego_idx`, `--opponent_raceline`, `--opponent_speed_scale`, `--interval_idx`, `--sim_duration`, `--noise`, and `--seed` default to `Austin`, `eval_results`, `raceline1`, `0`, `raceline1`, `0.8`, `15`, `8.0`, `0.0`, and `42`. The run prints `STATE`, `AVG_SPEED`, `SPEED_VARIANCE`, and `TOTAL_DISTANCE` as `KEY=VALUE` lines, where `STATE` is 1 for following, 2 for overtaking, and 3 for a collision. It writes no results file; `eval_multi.sh` owns the summary for a whole map.
+Per-map summaries are saved to `<output_dir>/<checkpoint name>/<map>/results.json`. `success_percent` includes collision-free following and overtaking.
 
-With `--render` the video lands in the `collision`, `follow`, or `overtake` subdirectory of `--output_dir` as `<c|f|o>_ol<opponent raceline>_e<ego index>_o<opponent index>_s<speed scale>[_noiseNN].mp4`, with the noise suffix present only for a nonzero `--noise`. The name carries the scenario alone, so the checkpoint and map belong in `--output_dir`.
+## Raceline generation
 
-### Multi-Agent Parallel Evaluation (Optional)
-
-The batch evaluation runs hundreds of scenarios in parallel to comprehensively assess the model's performance across different starting positions, opponent strategies, and difficulty levels:
+Generate racelines from map images and YAML metadata in `f1tenth_sim/f1tenth_racetracks/<map_name>/`:
 
 ```bash
-bash evaluation/eval_multi.sh checkpoint/epoch_00500.pt eval_results
+python f1tenth_sim/f1tenth_racetracks/generate_raceline.py
 ```
 
-The checkpoint is required and the output root defaults to `eval_results`. With no
-map arguments, the batch evaluates Austin, Hockenheim, MoscowRaceway, and
-Nuerburgring in order. Pass any supported subset after the output root to select
-maps explicitly:
+The tool generates smoothed lanes and speed profiles, overwriting existing numbered racelines. Single-agent evaluation also requires `<map_name>_raceline.csv`; copy your chosen generated raceline to that filename.
 
-```bash
-bash evaluation/eval_multi.sh checkpoint/epoch_00500.pt eval_results Austin Nuerburgring
-```
+## License and citation
 
-Each selected map runs 80 start points against 3 opponent racelines and 3
-opponent speed scales: 720 scenarios across 16 workers. Artifacts land under
-`<output root>/<checkpoint stem>/<map>/`. Every selected map runs its complete
-720-scenario matrix.
-
-The batch renders no video by default. Set `RENDER=true` to render every scenario and set `WORKERS` to override the default 16 workers, for example `WORKERS=8 RENDER=true bash evaluation/eval_multi.sh ...`. Rendered videos are grouped into `collision`, `follow`, and `overtake` subdirectories. Without rendering, `results.json` is the only artifact: the batch configuration, the following, overtaking, collision, and error counts, and their percentages. A `Ctrl-C` and a `SIGTERM` still write it, so `planned_scenarios`, `completed_scenarios`, `complete`, and `stop_reason` say how much of the batch the numbers cover; percentages always use `completed_scenarios` as their denominator. The batch exits 0 when every scenario ran, 1 on worker errors, and 130 or 143 when interrupted.
-
-### Checkpoint Qualification
-
-Training has no hyperparameter sweep and performs no evaluation. Monitor the pipeline externally and evaluate each `epoch_00500.pt` checkpoint in this order:
-
-1. Run `evaluation/eval_single.py` for Austin, Hockenheim, MoscowRaceway, and Nuerburgring, stopping at the first failure. Enforce a 90-second wall-clock timeout externally for each map; exceeding it is a failed single-agent gate.
-2. After all four maps pass, run `evaluation/eval_multi.sh` for Austin's 720 scenarios by
-   passing `Austin` as the map argument.
-3. Qualify the model only when all 720 scenarios complete without worker errors and `success_percent` in `results.json` is strictly greater than `80.0`.
-
-Retain a qualified checkpoint and record its four single-agent metric blocks plus the complete multi-agent `results.json` beside it. Delete a checkpoint that fails a single-agent map or the multi-agent safety requirement. An interrupted or errored evaluation is not a model result; resolve the runtime failure before deciding whether to retain the checkpoint.
-
-## Data Collection
-
-Collect one explicit competitive-racing scenario with:
-
-```bash
-python -m expert.collect --map_name Austin --dataset_dir dataset --ego_idx 0 \
-  --interval_idx 15 --opponent_raceline raceline1 \
-  --opponent_speed_scale 0.8 --sim_duration 8.0 --render
-```
-
-These are the defaults except for `--render`, so the arguments may be omitted.
-
-Collection runs 120 Hz physics, replans the FOT trajectory every 12th physics step (10 Hz), tracks the held trajectory at every physics step, and saves one live observation and aligned tracker action every third physics step (40 Hz). This produces exact 25 ms intervals without interpolation. To run the complete parallel multi-agent collection matrix and wait for every scenario:
-
-```bash
-bash expert/collect.sh
-```
-
-`expert/collect.sh` owns the output dataset directory and all batch collection settings. It refuses to start when the dataset directory already holds collected episodes, so every collection begins from an empty one, and it stops the remaining scenarios once the collision rate exceeds 20% after 25 completed scenarios. The current Austin batch runs 80 ego starting points against three opponent racelines at waypoint interval `15` and speed scales `0.4`, `0.6`, and `0.8`, with 8 seconds per scenario: 720 scenarios total.
-
-When the workers finish, `expert/collect.sh` prints the following, overtaking, collision, and worker-failure counts and writes `summary.json` into the dataset directory. It exits 0 when every scenario ran, 1 on worker failures, and 2 on a collision-guard stop. The summary snapshots the collection, vehicle, and expert configuration; reports collision-free, collision, overtaking, and following outcomes with their rates; counts training rows and saved videos; and provides a breakdown by opponent raceline and speed scale. It is generated from the saved CSV and collision metadata, so a collection cut short by the collision guard or by a worker failure still leaves a summary of what it collected.
-
-Each training row stores the measured ego speed, expert steering and desired-speed targets, and 180 LiDAR values from the same decision instant. Training keeps every 40 Hz row: the first row uses its measured speed as the initial speed input, and later rows use the measured speed from the preceding 25 ms step. The ego FOT expert replans every 12th physics step from the corresponding LiDAR scan, projects that scan into occupied points, and selects among dynamically feasible trajectories using mean velocity cost and worst-point clearance cost; its tracker supplies the 40 Hz labels while following that held trajectory. The non-reactive opponent tracks its assigned raceline. Every velocity choice produces a physically distinct trajectory over the candidate horizon, and generated speeds are bounded by 7.5 m/s.
-
-Every collection and evaluation scenario initializes the ego at 50% of its 7.5 m/s maximum speed (3.75 m/s). A multi-agent opponent starts at its local raceline speed multiplied by the scenario's opponent speed scale. Subsequent acceleration and braking are determined by each controller.
-
-## Training
-Trains the End2Race model using imitation learning on collected demonstrations.
-
-```bash
-python -m imitation.train
-```
-
-The main training parameters are command-line options:
-
-```bash
-python -m imitation.train \
-  --dataset_dir dataset \
-  --output_dir checkpoint \
-  --speed_loss_weight 0.05 \
-  --gradient_clip_norm 1.0
-```
-
-The training schedule is fixed: 500 epochs, a checkpoint at epoch 500, batch size 1024, and learning rate `1e-4`. Consequently, each run writes one weight-only `epoch_00500.pt` checkpoint to `--output_dir`. It contains only `model.state_dict()`—no optimizer state, training state, or resume metadata. These values are constants in `imitation/train.py`, not command-line options, and there is no hyperparameter sweep. Training reads collision-free episodes from `<--dataset_dir>/success/`, performs no evaluation, and keeps no resume state. Follow [Checkpoint Qualification](#checkpoint-qualification) externally after training.
-
-## PPO Fine-Tuning
-
-Train with recurrent PPO from an IL checkpoint produced by `imitation/train.py`:
-
-```bash
-python -m reinforcement.run_ppo \
-  --checkpoint_path checkpoint/epoch_00500.pt
-```
-
-Use `torchrun` to divide collection, optimization, and screening across multiple GPUs:
-
-```bash
-torchrun --standalone --nproc_per_node=4 --module reinforcement.run_ppo \
-  --checkpoint_path checkpoint/epoch_00500.pt
-```
-
-`reinforcement.run_ppo` externally sequences the separate training and evaluation modules. A plain Python launch uses one GPU when available; `torchrun --nproc_per_node=N` gives each rank one GPU and its own `--num_envs` environment workers. Every epoch randomly shuffles the 720 Austin scenarios once, divides them evenly among ranks, and collects one stochastic trajectory per scenario while holding a synchronized policy fixed. Advantages are normalized across all ranks, and the fixed rollout estimates are reused for two PPO updates so clipping can constrain the second pass. For each update, gradients accumulate across each rank's worker-sized rollout chunks, and one globally summed PPO gradient is clipped before every replica takes the same optimizer step. The actor's desired speed is bounded to `[0, 20]` by the PPO environment. The actor and value head use a constant learning rate of `1e-5`. After both updates, deterministic screening of all 720 scenarios is divided across ranks. The same model trains for unlimited epochs until the process is stopped. The required IL checkpoint initializes the policy weights; the value head, optimizer, and runtime training state start fresh. Stochastic collection starts with steering and speed standard deviations of `0.05` and `0.50`, and both decay by a factor of `0.9995` after every epoch. Every evaluation with safety strictly greater than 95% and an overtake rate strictly greater than 90% saves a new deployable policy as `checkpoint/ppo/ppo_NNN.pt`, numbered by qualifying evaluation from `ppo_001.pt`; the critic and runtime training state are not saved. The other flat PPO artifacts are `config.json`, `episodes.jsonl`, and `metrics.jsonl`. See [reinforcement/README.md](reinforcement/README.md) for the reward, exploration behavior, and artifacts.
-
-## Model Architecture
-
-The policy downsamples each full-circle simulator scan to 180 LiDAR values and applies one shared, fixed sigmoid normalization coefficient. The normalized LiDAR vector is concatenated with a 30-dimensional speed embedding, producing a 210-dimensional recurrent input. A single-layer GRU with 420 hidden units feeds an action head with dimensions `420 -> 128 -> 2`, which predicts steering and desired speed. During supervised training, the speed embedding is replaced by a learned dummy embedding at 20% of timesteps. PPO uses the measured previous speed at every timestep. All of these dimensions live as class attributes on `End2Race` in `imitation/model.py`.
-
-## Raceline Generation (Optional)
-
-Generate optimized racing lines for new tracks. First, upload the track map files to `f1tenth_sim/f1tenth_racetracks/{map_name}/` including `{map_name}_map.png` (binary image: white=drivable, black=walls) and `{map_name}_map.yaml` (map metadata). Then run:
-
-```bash
-python -m f1tenth_sim.f1tenth_racetracks.generate_raceline
-```
-
-Edit `f1tenth_sim/f1tenth_racetracks/config.yaml` for track-generation and shared vehicle settings. The expert and evaluation workflows reuse its `vehicle` section.
-
-The FOT implementation is adapted under the MIT license from [PythonRobotics](https://github.com/AtsushiSakai/PythonRobotics), pinned to commit `b38c510e083d69a5755d98d0680bd50f3d9a91fa`.
-
-## License
-
-This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
-
-## Citation
-
-If you use End2Race in your research, please consider citing:
+The project license is [Apache 2.0](LICENSE).
 
 ```bibtex
-@article{end2race,
-      title={End2Race: Efficient End-to-End Imitation Learning for Real-Time F1Tenth Racing}, 
+@misc{qiao2025end2race,
+      title={End2Race: Efficient End-to-End Imitation Learning for Real-Time F1Tenth Racing},
       author={Zhijie Qiao and Haowei Li and Zhong Cao and Henry X. Liu},
       year={2025},
-      eprint={2505.00284},
-      url={https://arxiv.org/abs/2509.16894}, 
+      eprint={2509.16894},
+      archivePrefix={arXiv},
+      primaryClass={cs.RO},
+      url={https://arxiv.org/abs/2509.16894},
 }
 ```

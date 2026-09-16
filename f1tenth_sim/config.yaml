@@ -1,5 +1,69 @@
+# Simulator timing, track generation, vehicle properties, and dynamics.
+
+# ----------------------------------------------------------------------------
+# Simulation timing
+# Physics, control, and planner frequencies in Hz; initial speed fraction and LiDAR noise seed.
+# ----------------------------------------------------------------------------
 simulation:
+  seed: 12345
   frequency_hz: 120
   control_frequency_hz: 40
   expert_planner_frequency_hz: 10
   ego_initial_speed_fraction: 0.5
+
+# ----------------------------------------------------------------------------
+# Track generation
+# Map selection, lane geometry, smoothing, and speed-profile generation.
+# ----------------------------------------------------------------------------
+track:
+  map_name: Austin
+  map_image_extension: .png
+  num_lanes: 3
+  side_lane_center_shift_fraction: 0.4
+  clockwise: true
+  inner_safe_distance: 0.3
+  outer_safe_distance: 0.3
+  preparation_step_size: 0.5
+  regularization_step_size: 2.0
+  interpolation_step_size: 0.2
+  smoothing_regularization: 3
+  smoothing_length: 0.0
+  dynamic_model_exponent: 1.0
+  velocity_filter_window: 31
+
+# ----------------------------------------------------------------------------
+# Vehicle properties
+# Geometry and limits used by planning, track generation, and evaluation.
+# Speeds are in m/s, dimensions in m, steering in radians, and mass in kg.
+# ----------------------------------------------------------------------------
+vehicle:
+  steering_limit: 0.4189
+  maximum_speed: 7.5
+  length: 0.58
+  width: 0.31
+  mass: 3.362
+  drag_coefficient: 0.0075
+
+# ----------------------------------------------------------------------------
+# Simulator dynamics
+# Physical model parameters and actuator limits used by the F1TENTH simulator.
+# ----------------------------------------------------------------------------
+dynamics:
+  mu: 1.0489
+  C_Sf: 4.718
+  C_Sr: 5.4562
+  lf: 0.15875
+  lr: 0.17145
+  h: 0.074
+  m: 3.74
+  I: 0.04712
+  s_min: -0.4189
+  s_max: 0.4189
+  sv_min: -3.2
+  sv_max: 3.2
+  v_switch: 7.319
+  a_max: 9.51
+  v_min: -5.0
+  v_max: 20.0
+  width: 0.31
+  length: 0.58

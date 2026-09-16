@@ -26,23 +26,6 @@ class FTGConfig:
     wheelbase: float = 0.3302
     steering_limit: float = 0.4189
 
-    def __post_init__(self):
-        for name, value in vars(self).items():
-            if not np.isfinite(value) or value < 0:
-                raise ValueError(f"{name} must be finite and nonnegative")
-        if not 0 < self.min_speed <= self.max_speed <= 7.5:
-            raise ValueError("Require 0 < min_speed <= max_speed <= 7.5 m/s")
-        if not 0 < self.forward_fov <= self.lidar_fov <= 2 * np.pi:
-            raise ValueError("Require 0 < forward_fov <= lidar_fov <= 2*pi")
-        if not 0 < self.steering_smoothing <= 1:
-            raise ValueError("steering_smoothing must be in (0, 1]")
-        if self.lookahead <= 0 or self.wheelbase <= 0:
-            raise ValueError("lookahead and wheelbase must be positive")
-        if not isinstance(self.smoothing, int) or self.smoothing < 1 or self.smoothing % 2 != 1:
-            raise ValueError("smoothing must be a positive odd integer")
-        if not isinstance(self.target_window, int) or self.target_window < 1:
-            raise ValueError("target_window must be a positive integer")
-
 
 class FollowTheGapController:
     """Return (steering radians, desired speed m/s) at each control tick.
@@ -65,13 +48,9 @@ class FollowTheGapController:
             scan = scan["scans"][agent_index]
         c = self.config
         raw = np.asarray(scan, dtype=float)
-        if raw.ndim != 1 or len(raw) < 3:
-            raise ValueError("Expected a one-dimensional raw LiDAR scan")
         angles = np.linspace(-c.lidar_fov / 2, c.lidar_fov / 2, len(raw))
         mask = np.abs(angles) <= c.forward_fov / 2
         angles = angles[mask]
-        if len(angles) < max(3, c.smoothing):
-            raise ValueError("Too few forward beams for the configured smoothing")
         ranges = np.clip(np.nan_to_num(raw[mask], nan=0.0, posinf=c.max_range, neginf=0.0), 0, c.max_range)
         if not np.any(ranges > c.bubble_radius):
             self.reset()

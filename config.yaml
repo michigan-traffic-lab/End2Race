@@ -1,0 +1,173 @@
+# Workflow settings. Paths are relative to the repository root.
+
+# ----------------------------------------------------------------------------
+# Runtime
+# Compute device and worker count shared by the workflows. Training requires CUDA.
+# ----------------------------------------------------------------------------
+runtime:
+  device: cuda
+  workers: 4
+
+# ----------------------------------------------------------------------------
+# Expert planner
+# Trajectory sampling, feasibility limits, collision costs, and Pure Pursuit tracking.
+# ----------------------------------------------------------------------------
+expert:
+  tracker_steps: 12
+  trajectory_points: 15
+  horizon: 0.6
+  time_step: 0.1
+  road_width: 0.8
+  road_step: 0.2
+  minimum_terminal_speed: 1.0
+  max_acceleration: 7.51
+  max_lateral_acceleration: 10.29
+  max_curvature: 1.35
+  soft_collision_clearance: 0.5
+  collision_cost_weight: 5.0
+  collision_cost_power: 2.0
+  min_lookahead: 0.5
+  max_lookahead: 2.5
+  lookahead_speed_scale: 8.0
+  steering_gain: 0.8
+  interpolation_points: 10
+
+# ----------------------------------------------------------------------------
+# Expert demonstration collection
+# Scenario selection, dataset output, and collision-rate limits for batch collection.
+# ----------------------------------------------------------------------------
+collection:
+  map_name: Austin
+  dataset_dir: dataset
+  ego_raceline: raceline1
+  interval_idx: 15
+  sim_duration: 8.0
+  render: false
+  num_startpoints: 80
+  opponent_racelines:
+  - raceline0
+  - raceline1
+  - raceline2
+  opponent_speed_scales:
+  - 0.4
+  - 0.6
+  - 0.8
+  max_collision_rate_percent: 20
+  min_scenarios_for_collision_guard: 25
+
+# ----------------------------------------------------------------------------
+# Behavioral cloning
+# Demonstration and checkpoint paths, training schedule, optimizer, and loss weights.
+# ----------------------------------------------------------------------------
+imitation:
+  dataset_dir: dataset
+  output_dir: checkpoint
+  num_epochs: 500
+  learning_rate: 0.0001
+  speed_loss_weight: 0.05
+  gradient_clip_norm: 1.0
+
+# ----------------------------------------------------------------------------
+# PPO training
+# Initial policy, output directory, optimizer, and PPO update parameters.
+# ----------------------------------------------------------------------------
+ppo:
+  initial_policy_path: checkpoint/bc.pt
+  output_dir: checkpoint/ppo
+  learning_rate: 1.0e-05
+  update_epochs: 2
+  max_grad_norm: 0.5
+  gamma: 0.999
+  gae_lambda: 0.99
+  clip_range: 0.2
+  value_loss_weight: 0.5
+
+# ----------------------------------------------------------------------------
+# PPO scenarios
+# Maps, starting positions, opponent behavior, and episode duration. Vehicle limits live in f1tenth_sim/config.yaml.
+# ----------------------------------------------------------------------------
+ppo_environment:
+  maps:
+  - Austin
+  - Hockenheim
+  - MoscowRaceway
+  - Nuerburgring
+  ego_raceline: raceline1
+  opponent_racelines:
+  - raceline0
+  - raceline1
+  - raceline2
+  opponent_speed_scales:
+  - 0.4
+  - 0.6
+  - 0.8
+  num_startpoints: 80
+  interval_index: 15
+  episode_duration: 8.0
+
+# ----------------------------------------------------------------------------
+# PPO exploration
+# Initial action standard deviations and their decay after each epoch.
+# ----------------------------------------------------------------------------
+ppo_exploration:
+  initial_steering_std: 0.05
+  initial_speed_std: 0.5
+  action_std_decay: 0.9995
+
+# ----------------------------------------------------------------------------
+# PPO rewards
+# Forward-progress reward weight and ego-collision penalty.
+# ----------------------------------------------------------------------------
+ppo_rewards:
+  progress_reward_weight: 0.01
+  collision_penalty: -3.0
+
+# ----------------------------------------------------------------------------
+# PPO checkpoint criteria
+# Minimum safety and overtaking rates required to save a policy after evaluation.
+# ----------------------------------------------------------------------------
+ppo_screening:
+  minimum_safety_rate: 0.95
+  minimum_overtake_rate: 0.75
+
+# ----------------------------------------------------------------------------
+# Single-agent evaluation
+# Policy, maps, requested lap count, and output directory.
+# ----------------------------------------------------------------------------
+eval_single:
+  checkpoint_path: checkpoint/bc.pt
+  maps:
+  - Austin
+  - Hockenheim
+  - MoscowRaceway
+  - Nuerburgring
+  output_dir: eval_results
+  render: false
+  lap_num: 1
+  start_idx: 0
+
+# ----------------------------------------------------------------------------
+# Multi-agent evaluation
+# Sweep the listed maps, start points, opponent racelines, and speeds.
+# ----------------------------------------------------------------------------
+eval_multi:
+  checkpoint_path: checkpoint/bc.pt
+  maps:
+  - Austin
+  - Hockenheim
+  - MoscowRaceway
+  - Nuerburgring
+  output_dir: eval_results
+  render: false
+  ego_raceline: raceline1
+  interval_idx: 15
+  sim_duration: 8.0
+  num_startpoints: 80
+  opponent_racelines:
+  - raceline0
+  - raceline1
+  - raceline2
+  opponent_speed_scales:
+  - 0.4
+  - 0.6
+  - 0.8

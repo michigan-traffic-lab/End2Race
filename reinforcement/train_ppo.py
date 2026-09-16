@@ -6,13 +6,6 @@ import torch.distributed as dist
 
 from .env import collect_batch, shard_scenarios
 
-INITIAL_STEERING_STD = 0.05
-INITIAL_SPEED_STD = 0.50
-ACTION_STD_DECAY = 0.9995
-UPDATE_EPOCHS = 2
-VALUE_LOSS_WEIGHT = 0.5
-
-
 def _discounted_return(rewards, gamma):
     if gamma == 1.0:
         return float(rewards.sum())
@@ -97,7 +90,7 @@ def _pad_batch(trajectories, device):
 def _accumulate_batch_gradients(
     model,
     trajectories,
-    args,
+    config,
     device,
     advantage_mean,
     advantage_std,
@@ -115,13 +108,13 @@ def _accumulate_batch_gradients(
     ratio = torch.exp(log_ratio)
     surrogate = torch.min(
         ratio * normalized,
-        torch.clamp(ratio, 1 - args.clip_range, 1 + args.clip_range)
+        torch.clamp(ratio, 1 - config['ppo']['clip_range'], 1 + config['ppo']['clip_range'])
         * normalized,
     )
     policy_loss = -surrogate[mask].mean()
     value_loss = torch.nn.functional.mse_loss(values[mask], returns[mask])
     weight = int(mask.sum().item()) / total_transitions
-    loss = weight * (policy_loss + VALUE_LOSS_WEIGHT * value_loss)
+    loss = weight * (policy_loss + config['ppo']['value_loss_weight'] * value_loss)
     loss.backward()
     return float(policy_loss.item()) * weight, float(value_loss.item()) * weight
 
@@ -145,7 +138,7 @@ def _update_policy(
     model,
     optimizer,
     batches,
-    args,
+    config,
     device,
     epoch,
     update,
@@ -180,7 +173,7 @@ def _update_policy(
         batch_policy_loss, batch_value_loss = _accumulate_batch_gradients(
             model,
             batch,
-            args,
+            config,
             device,
             advantage_mean,
             advantage_std,
@@ -190,8 +183,8 @@ def _update_policy(
         value_loss += batch_value_loss
 
     _synchronize_gradients(model)
-    grad_norm = float(torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm))
-    applied_grad_norm = min(grad_norm, args.max_grad_norm)
+    grad_norm = float(torch.nn.utils.clip_grad_norm_(model.parameters(), config['ppo']['max_grad_norm']))
+    applied_grad_norm = min(grad_norm, config['ppo']['max_grad_norm'])
     optimizer.step()
 
     approx_kl = 0.0
@@ -206,7 +199,7 @@ def _update_policy(
             weight = int(mask.sum().item()) / total_transitions
             approx_kl += weight * float(((new_ratio - 1) - new_log_ratio)[mask].mean().item())
             clip_fraction += weight * float(
-                (torch.abs(new_ratio - 1) > args.clip_range)[mask]
+                (torch.abs(new_ratio - 1) > config['ppo']['clip_range'])[mask]
                 .float()
                 .mean()
                 .item()
@@ -271,13 +264,13 @@ def _gather_rollouts(batches):
     }
 
 
-def _collect_shard(envs, model, scenarios, device, args, epoch, started_at):
+def _collect_shard(envs, model, scenarios, device, config, epoch, started_at):
     batches = []
     report = not dist.is_initialized() or dist.get_rank() == 0
     for start in range(0, len(scenarios), envs.num_envs):
         selected = scenarios[start : start + envs.num_envs]
         batch = collect_batch(envs, model, selected, device)
-        _score_batch(batch, args.gamma, args.gae_lambda)
+        _score_batch(batch, config['ppo']['gamma'], config['ppo']['gae_lambda'])
         batches.append(batch)
         if report:
             diagnostics = _rollout_diagnostics(batch)
@@ -296,7 +289,7 @@ def _collect_shard(envs, model, scenarios, device, args, epoch, started_at):
     return batches
 
 
-def train_epoch(model, optimizer, envs, scenarios, rng, args, device, epoch):
+def train_epoch(model, optimizer, envs, scenarios, rng, config, device, epoch):
     statistics = {
         name: []
         for name in (
@@ -307,10 +300,6 @@ def train_epoch(model, optimizer, envs, scenarios, rng, args, device, epoch):
             "grad_norm",
         )
     }
-    if not scenarios:
-        print(f"Epoch {epoch} rollouts: no scenarios", flush=True)
-        return [], None, statistics
-
     rank = dist.get_rank() if dist.is_initialized() else 0
     world_size = dist.get_world_size() if dist.is_initialized() else 1
     if rank == 0:
@@ -330,7 +319,7 @@ def train_epoch(model, optimizer, envs, scenarios, rng, args, device, epoch):
         model,
         shard,
         device,
-        args,
+        config,
         epoch,
         started_at,
     )
@@ -342,16 +331,16 @@ def train_epoch(model, optimizer, envs, scenarios, rng, args, device, epoch):
             flush=True,
         )
 
-    for update in range(1, UPDATE_EPOCHS + 1):
+    for update in range(1, config['ppo']['update_epochs'] + 1):
         update_statistics = _update_policy(
             model,
             optimizer,
             batches,
-            args,
+            config,
             device,
             epoch,
             update,
-            UPDATE_EPOCHS,
+            config['ppo']['update_epochs'],
         )
         for name, value in update_statistics.items():
             statistics[name].append(value)

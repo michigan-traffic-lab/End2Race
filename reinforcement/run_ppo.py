@@ -1,74 +1,24 @@
-import argparse
 import itertools
 import json
 import os
 from pathlib import Path
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import numpy as np
 import torch
 import torch.distributed as dist
 
-from .env import RaceEnv, Scenario, VectorEnv
-from .eval_ppo import evaluate_scenarios
-from .policy import ActorCritic
-from .train_ppo import (
-    ACTION_STD_DECAY,
-    INITIAL_SPEED_STD,
-    INITIAL_STEERING_STD,
-    UPDATE_EPOCHS,
-    VALUE_LOSS_WEIGHT,
-    train_epoch,
-)
+import yaml
+from reinforcement.env import Scenario, VectorEnv
+from reinforcement.eval_ppo import evaluate_scenarios
+from reinforcement.policy import ActorCritic
+from reinforcement.train_ppo import train_epoch
 from expert.utils import find_opponent_start_index, get_ego_idx_range
-from f1tenth_sim.utils import load_racetrack_config, load_raceline
+from f1tenth_sim.utils import load_raceline
 
-ARTIFACT_DIR = Path("checkpoint/ppo")
-LEARNING_RATE = 1e-5
-MINIMUM_SAFETY_RATE = 0.95
-MINIMUM_OVERTAKE_RATE = 0.75
-
-
-def parse_arguments():
-    parser = argparse.ArgumentParser(description="Run End2Race PPO training and evaluation")
-
-    parser.add_argument("--checkpoint_path", type=Path, default=Path("checkpoint/epoch_00500.pt"))
-    parser.add_argument("--map_name", type=str, default="Austin")
-    parser.add_argument("--ego_raceline", type=str, default="raceline1")
-    parser.add_argument("--opponent_racelines", nargs="+", default=["raceline0", "raceline1", "raceline2"])
-    parser.add_argument("--opponent_speed_scales", nargs="+", type=float, default=[0.4, 0.6, 0.8])
-    parser.add_argument("--num_startpoints", type=int, default=80)
-    parser.add_argument("--interval_index", type=int, default=15)
-    parser.add_argument("--episode_duration", type=float, default=8.0)
-    parser.add_argument("--num_envs", type=int, default=8)
-
-    parser.add_argument("--max_grad_norm", type=float, default=0.5)
-    parser.add_argument("--gamma", type=float, default=0.999)
-    parser.add_argument("--gae_lambda", type=float, default=0.99)
-    parser.add_argument("--clip_range", type=float, default=0.2)
-
-    args = parser.parse_args()
-    positive_values = {
-        "--num_startpoints": args.num_startpoints,
-        "--episode_duration": args.episode_duration,
-        "--num_envs": args.num_envs,
-        "--max_grad_norm": args.max_grad_norm,
-        "--clip_range": args.clip_range,
-    }
-    invalid_values = [name for name, value in positive_values.items() if value <= 0]
-    if invalid_values:
-        parser.error(f"{', '.join(invalid_values)} must be positive")
-    if not 0 < args.gamma <= 1 or not 0 <= args.gae_lambda <= 1:
-        parser.error("--gamma must be in (0, 1] and --gae_lambda must be in [0, 1]")
-    if args.interval_index < 0 or any(scale <= 0 for scale in args.opponent_speed_scales):
-        parser.error("--interval_index must be nonnegative and opponent speed scales must be positive")
-    if (
-        len(set(args.opponent_racelines)) != len(args.opponent_racelines)
-        or len(set(args.opponent_speed_scales)) != len(args.opponent_speed_scales)
-    ):
-        parser.error("opponent racelines and speed scales must not contain duplicates")
-    if not args.checkpoint_path.is_file():
-        parser.error(f"checkpoint not found: {args.checkpoint_path}")
-    return args
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def _append_record(path, record):
@@ -77,36 +27,39 @@ def _append_record(path, record):
 
 
 def _build_scenarios(settings):
-    ego_waypoints = load_raceline(settings.map_name, f"{settings.ego_raceline}.csv")
-    ego_indices = get_ego_idx_range(settings.map_name, settings.ego_raceline, settings.num_startpoints)
-
     scenarios = []
-    for opponent_raceline in settings.opponent_racelines:
-        if opponent_raceline == settings.ego_raceline:
-            opponent_waypoints = ego_waypoints
-        else:
-            opponent_waypoints = load_raceline(settings.map_name, f"{opponent_raceline}.csv")
-        for opponent_speed_scale in settings.opponent_speed_scales:
-            for ego_idx in ego_indices:
-                opponent_idx = find_opponent_start_index(
-                    ego_waypoints,
-                    opponent_waypoints,
-                    ego_idx,
-                    settings.interval_index,
-                )
-                scenarios.append(
-                    Scenario(
-                        f"e{ego_idx:04d}_{opponent_raceline}_s{opponent_speed_scale}",
-                        int(ego_idx),
-                        int(opponent_idx),
-                        opponent_raceline,
-                        float(opponent_speed_scale),
+    for map_name in settings['maps']:
+        ego_waypoints = load_raceline(map_name, f"{settings['ego_raceline']}.csv")
+        ego_indices = get_ego_idx_range(map_name, settings['ego_raceline'], settings['num_startpoints'])
+
+        for opponent_raceline in settings['opponent_racelines']:
+            if opponent_raceline == settings['ego_raceline']:
+                opponent_waypoints = ego_waypoints
+            else:
+                opponent_waypoints = load_raceline(map_name, f"{opponent_raceline}.csv")
+            for opponent_speed_scale in settings['opponent_speed_scales']:
+                for ego_idx in ego_indices:
+                    opponent_idx = find_opponent_start_index(
+                        ego_waypoints,
+                        opponent_waypoints,
+                        ego_idx,
+                        settings['interval_index'],
                     )
-                )
+                    scenarios.append(
+                        Scenario(
+                            f"{map_name}_e{ego_idx:04d}_{opponent_raceline}_s{opponent_speed_scale}",
+                            map_name,
+                            int(ego_idx),
+                            int(opponent_idx),
+                            opponent_raceline,
+                            float(opponent_speed_scale),
+                        )
+                    )
     return tuple(scenarios)
 
 
 def _summarize(
+    config,
     epoch,
     scenarios,
     rollout_summary,
@@ -140,7 +93,7 @@ def _summarize(
     )
     metrics = {
         "epoch": epoch,
-        "learning_rate": LEARNING_RATE,
+        "learning_rate": config['ppo']['learning_rate'],
         "screening_count": screening_count,
         "screening_safe_count": screening_safe_count,
         "screening_collision_count": screening_collision_count,
@@ -163,13 +116,9 @@ def _summarize(
         ),
         "training_mean_steps": (
             float(np.mean([record["episode_steps"] for record in records]))
-            if records
-            else 0.0
         ),
         "training_mean_return": (
             float(np.mean([trajectory["episode_return"] for trajectory in trajectories]))
-            if records
-            else 0.0
         ),
         "training_explained_variance": (
             1.0 - error_variance / return_variance
@@ -183,41 +132,19 @@ def _summarize(
     return metrics
 
 
-def _resolved_config(args, scenario_count, world_size):
-    return {
-        **vars(args),
-        "checkpoint_path": str(args.checkpoint_path),
-        "initial_steering_std": INITIAL_STEERING_STD,
-        "initial_speed_std": INITIAL_SPEED_STD,
-        "action_std_decay": ACTION_STD_DECAY,
-        "value_weight": VALUE_LOSS_WEIGHT,
-        "progress_reward": RaceEnv.PROGRESS_REWARD_WEIGHT,
-        "overtake_distance": load_racetrack_config().vehicle.length,
-        "collision_penalty": RaceEnv.COLLISION_PENALTY,
-        "maximum_ego_speed": RaceEnv.MAXIMUM_EGO_SPEED,
-        "batch_size": scenario_count,
-        "gpu_processes": world_size,
-        "workers_per_gpu": args.num_envs,
-        "total_env_workers": args.num_envs * world_size,
-        "trajectories_per_scenario": 1,
-        "update_epochs": UPDATE_EPOCHS,
-        "learning_rate": LEARNING_RATE,
-        "training_duration": "until_stopped",
-        "minimum_safety_rate": MINIMUM_SAFETY_RATE,
-        "minimum_overtake_rate": MINIMUM_OVERTAKE_RATE,
-    }
-
-
-def _initialize_process_group():
-    if "RANK" not in os.environ:
-        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-        return 0, 1, device
-    if not torch.cuda.is_available():
-        raise RuntimeError("torchrun PPO requires CUDA")
-    local_rank = int(os.environ["LOCAL_RANK"])
-    torch.cuda.set_device(local_rank)
-    dist.init_process_group("nccl")
-    return dist.get_rank(), dist.get_world_size(), torch.device(f"cuda:{local_rank}")
+def _initialize_process_group(config):
+    device = torch.device(config['runtime']['device'])
+    if device.type != "cuda" or not torch.cuda.is_available():
+        raise RuntimeError("Training requires CUDA.")
+    if "RANK" in os.environ:
+        local_rank = int(os.environ["LOCAL_RANK"])
+        device = torch.device(f"cuda:{(device.index or 0) + local_rank}")
+        torch.cuda.set_device(device)
+        dist.init_process_group("nccl")
+        return dist.get_rank(), dist.get_world_size(), device
+    if device.index is not None:
+        torch.cuda.set_device(device)
+    return 0, 1, device
 
 
 def _synchronize_model(model):
@@ -228,11 +155,12 @@ def _synchronize_model(model):
 
 
 def main():
-    args = parse_arguments()
-    rank, world_size, device = _initialize_process_group()
+    with (ROOT / "config.yaml").open() as stream:
+        config = yaml.safe_load(stream)
+    rank, world_size, device = _initialize_process_group(config)
     envs = None
     try:
-        artifact_dir = ARTIFACT_DIR
+        artifact_dir = ROOT / config['ppo']['output_dir']
         config_path = artifact_dir / "config.json"
         episodes_path = artifact_dir / "episodes.jsonl"
         metrics_path = artifact_dir / "metrics.jsonl"
@@ -252,28 +180,24 @@ def main():
         if artifact_error:
             raise FileExistsError(artifact_error)
 
-        scenarios = _build_scenarios(args)
+        scenarios = _build_scenarios(config["ppo_environment"])
         if world_size > len(scenarios):
             raise ValueError(
                 f"Cannot distribute {len(scenarios)} scenarios across "
                 f"{world_size} GPU processes"
             )
         model = ActorCritic(
-            args.checkpoint_path,
-            INITIAL_STEERING_STD,
-            INITIAL_SPEED_STD,
+            ROOT / config['ppo']['initial_policy_path'],
+            config['ppo_exploration']['initial_steering_std'],
+            config['ppo_exploration']['initial_speed_std'],
         ).to(device)
         _synchronize_model(model)
-        optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
+        optimizer = torch.optim.Adam(model.parameters(), lr=config['ppo']['learning_rate'])
 
         if rank == 0:
             config_path.write_text(
                 json.dumps(
-                    _resolved_config(
-                        args,
-                        len(scenarios),
-                        world_size,
-                    ),
+                    config,
                     indent=2,
                 )
                 + "\n",
@@ -283,12 +207,12 @@ def main():
             metrics_path.touch(exist_ok=True)
             print(
                 f"Scenario pool: {len(scenarios)} | GPU processes: {world_size} | "
-                f"workers/GPU: {args.num_envs} | "
-                f"total workers: {args.num_envs * world_size} | "
-                f"lr: {LEARNING_RATE:.1e}"
+                f"workers/GPU: {config['runtime']['workers']} | "
+                f"total workers: {config['runtime']['workers'] * world_size} | "
+                f"lr: {config['ppo']['learning_rate']:.1e}"
             )
 
-        envs = VectorEnv(args.num_envs, args)
+        envs = VectorEnv(config['runtime']['workers'], config)
         rng = np.random.default_rng()
         saved_model_count = 0
         for epoch in itertools.count(1):
@@ -299,7 +223,7 @@ def main():
                 envs,
                 scenarios,
                 rng,
-                args,
+                config,
                 device,
                 epoch,
             )
@@ -316,7 +240,7 @@ def main():
 
             label = f"Epoch {epoch}"
             eval_records = evaluate_scenarios(envs, model, scenarios, device, label)
-            model.action_std.mul_(ACTION_STD_DECAY)
+            model.action_std.mul_(config['ppo_exploration']['action_std_decay'])
             next_action_std = model.action_std.detach().cpu().tolist()
             if rank == 0:
                 for record in eval_records:
@@ -330,6 +254,7 @@ def main():
                     )
 
                 metrics = _summarize(
+                    config,
                     epoch,
                     ordered,
                     rollout_summary,
@@ -341,8 +266,8 @@ def main():
                 metrics["next_exploration_steering_std"] = next_action_std[0]
                 metrics["next_exploration_speed_std"] = next_action_std[1]
                 model_saved = (
-                    metrics["screening_safety_rate"] > MINIMUM_SAFETY_RATE
-                    and metrics["screening_overtake_rate"] > MINIMUM_OVERTAKE_RATE
+                    metrics["screening_safety_rate"] > config['ppo_screening']['minimum_safety_rate']
+                    and metrics["screening_overtake_rate"] > config['ppo_screening']['minimum_overtake_rate']
                 )
                 metrics["model_saved"] = model_saved
                 if model_saved:

@@ -18,23 +18,13 @@ def _evaluate_group(envs, model, scenarios, device):
             actions, next_state = model.predict(observation_batch, state)
         actions = actions.cpu().numpy()
 
-        for slot, result in enumerate(envs.step(actions, active)):
-            if result is None:
-                continue
+        for slot, result in envs.step(actions, active).items():
             next_observation, _, done, info = result
             observations[slot] = next_observation
             if done:
                 active[slot] = False
                 records[slot] = info
         state = next_state
-    return records
-
-
-def _evaluate_shard(envs, model, scenarios, device):
-    records = []
-    for start in range(0, len(scenarios), envs.num_envs):
-        selected = scenarios[start : start + envs.num_envs]
-        records.extend(_evaluate_group(envs, model, selected, device))
     return records
 
 
@@ -45,7 +35,9 @@ def evaluate_scenarios(envs, model, scenarios, device, label):
     started_at = time.monotonic()
     if rank == 0:
         print(f"{label} screening: 0/{len(scenarios)}", flush=True)
-    local_records = _evaluate_shard(envs, model, shard, device)
+    local_records = []
+    for start in range(0, len(shard), envs.num_envs):
+        local_records.extend(_evaluate_group(envs, model, shard[start:start + envs.num_envs], device))
     if dist.is_initialized():
         gathered = [None] * world_size if rank == 0 else None
         dist.gather_object(local_records, gathered, dst=0)

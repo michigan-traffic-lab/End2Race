@@ -410,12 +410,9 @@ class ScanSimulator2D(object):
 
         # load map yaml
         with open(map_path, 'r') as yaml_stream:
-            try:
-                map_metadata = yaml.safe_load(yaml_stream)
-                self.map_resolution = map_metadata['resolution']
-                self.origin = map_metadata['origin']
-            except yaml.YAMLError as ex:
-                print(ex)
+            map_metadata = yaml.safe_load(yaml_stream)
+            self.map_resolution = map_metadata['resolution']
+            self.origin = map_metadata['origin']
 
         # calculate map parameters
         self.orig_x = self.origin[0]

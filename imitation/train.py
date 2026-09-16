@@ -1,101 +1,41 @@
-import argparse
+from itertools import chain
 from pathlib import Path
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import numpy as np
 import pandas as pd
 import torch
 import torch.nn.functional as F
 import torch.optim as optim
+import yaml
 from torch.utils.data import DataLoader, Dataset
 
-from expert.utils import require_end2race_runtime
 from imitation.model import End2Race
-
-NUM_EPOCHS = 500
-CHECKPOINT_INTERVAL = 500
-BATCH_SIZE = 1024
-LEARNING_RATE = 1e-4
-
-
-def parse_arguments():
-    parser = argparse.ArgumentParser(description="Train End2Race speed-conditioned model")
-    parser.add_argument("--dataset_dir", type=Path, default=Path("dataset"))
-    parser.add_argument("--output_dir", type=Path, default=Path("checkpoint"))
-
-    parser.add_argument("--speed_loss_weight", type=float, default=0.05)
-    parser.add_argument("--gradient_clip_norm", type=float, default=1.0)
-
-    return parser.parse_args()
-
 
 class SequenceDataset(Dataset):
     def __init__(self, data_path: str | Path):
-        self.lidar_columns = [
-            f"lidar_{index}" for index in range(End2Race.NUM_LIDAR_FEATURES)
-        ]
-        self.speed_column = "current_speed"
-        self.action_columns = ["steer", "desired_speed"]
-        self.expected_columns = ["time", self.speed_column] + self.action_columns + self.lidar_columns
-        self.sequence_length = self._determine_sequence_length(data_path)
+        paths = iter(sorted(Path(data_path).glob("*.csv")))
+        first_episode = pd.read_csv(next(paths))
+        self.sequence_length = len(first_episode)
         self.sequences = []
-        self._load_episodes(data_path)
-        if not self.sequences:
-            raise ValueError(f"No usable training sequences found in {data_path}")
-        print(f"Loaded {len(self.sequences)} sequences")
+        lidar_columns = [f"lidar_{index}" for index in range(End2Race.NUM_LIDAR_FEATURES)]
+        for episode in chain((first_episode,), map(pd.read_csv, paths)):
+            lidar = episode[lidar_columns].to_numpy(dtype=np.float32)
+            speed = episode[['current_speed']].to_numpy(dtype=np.float32)
+            actions = episode[['steer', 'desired_speed']].to_numpy(dtype=np.float32)
+            previous_speed = np.concatenate((speed[:1], speed[:-1]))
+            for start in range(len(episode) - self.sequence_length + 1):
+                end = start + self.sequence_length
+                self.sequences.append((lidar[start:end], previous_speed[start:end], actions[start:end]))
+        print(f"Loaded {len(self.sequences)} sequences of length {self.sequence_length}")
 
-    def _load_episodes(self, data_path: str | Path):
-        csv_files = sorted(Path(data_path).glob("*.csv"))
-        for csv_file in csv_files:
-            df = pd.read_csv(csv_file)
-            if list(df.columns) != self.expected_columns:
-                raise ValueError(
-                    f"{csv_file} does not match the collected CSV header"
-                )
-
-            if len(df) < self.sequence_length:
-                continue
-
-            lidar_data = df[self.lidar_columns].values.astype(np.float32)
-            speed_data = df[[self.speed_column]].values.astype(np.float32)
-            action_data = df[self.action_columns].values.astype(np.float32)
-
-            self._create_sequences(lidar_data, speed_data, action_data)
-
-    def _determine_sequence_length(self, data_path: str | Path) -> int:
-        csv_files = sorted(Path(data_path).glob("*.csv"))
-        if not csv_files:
-            raise FileNotFoundError(f"No training CSV files found in {data_path}")
-        sequence_length = len(pd.read_csv(csv_files[0]))
-        print(f"Sequence length: {sequence_length}")
-        return sequence_length
-
-    def _create_sequences(
-        self,
-        lidar_data: np.ndarray,
-        speed_data: np.ndarray,
-        action_data: np.ndarray,
-    ):
-        previous_speed = np.concatenate((speed_data[:1], speed_data[:-1]))
-        for end_idx in range(self.sequence_length - 1, len(lidar_data)):
-            start_idx = end_idx - self.sequence_length + 1
-            self.sequences.append(
-                {
-                    "lidar": lidar_data[start_idx : end_idx + 1],
-                    "speed": previous_speed[start_idx : end_idx + 1],
-                    "action": action_data[start_idx : end_idx + 1],
-                }
-            )
-
-    def __len__(self) -> int:
+    def __len__(self):
         return len(self.sequences)
 
-    def __getitem__(self, index: int) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        sequence = self.sequences[index]
-        return (
-            torch.from_numpy(sequence["lidar"]),
-            torch.from_numpy(sequence["speed"]),
-            torch.from_numpy(sequence["action"]),
-        )
+    def __getitem__(self, index):
+        return tuple(torch.from_numpy(array) for array in self.sequences[index])
 
 
 def train_epoch(
@@ -128,45 +68,49 @@ def train_epoch(
 
 
 def main():
-    args = parse_arguments()
-    require_end2race_runtime()
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    root = Path(__file__).resolve().parents[1]
+    with (root / "config.yaml").open() as stream:
+        config = yaml.safe_load(stream)
+    settings = config['imitation']
+    device = torch.device(config['runtime']['device'])
+    if device.type != "cuda" or not torch.cuda.is_available():
+        raise RuntimeError("Training requires CUDA.")
+    if device.index is not None:
+        torch.cuda.set_device(device)
     print(f"Using device: {device}")
     print(
-        f"Training settings: epochs={NUM_EPOCHS}, checkpoint_interval={CHECKPOINT_INTERVAL}, "
-        f"batch_size={BATCH_SIZE}, learning_rate={LEARNING_RATE}, arguments={vars(args)}"
+        f"Training settings: epochs={settings['num_epochs']}, "
+        f"learning_rate={settings['learning_rate']}, arguments={settings}"
     )
 
-    dataset = SequenceDataset(args.dataset_dir / "success")
+    dataset = SequenceDataset(root / settings['dataset_dir'] / "success")
 
     train_loader = DataLoader(
         dataset,
-        batch_size=BATCH_SIZE,
-        shuffle=True,
-        pin_memory=device.type == "cuda",
+        batch_size=len(dataset),
+        num_workers=config['runtime']['workers'],
+        pin_memory=True,
     )
 
     model = End2Race().to(device)
-    optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
-    args.output_dir.mkdir(parents=True, exist_ok=True)
+    optimizer = optim.Adam(model.parameters(), lr=settings['learning_rate'])
+    output_dir = root / settings['output_dir']
+    output_dir.mkdir(parents=True, exist_ok=True)
     print(f"Train batches: {len(train_loader)}")
 
-    for epoch in range(1, NUM_EPOCHS + 1):
+    for epoch in range(1, settings['num_epochs'] + 1):
         loss = train_epoch(
             model,
             train_loader,
             optimizer,
-            args.speed_loss_weight,
-            args.gradient_clip_norm,
+            settings['speed_loss_weight'],
+            settings['gradient_clip_norm'],
         )
-        if epoch % CHECKPOINT_INTERVAL:
-            continue
-        checkpoint_path = args.output_dir / f"epoch_{epoch:05d}.pt"
-        torch.save(model.state_dict(), checkpoint_path)
-        print(
-            f"Epoch {epoch}/{NUM_EPOCHS}, loss: {loss:.5f}, "
-            f"saved {checkpoint_path}"
-        )
+        print(f"Epoch {epoch}/{settings['num_epochs']}, loss: {loss:.5f}")
+
+    checkpoint_path = output_dir / f"epoch_{settings['num_epochs']:05d}.pt"
+    torch.save(model.state_dict(), checkpoint_path)
+    print(f"Saved {checkpoint_path}")
 
 
 if __name__ == "__main__":

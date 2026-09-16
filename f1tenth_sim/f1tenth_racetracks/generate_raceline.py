@@ -3,6 +3,8 @@ import sys
 from pathlib import Path
 from types import SimpleNamespace
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
 import cv2
 import matplotlib.pyplot as plt
 import numpy as np
@@ -10,7 +12,7 @@ import trajectory_planning_helpers as tph
 import yaml
 from scipy import interpolate
 
-from f1tenth_sim.utils import load_racetrack_config
+from f1tenth_sim.utils import load_simulator_config
 
 
 def spline_distance(t_glob, path, point):
@@ -323,7 +325,7 @@ def generate_raceline(lane_data, config, module):
 
 def main():
     module = Path(__file__).resolve().parent
-    racetrack = load_racetrack_config()
+    racetrack = load_simulator_config()
     config = SimpleNamespace(
         **vars(racetrack.track),
         **vars(racetrack.vehicle),

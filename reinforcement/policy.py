@@ -7,7 +7,7 @@ from imitation.model import End2Race
 class ActorCritic(nn.Module):
     """Recurrent policy and value head initialized from IL policy weights."""
 
-    def __init__(self, checkpoint_path, steering_std, speed_std):
+    def __init__(self, initial_policy_path, steering_std, speed_std):
         super().__init__()
         self.model = End2Race()
         self.value_head = nn.Sequential(
@@ -19,7 +19,7 @@ class ActorCritic(nn.Module):
             "action_std",
             torch.tensor([steering_std, speed_std], dtype=torch.float32),
         )
-        checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
+        checkpoint = torch.load(initial_policy_path, map_location="cpu", weights_only=True)
         self.model.load_state_dict(checkpoint)
         self.train()
 
@@ -29,19 +29,12 @@ class ActorCritic(nn.Module):
         self.model.gru.train(True)
         return self
 
-    def initial_hidden(self, batch_size, device):
+    def initial_state(self, batch_size, device):
         return torch.zeros(
             (1, batch_size, self.model.gru.hidden_size),
             dtype=torch.float32,
             device=device,
         )
-
-    def initial_state(self, batch_size, device):
-        return self.initial_hidden(batch_size, device)
-
-    @staticmethod
-    def select_state(state, indices):
-        return state[:, indices].contiguous()
 
     def _outputs(self, observations, hidden=None):
         lidar = observations[..., :End2Race.NUM_LIDAR_FEATURES]

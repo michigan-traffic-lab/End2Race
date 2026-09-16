@@ -1,6 +1,4 @@
 import json
-import os
-import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -8,22 +6,21 @@ from types import SimpleNamespace
 import numpy as np
 from numba import njit
 
+import yaml
 from f1tenth_sim.utils import (
-    load_racetrack_config,
-    load_yaml_config,
+    load_simulator_config,
     racetrack_path,
     simulation_config,
 )
 
 
-def load_expert_config():
-    return load_yaml_config(Path(__file__).resolve().parent / "config.yaml")
-
-
 def expert_configuration():
+    with (Path(__file__).resolve().parents[1] / "config.yaml").open() as stream:
+        config = yaml.safe_load(stream)
     return SimpleNamespace(
-        **vars(load_expert_config().expert),
-        **vars(load_racetrack_config().vehicle),
+        **config['expert'],
+        parallel_workers=config['runtime']['workers'],
+        **vars(load_simulator_config().vehicle),
     )
 
 
@@ -68,14 +65,6 @@ def project_point_to_centerline(point, centerline):
 def downsample_lidar(lidar_data, target_points):
     """Uniformly downsample a flat LiDAR scan."""
     scan = np.asarray(lidar_data).reshape(-1)
-    if target_points <= 0:
-        raise ValueError("target_points must be positive")
-    if scan.size < target_points:
-        raise ValueError(
-            f"Cannot downsample {scan.size} LiDAR points to {target_points}"
-        )
-    if scan.size == target_points:
-        return scan.copy()
     if scan.size % target_points == 0:
         step = scan.size // target_points
         return scan[::step][:target_points]
@@ -109,39 +98,14 @@ def raceline_pose(waypoints_xytheta, index):
     return pose
 
 
-def require_end2race_runtime():
-    """Require the supported Python 3.11 end2race Conda environment."""
-    environment_name = os.environ.get("CONDA_DEFAULT_ENV") or os.path.basename(
-        sys.prefix
-    )
-    if sys.version_info[:2] != (3, 11) or environment_name != "end2race":
-        raise RuntimeError(
-            "Activate the Python 3.11 end2race environment before running this "
-            "workflow: conda activate end2race"
-        )
-
-
 def calculate_metrics(trajectory, speeds):
     avg_speed = np.mean(speeds) if speeds else 0
     speed_variance = np.var(speeds) if speeds else 0
-    total_distance = (
-        sum(
-            np.linalg.norm(np.asarray(trajectory[index + 1]) - trajectory[index])
-            for index in range(len(trajectory) - 1)
-        )
-        if len(trajectory) > 1
-        else 0
+    total_distance = sum(
+        np.linalg.norm(np.asarray(trajectory[index + 1]) - trajectory[index])
+        for index in range(len(trajectory) - 1)
     )
     return avg_speed, speed_variance, total_distance
-
-
-def mask_lidar_points(lidar, ratio, rng):
-    lidar = np.array(lidar, copy=True)
-    masked_count = int(len(lidar) * ratio)
-    if masked_count:
-        indices = rng.choice(len(lidar), masked_count, replace=False)
-        lidar[indices] = 0.0
-    return lidar
 
 
 def follow_vehicle_camera(event, horizontal_margin=800.0):
@@ -269,8 +233,6 @@ def create_single_agent_render_callback(
 def get_ego_idx_range(map_name, ego_raceline, num_startpoints):
     raceline_path = racetrack_path(map_name, f"{ego_raceline}.csv")
     waypoints = np.loadtxt(raceline_path, delimiter=";", skiprows=1, ndmin=2)
-    if np.linalg.norm(waypoints[-1, 1:3] - waypoints[0, 1:3]) > 1e-9:
-        raise ValueError(f"{raceline_path} must repeat its first waypoint at the end")
     unique_waypoints = waypoints[:-1]
     track_length = waypoints[-1, 0]
     targets = np.arange(num_startpoints) * track_length / num_startpoints
@@ -306,75 +268,6 @@ def _percentage(numerator, denominator):
     return round(100.0 * numerator / denominator, 4) if denominator else 0.0
 
 
-def write_multi_evaluation_summary(results_dir, summary_path, checkpoint_path, map_name, ego_raceline, num_startpoints, opponent_racelines, opponent_speed_scales, sim_duration, noise, seed, planned_scenarios, stop_reason):
-    results_dir = Path(results_dir)
-    following = 0
-    overtaking = 0
-    collisions = 0
-    errors = 0
-    completed = 0
-    for status_path in sorted(results_dir.glob("*.status")):
-        completed += 1
-        index = status_path.stem
-        if status_path.read_text(encoding="utf-8").strip() != "0":
-            errors += 1
-            sys.stderr.write((results_dir / f"{index}.err").read_text(encoding="utf-8"))
-            continue
-        state = None
-        for line in (results_dir / f"{index}.out").read_text(encoding="utf-8").splitlines():
-            if line.startswith("STATE="):
-                state = line.partition("=")[2]
-                break
-        if state == "1":
-            following += 1
-        elif state == "2":
-            overtaking += 1
-        elif state == "3":
-            collisions += 1
-        else:
-            errors += 1
-
-    planned_scenarios = int(planned_scenarios)
-    opponent_racelines = opponent_racelines.split()
-    opponent_speed_scales = [float(value) for value in opponent_speed_scales.split()]
-    summary = {
-        "generated_at_utc": datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
-        "checkpoint_path": checkpoint_path,
-        "map_name": map_name,
-        "ego_raceline": ego_raceline,
-        "num_startpoints": int(num_startpoints),
-        "opponent_racelines": opponent_racelines,
-        "opponent_speed_scales": opponent_speed_scales,
-        "sim_duration": float(sim_duration),
-        "noise": float(noise),
-        "seed": int(seed),
-        "planned_scenarios": planned_scenarios,
-        "completed_scenarios": completed,
-        "complete": completed == planned_scenarios and stop_reason == "completed",
-        "stop_reason": stop_reason,
-        "following": following,
-        "overtaking": overtaking,
-        "success": following + overtaking,
-        "collision": collisions,
-        "errors": errors,
-        "following_percent": _percentage(following, completed),
-        "overtaking_percent": _percentage(overtaking, completed),
-        "success_percent": _percentage(following + overtaking, completed),
-        "collision_percent": _percentage(collisions, completed),
-    }
-    summary_path = Path(summary_path)
-    summary_path.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
-
-    print(f"following: {following} ({summary['following_percent']}%)")
-    print(f"overtaking: {overtaking} ({summary['overtaking_percent']}%)")
-    print(f"success: {summary['success']} ({summary['success_percent']}%)")
-    print(f"collision: {collisions} ({summary['collision_percent']}%)")
-    print(f"errors: {errors}")
-    print(f"completed: {completed}/{planned_scenarios} ({stop_reason})")
-    print(f"Summary saved to {summary_path}")
-    return summary["complete"] and errors == 0
-
-
 def _tally(episodes):
     collision_free = [item for item in episodes if item["outcome"] == "collision_free"]
     overtakes = sum(item["final_state"] == "overtaking" for item in collision_free)
@@ -391,6 +284,8 @@ def _tally(episodes):
 
 def write_collection_summary(dataset_dir, collection_config, failures):
     """Summarize a finished collection from the artifacts left in its dataset directory."""
+    with (Path(__file__).resolve().parents[1] / "config.yaml").open() as stream:
+        config = yaml.safe_load(stream)
     # Imported here so that every utils consumer does not pay for torch
     from imitation.model import End2Race
 
@@ -421,8 +316,8 @@ def write_collection_summary(dataset_dir, collection_config, failures):
         "data_config": {
             "lidar_features": End2Race.NUM_LIDAR_FEATURES,
             "csv_columns": 4 + End2Race.NUM_LIDAR_FEATURES,
-            "vehicle": vars(load_racetrack_config().vehicle),
-            "expert": vars(load_expert_config().expert),
+            "vehicle": vars(load_simulator_config().vehicle),
+            "expert": config['expert'],
         },
         "results": {
             "expected_scenarios": collection_config["num_startpoints"]

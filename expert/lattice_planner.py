@@ -84,19 +84,16 @@ class PeriodicReference:
         self.x_spline = CubicSpline(self.s, self.points[:, 0], bc_type="periodic")
         self.y_spline = CubicSpline(self.s, self.points[:, 1], bc_type="periodic")
 
-    def _wrap(self, distance):
-        return float(distance % self.length)
-
     def position(self, distance):
-        distance = self._wrap(distance)
+        distance = float(distance % self.length)
         return float(self.x_spline(distance)), float(self.y_spline(distance))
 
     def yaw(self, distance):
-        distance = self._wrap(distance)
+        distance = float(distance % self.length)
         return math.atan2(float(self.y_spline(distance, 1)), float(self.x_spline(distance, 1)))
 
     def curvature(self, distance):
-        distance = self._wrap(distance)
+        distance = float(distance % self.length)
         dx = float(self.x_spline(distance, 1))
         dy = float(self.y_spline(distance, 1))
         ddx = float(self.x_spline(distance, 2))
@@ -238,6 +235,8 @@ class FrenetOptimalTrajectoryPlanner:
         self.tracker = PurePursuitController(configuration)
         self.parallel_workers = configuration.parallel_workers
         self._candidate_pool = None
+        self.lateral_targets = self._lateral_targets()
+        self.sample_times = self._sample_times().tolist()
 
     def _terminal_speed_limits(self, physical_speed):
         minimum_speed = max(
@@ -250,9 +249,7 @@ class FrenetOptimalTrajectoryPlanner:
         )
         return minimum_speed, maximum_speed
 
-    def _terminal_speeds(self, physical_speed, minimum_speed=None, maximum_speed=None):
-        if minimum_speed is None or maximum_speed is None:
-            minimum_speed, maximum_speed = self._terminal_speed_limits(physical_speed)
+    def _terminal_speeds(self, physical_speed, minimum_speed, maximum_speed):
         reference_speed = float(np.clip(physical_speed, minimum_speed, maximum_speed))
         return [
             minimum_speed,
@@ -263,19 +260,11 @@ class FrenetOptimalTrajectoryPlanner:
         ]
 
     def _lateral_targets(self):
-        if self.conf.road_width <= 0.0 or self.conf.road_step <= 0.0:
-            raise ValueError("expert.road_width and expert.road_step must be positive")
         step_count = math.floor(self.conf.road_width / self.conf.road_step + 1e-9)
-        if step_count < 1:
-            raise ValueError("expert.road_step must not exceed expert.road_width")
         return np.arange(-step_count, step_count + 1) * self.conf.road_step
 
     def _sample_times(self):
         interval_count = round(self.conf.horizon / self.conf.time_step)
-        if not math.isclose(
-            interval_count * self.conf.time_step, self.conf.horizon, rel_tol=0.0, abs_tol=1e-9
-        ):
-            raise ValueError("expert.horizon must be divisible by expert.time_step")
         return np.linspace(0.0, self.conf.horizon, interval_count + 1)
 
     def _course_terminal_speed(
@@ -442,7 +431,6 @@ class FrenetOptimalTrajectoryPlanner:
         denominator = max(1.0 - reference_curvature * lateral_distance, 0.2)
         course_speed = max(physical_speed * math.cos(heading_error) / denominator, 0.05)
         lateral_time_velocity = physical_speed * math.sin(heading_error)
-        sample_times = self._sample_times().tolist()
         lateral_arguments = [
             (
                 course_distance,
@@ -451,10 +439,10 @@ class FrenetOptimalTrajectoryPlanner:
                 lateral_time_velocity,
                 float(lateral_target),
                 physical_speed,
-                sample_times,
+                self.sample_times,
                 require_dynamic_feasibility,
             )
-            for lateral_target in self._lateral_targets()
+            for lateral_target in self.lateral_targets
         ]
         # Workers only ever run _generate_lateral_paths, which never reaches this branch
         if self.parallel_workers > 1 and len(lateral_arguments) > 1:
@@ -490,7 +478,7 @@ class FrenetOptimalTrajectoryPlanner:
                 sample_times,
             )
         else:
-            terminal_speeds = self._terminal_speeds(physical_speed)
+            terminal_speeds = self._terminal_speeds(physical_speed, *self._terminal_speed_limits(physical_speed))
             candidate_cache = {}
 
         paths = []
@@ -552,9 +540,6 @@ class FrenetOptimalTrajectoryPlanner:
         )
         return max(violations)
 
-    def _best_effort_path(self, paths):
-        return min(paths, key=self._dynamic_violation) if paths else None
-
     def _collision_distances(self, path, obstacle_tree):
         if obstacle_tree is None:
             return np.full(len(path.x) - 1, math.inf)
@@ -602,7 +587,7 @@ class FrenetOptimalTrajectoryPlanner:
                 velocity,
                 require_dynamic_feasibility=False,
             )
-            path = self._best_effort_path(best_effort_paths)
+            path = min(best_effort_paths, key=self._dynamic_violation, default=None)
         if path is None:
             raise RuntimeError("FOT produced no usable trajectory")
 

@@ -26,6 +26,7 @@ Author: Hongrui Zheng
 
 # gym imports
 import gym
+from f1tenth_sim.utils import load_simulator_config
 from gym import error, spaces, utils
 from gym.utils import seeding
 
@@ -101,84 +102,18 @@ class F110Env(gym.Env):
     render_callbacks = []
 
     def __init__(self, **kwargs):
-        # kwargs extraction
-        try:
-            self.seed = kwargs["seed"]
-        except:
-            self.seed = 12345
-        try:
-            self.map_name = kwargs["map"]
-            # different default maps
-            if self.map_name == "berlin":
-                self.map_path = (
-                    os.path.dirname(os.path.abspath(__file__)) + "/maps/berlin.yaml"
-                )
-            elif self.map_name == "skirk":
-                self.map_path = (
-                    os.path.dirname(os.path.abspath(__file__)) + "/maps/skirk.yaml"
-                )
-            elif self.map_name == "levine":
-                self.map_path = (
-                    os.path.dirname(os.path.abspath(__file__)) + "/maps/levine.yaml"
-                )
-            else:
-                self.map_path = self.map_name + ".yaml"
-        except:
-            self.map_path = (
-                os.path.dirname(os.path.abspath(__file__)) + "/maps/vegas.yaml"
-            )
-
-        try:
-            self.map_ext = kwargs["map_ext"]
-        except:
-            self.map_ext = ".png"
-
-        try:
-            self.params = kwargs["params"]
-        except:
-            self.params = {
-                "mu": 1.0489,
-                "C_Sf": 4.718,
-                "C_Sr": 5.4562,
-                "lf": 0.15875,
-                "lr": 0.17145,
-                "h": 0.074,
-                "m": 3.74,
-                "I": 0.04712,
-                "s_min": -0.4189,
-                "s_max": 0.4189,
-                "sv_min": -3.2,
-                "sv_max": 3.2,
-                "v_switch": 7.319,
-                "a_max": 9.51,
-                "v_min": -5.0,
-                "v_max": 20.0,
-                "width": 0.31,
-                "length": 0.58,
-            }
-
-        # simulation parameters
-        try:
-            self.num_agents = kwargs["num_agents"]
-        except:
-            self.num_agents = 2
-
-        try:
-            self.timestep = kwargs["timestep"]
-        except:
-            self.timestep = 0.01
-
-        # default ego index
-        try:
-            self.ego_idx = kwargs["ego_idx"]
-        except:
-            self.ego_idx = 0
-
-        # default integrator
-        try:
-            self.integrator = kwargs["integrator"]
-        except:
-            self.integrator = Integrator.Euler
+        config = load_simulator_config()
+        self.seed = kwargs.get("seed", config.simulation.seed)
+        self.map_name = kwargs.get("map", "vegas")
+        if self.map_name in ("berlin", "skirk", "levine", "vegas"):
+            self.map_name = os.path.join(os.path.dirname(__file__), "maps", self.map_name)
+        self.map_path = self.map_name + ".yaml"
+        self.map_ext = kwargs.get("map_ext", ".png")
+        self.params = kwargs.get("params", vars(config.dynamics))
+        self.num_agents = kwargs.get("num_agents", 2)
+        self.timestep = kwargs.get("timestep", 1.0 / config.simulation.frequency_hz)
+        self.ego_idx = kwargs.get("ego_idx", 0)
+        self.integrator = kwargs.get("integrator", Integrator.Euler)
 
         # radius to consider done
         self.start_thresh = 0.5  # 10cm
@@ -222,12 +157,6 @@ class F110Env(gym.Env):
 
         # stateful observations for rendering
         self.render_obs = None
-
-    def __del__(self):
-        """
-        Finalizer, does cleanup
-        """
-        pass
 
     def _check_done(self):
         """
@@ -356,10 +285,6 @@ class F110Env(gym.Env):
         if velocities is None:
             velocities = np.zeros(self.num_agents)
         velocities = np.asarray(velocities, dtype=np.float64)
-        if velocities.shape != (self.num_agents,):
-            raise ValueError(
-                "Number of velocities for reset does not match number of agents."
-            )
 
         # states after reset
         self.start_xs = poses[:, 0]
@@ -476,6 +401,4 @@ class F110Env(gym.Env):
             F110Env.renderer.flip()
             if mode == 'human':
                 time.sleep(0.005)
-            elif mode == 'human_fast':
-                pass
             return None

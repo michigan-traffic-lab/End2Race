@@ -134,14 +134,11 @@ class EnvRenderer(pyglet.window.Window):
 
         # load map metadata
         with open(map_path + ".yaml", "r") as yaml_stream:
-            try:
-                map_metadata = yaml.safe_load(yaml_stream)
-                map_resolution = map_metadata["resolution"]
-                origin = map_metadata["origin"]
-                origin_x = origin[0]
-                origin_y = origin[1]
-            except yaml.YAMLError as ex:
-                print(ex)
+            map_metadata = yaml.safe_load(yaml_stream)
+            map_resolution = map_metadata["resolution"]
+            origin = map_metadata["origin"]
+            origin_x = origin[0]
+            origin_y = origin[1]
 
         # load map image
         map_img = np.array(

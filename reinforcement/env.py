@@ -1,14 +1,10 @@
-from contextlib import redirect_stderr
 from dataclasses import dataclass
-from io import StringIO
 import multiprocessing as mp
 import os
 import traceback
-import warnings
 
-with redirect_stderr(StringIO()):
-    import f110_gym  # Registers the F1TENTH Gym environment.
-    import gym
+import f110_gym  # Registers the F1TENTH Gym environment.
+import gym
 import numpy as np
 import torch
 from f110_gym.envs.base_classes import Integrator
@@ -20,23 +16,16 @@ from expert.utils import (
 )
 from f1tenth_sim.utils import (
     load_raceline,
-    load_racetrack_config,
+    load_simulator_config,
     racetrack_path,
     simulation_config,
 )
 from imitation.model import End2Race
 
-warnings.filterwarnings(
-    "ignore",
-    message="Chosen integrator is RK4.*",
-    category=UserWarning,
-    module="f110_gym.envs.base_classes",
-)
-
-
 @dataclass(frozen=True)
 class Scenario:
     scenario_id: str
+    map_name: str
     ego_idx: int
     opponent_idx: int
     opponent_raceline: str
@@ -63,16 +52,20 @@ def _wrapped_progress_delta(current_progress, previous_progress, track_length):
 class RaceEnv:
     """Two-agent racing episode stepped at 40 Hz over 120 Hz physics."""
 
-    PROGRESS_REWARD_WEIGHT = 0.01
-    COLLISION_PENALTY = -2.5
-    MAXIMUM_EGO_SPEED = 20.0
-
     def __init__(self, settings):
-        self.map_name = settings.map_name
-        self.vehicle = load_racetrack_config().vehicle
+        self.settings = settings
+        self.map_name = None
+        self.env = None
+        simulator = load_simulator_config()
+        self.vehicle = simulator.vehicle
+        self.maximum_ego_speed = simulator.dynamics.v_max
         self.simulation = simulation_config()
-        self.control_steps = int(round(settings.episode_duration * self.simulation.control_frequency_hz))
+        self.control_steps = int(round(settings['ppo_environment']['episode_duration'] * self.simulation.control_frequency_hz))
 
+    def _load_map(self, map_name):
+        if self.env is not None:
+            self.env.close()
+        self.map_name = map_name
         self.env = gym.make(
             "f110-v0",
             map=str(racetrack_path(self.map_name, f"{self.map_name}_map")),
@@ -81,7 +74,7 @@ class RaceEnv:
             timestep=self.simulation.timestep,
             integrator=Integrator.RK4,
         )
-        self.ego_waypoints = load_raceline(self.map_name, f"{settings.ego_raceline}.csv")
+        self.ego_waypoints = load_raceline(self.map_name, f"{self.settings['ppo_environment']['ego_raceline']}.csv")
         self.opponents = {}
 
         # Progress is measured against the ego raceline for both vehicles
@@ -91,11 +84,6 @@ class RaceEnv:
     def _opponent(self, raceline):
         if raceline not in self.opponents:
             opponent = RacelineFollower(self.map_name, raceline)
-            if opponent.conf.tracker_steps != self.simulation.steps_per_expert_plan:
-                raise ValueError(
-                    "expert.tracker_steps must match the number of simulation "
-                    f"steps per expert plan ({self.simulation.steps_per_expert_plan})"
-                )
             self.opponents[raceline] = opponent
         return self.opponents[raceline]
 
@@ -109,6 +97,8 @@ class RaceEnv:
 
     def reset(self, scenario):
         """Place both vehicles for one scenario and return the first observation."""
+        if scenario.map_name != self.map_name:
+            self._load_map(scenario.map_name)
         opponent = self._opponent(scenario.opponent_raceline)
         opponent_waypoints = opponent.waypoints
         opponent_idx = scenario.opponent_idx % len(opponent_waypoints)
@@ -158,7 +148,7 @@ class RaceEnv:
     def step(self, action):
         """Hold one 40 Hz action across three physics steps and score the interval."""
         ego_steering = float(np.clip(action[0], -self.vehicle.steering_limit, self.vehicle.steering_limit))
-        ego_speed = float(np.clip(action[1], 0.0, self.MAXIMUM_EGO_SPEED))
+        ego_speed = float(np.clip(action[1], 0.0, self.maximum_ego_speed))
         self.previous_speed = float(self.raw_observation["linear_vels_x"][0])
 
         ego_collision = False
@@ -173,7 +163,6 @@ class RaceEnv:
             self.tracker_count = (self.tracker_count + 1) % tracker_steps
             if self.raw_observation["collisions"][0]:
                 ego_collision = True
-            if ego_collision:
                 break
 
         # Score progress across the whole control interval
@@ -189,10 +178,10 @@ class RaceEnv:
         self.opponent_progress = opponent_progress
         self.relative_position += ego_delta - opponent_delta
 
-        reward = self.PROGRESS_REWARD_WEIGHT * ego_delta
+        reward = self.settings['ppo_rewards']['progress_reward_weight'] * ego_delta
         self.overtaken = self.overtaken or self.relative_position >= self.vehicle.length
         if ego_collision:
-            reward += self.COLLISION_PENALTY
+            reward += self.settings['ppo_rewards']['collision_penalty']
         self.episode_return += reward
         self.episode_steps += 1
 
@@ -208,6 +197,7 @@ class RaceEnv:
                 outcome = "follow"
             info = {
                 "scenario_id": self.scenario.scenario_id,
+                "map_name": self.map_name,
                 "outcome": outcome,
                 "episode_return": float(self.episode_return),
                 "episode_steps": int(self.episode_steps),
@@ -219,7 +209,8 @@ class RaceEnv:
         return self._observation(self.raw_observation), reward, done, info
 
     def close(self):
-        self.env.close()
+        if self.env is not None:
+            self.env.close()
 
 
 def _worker(remote, parent_remote, settings):
@@ -292,8 +283,6 @@ class VectorEnv:
 
     def reset_scenarios(self, scenarios):
         """Assign one scenario to each participating worker."""
-        if len(scenarios) > self.num_envs:
-            raise ValueError(f"Cannot assign {len(scenarios)} scenarios to {self.num_envs} workers")
         for rank, scenario in enumerate(scenarios):
             self.remotes[rank].send(("reset", scenario))
         return np.stack([self._receive(rank) for rank in range(len(scenarios))])
@@ -303,10 +292,7 @@ class VectorEnv:
         ranks = [rank for rank, is_active in enumerate(active) if is_active]
         for rank in ranks:
             self.remotes[rank].send(("step", actions[rank]))
-        results = [None] * self.num_envs
-        for rank in ranks:
-            results[rank] = self._receive(rank)
-        return results
+        return {rank: self._receive(rank) for rank in ranks}
 
     def close(self):
         if self.closed:
@@ -353,9 +339,7 @@ def collect_batch(envs, model, scenarios, device):
         values = values.cpu().numpy()
 
         bootstrap_ranks = []
-        for rank, result in enumerate(envs.step(actions, active)):
-            if result is None:
-                continue
+        for rank, result in envs.step(actions, active).items():
             next_observation, reward, done, info = result
             trajectory = trajectories[rank]
             trajectory["observations"].append(observations[rank].copy())
@@ -375,7 +359,7 @@ def collect_batch(envs, model, scenarios, device):
         if bootstrap_ranks:
             with torch.no_grad():
                 tail_observations = torch.as_tensor(observations[bootstrap_ranks], device=device)
-                tail_state = model.select_state(next_state, bootstrap_ranks)
+                tail_state = next_state[:, bootstrap_ranks].contiguous()
                 _, tail_values, _ = model.evaluate(
                     tail_observations[:, None], hidden=tail_state
                 )
