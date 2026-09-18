@@ -9,9 +9,12 @@
 **End2Race** is an end-to-end learning framework for multi-vehicle autonomous racing on [F1TENTH](https://roboracer.ai/). It maps 2D LiDAR scans and vehicle speed directly to steering and speed commands in real time, providing a full workflow for scenario generation, training, and benchmarking.
 
 ### Highlights
-- **Scalable Scenario Generation**: Automatically generates diverse overtaking scenarios for policy training and evaluation.
-- **Sub-Millisecond Policy**: Runs in <1 ms on embedded hardware for high-frequency real-time control.
-- **Zero-Shot Generalization**: Adapts to unseen tracks and opponent behaviors with high racing speeds and robust safety.
+
+🔄 **Scalable Scenario Generation**: Automatically generates diverse overtaking scenarios for policy training and evaluation.
+
+⚡ **Sub-Millisecond Policy**: Runs in <1 ms on embedded hardware for high-frequency real-time control.
+
+🌐 **Zero-Shot Generalization**: Adapts to unseen tracks and opponent behaviors with high racing speeds and robust safety.
 
 <!-- https://github.com/user-attachments/assets/5369f5ea-13fa-44c3-a6aa-5b3c2b59b10c -->
 
@@ -32,40 +35,40 @@
 ```text
 End2Race/
 ├── checkpoint/
-│   ├── bc.pt                        # Policy trained with behavioral cloning
-│   └── ppo.pt                       # Policy fine-tuned with PPO
+│   ├── bc.pt                        # BC policy checkpoint
+│   └── ppo.pt                       # PPO policy checkpoint
 ├── dataset/
-│   ├── collision/                   # Metadata for episodes ending in collision
-│   ├── success/                     # Collision-free demonstration CSV files
-│   └── summary.json                 # Demonstration collection statistics
+│   ├── collision/                   # Collision episodes
+│   ├── success/                     # Demonstration episodes
+│   └── summary.json                 # Collection summary
 ├── evaluation/
-│   ├── eval_multi.py                # Evaluate head-to-head racing against a raceline follower
-│   └── eval_single.py               # Evaluate single-vehicle timed trials and lap times
+│   ├── eval_multi.py                # Head-to-head racing evaluation
+│   └── eval_single.py               # Single-vehicle timed trials
 ├── expert/
-│   ├── collect.py                   # Collect expert driving demonstrations
-│   ├── controllers.py               # Pure Pursuit controller and raceline-following opponent
-│   ├── lattice_planner.py           # Frenet lattice trajectory planner
-│   └── utils.py                     # Scenario generation, geometry, and visualization helpers
+│   ├── collect.py                   # Demonstration collection
+│   ├── controllers.py               # Opponent and tracking controllers
+│   ├── lattice_planner.py           # Frenet lattice planner
+│   └── utils.py                     # Planner utilities and metrics
 ├── f1tenth_sim/
-│   ├── f1tenth_gym/                 # Gym environment, vehicle dynamics, LiDAR, and rendering
-│   ├── f1tenth_racetracks/          # Track maps, racelines, and raceline generation script
 │   ├── config.yaml                  # Simulator configuration
-│   └── utils.py                     # Load simulator settings and racelines
+│   ├── f1tenth_gym/                 # F1TENTH Gym environment
+│   ├── f1tenth_racetracks/          # Track maps and racelines
+│   └── utils.py                     # Simulator utilities
 ├── ftg/
-│   └── controller.py                # Follow-the-Gap controller using LiDAR and speed
+│   └── controller.py                # Follow-the-Gap controller
 ├── imitation/
-│   ├── model.py                     # GRU driving policy
-│   └── train.py                     # Behavioral cloning on expert demonstrations
+│   ├── model.py                     # End2Race policy network
+│   └── train.py                     # Behavioral cloning training
 ├── reinforcement/
-│   ├── env.py                       # Racing environment, rewards, and simulation workers
-│   ├── eval_ppo.py                  # Evaluate safety and overtaking during PPO training
+│   ├── env.py                       # Simulation environment and workers
+│   ├── eval_ppo.py                  # PPO evaluation routine
 │   ├── policy.py                    # Recurrent actor-critic network
-│   ├── run_ppo.py                   # Run PPO training and save policy checkpoints
-│   └── train_ppo.py                 # Collect rollouts and optimize PPO losses
-├── LICENSE
-├── README.md
-├── config.yaml                      # Workflow settings and shared paths
-└── install.sh                       # Install dependencies and the simulator
+│   ├── run_ppo.py                   # PPO training runner
+│   └── train_ppo.py                 # Rollout collection and PPO update
+├── config.yaml                      # Pipeline configuration
+├── install.sh                       # Installation script
+├── LICENSE                          # License
+└── README.md                        # Documentation
 ```
 
 ## Setup
