@@ -1,147 +1,183 @@
-# End2Race: Efficient End-to-End Imitation Learning for Real-Time F1Tenth Racing
+# End2Race: An End-to-End Learning Framework for Multi-Vehicle Autonomous Racing
+
+[![arXiv](https://img.shields.io/badge/arXiv-2509.16894-red.svg)](https://arxiv.org/abs/2509.16894)
+[![F1TENTH](https://img.shields.io/badge/platform-F1TENTH-green.svg)](https://roboracer.ai/)
+[![Hugging Face](https://img.shields.io/badge/🤗-Hugging_Face-yellow.svg)](https://github.com/michigan-traffic-lab/End2Race)
 
 ## Introduction
 
-End2Race learns recurrent steering and desired-speed control from LiDAR and measured speed. This repository provides simulation workflows for expert demonstration collection, behavioral cloning (BC), PPO fine-tuning, and racing evaluation.
+**End2Race** is an end-to-end learning framework for multi-vehicle autonomous racing on [F1TENTH](https://roboracer.ai/). It maps 2D LiDAR scans and vehicle speed directly to steering and speed commands in real time, providing a full workflow for scenario generation, training, and benchmarking.
 
-[Paper](https://arxiv.org/abs/2509.16894)
+### Highlights
+- **Scalable Scenario Generation**: Automatically generates diverse overtaking scenarios for policy training and evaluation.
+- **Sub-Millisecond Policy**: Runs in <1 ms on embedded hardware for high-frequency real-time control.
+- **Zero-Shot Generalization**: Adapts to unseen tracks and opponent behaviors with high racing speeds and robust safety.
 
-https://github.com/user-attachments/assets/5369f5ea-13fa-44c3-a6aa-5b3c2b59b10c
+<!-- https://github.com/user-attachments/assets/5369f5ea-13fa-44c3-a6aa-5b3c2b59b10c -->
 
 ## Table of Contents
 
 - [Code Structure](#code-structure)
 - [Setup](#setup)
-- [Collecting demonstrations](#collecting-demonstrations)
+- [Configuration](#configuration)
+- [Expert Demonstrations](#expert-demonstrations)
 - [Training](#training)
 - [Evaluation](#evaluation)
-- [Raceline generation](#raceline-generation)
-- [License and citation](#license-and-citation)
+- [Raceline Generation (Optional)](#raceline-generation-optional)
+- [License and Citation](#license-and-citation)
+- [Contributing and Feedback](#contributing-and-feedback)
 
 ## Code Structure
 
 ```text
 End2Race/
-├── config.yaml                          # Training, collection, and evaluation configuration
-├── install.sh                           # Install dependencies and the bundled simulator
-├── checkpoint/                          # Pretrained policy weights
-│   ├── bc.pt                            # Policy trained from expert demonstrations
-│   └── ppo.pt                           # Policy fine-tuned with reinforcement learning
-├── dataset/                             # Expert demonstrations used for behavioral cloning
-├── f1tenth_sim/                         # F1TENTH racing simulation and track resources
-│   ├── config.yaml                      # Vehicle dynamics, simulation timing, and track generation
-│   ├── utils.py                         # Load racelines and shared simulator settings
-│   ├── f1tenth_gym/                     # Vehicle physics, LiDAR, collisions, and rendering
-│   └── f1tenth_racetracks/              # Track maps and pre-generated lanes and racelines
-│       └── generate_raceline.py         # Generate lanes and raceline speed profiles
-├── expert/                              # Lattice-planner expert and demonstration collection
-│   ├── lattice_planner.py               # Generate and select obstacle-aware racing trajectories
-│   ├── controllers.py                   # Pure Pursuit tracking and raceline-following opponent
-│   ├── collect.py                       # Collect scenario batches and save demonstration CSVs
-│   └── utils.py                         # Scenario generation, geometry, rendering, and summaries
-├── imitation/                           # Learn a driving policy from expert demonstrations
-│   ├── model.py                         # GRU mapping LiDAR and speed to steering and desired speed
-│   └── train.py                         # Train the policy on demonstration sequences
-├── reinforcement/                       # Fine-tune the learned policy through racing interaction
-│   ├── run_ppo.py                       # Run training epochs, evaluate policies, and save checkpoints
-│   ├── train_ppo.py                     # Collect rollouts and optimize PPO policy and value losses
-│   ├── eval_ppo.py                      # Measure safety and overtaking after each training epoch
-│   ├── policy.py                        # Extend the driving policy with a value head and action sampling
-│   └── env.py                           # Racing episodes, rewards, and parallel simulation workers
-└── evaluation/                          # Evaluate saved policies across tracks
-    ├── eval_single.py                   # Measure lap completion, lap times, and driving metrics
-    └── eval_multi.py                    # Run opponent scenario batches and report racing outcomes
+├── checkpoint/
+│   ├── bc.pt                        # Policy trained with behavioral cloning
+│   └── ppo.pt                       # Policy fine-tuned with PPO
+├── dataset/
+│   ├── collision/                   # Metadata for episodes ending in collision
+│   ├── success/                     # Collision-free demonstration CSV files
+│   └── summary.json                 # Demonstration collection statistics
+├── eval_results/
+│   └── bc/                          # Evaluation results for the BC checkpoint
+├── evaluation/
+│   ├── eval_multi.py                # Evaluate head-to-head racing against a raceline follower
+│   └── eval_single.py               # Evaluate single-vehicle timed trials and lap times
+├── expert/
+│   ├── collect.py                   # Collect expert driving demonstrations
+│   ├── controllers.py               # Pure Pursuit controller and raceline-following opponent
+│   ├── lattice_planner.py           # Frenet lattice trajectory planner
+│   └── utils.py                     # Scenario generation, geometry, and visualization helpers
+├── f1tenth_sim/
+│   ├── f1tenth_gym/                 # Gym environment, vehicle dynamics, LiDAR, and rendering
+│   ├── f1tenth_racetracks/          # Track maps, racelines, and raceline generation script
+│   ├── config.yaml                  # Simulator configuration
+│   └── utils.py                     # Load simulator settings and racelines
+├── ftg/
+│   └── controller.py                # Follow-the-Gap controller using LiDAR and speed
+├── imitation/
+│   ├── model.py                     # GRU driving policy
+│   └── train.py                     # Behavioral cloning on expert demonstrations
+├── reinforcement/
+│   ├── env.py                       # Racing environment, rewards, and simulation workers
+│   ├── eval_ppo.py                  # Evaluate safety and overtaking during PPO training
+│   ├── policy.py                    # Recurrent actor-critic network
+│   ├── run_ppo.py                   # Run PPO training and save policy checkpoints
+│   └── train_ppo.py                 # Collect rollouts and optimize PPO losses
+├── LICENSE
+├── README.md
+├── config.yaml                      # Workflow settings and shared paths
+└── install.sh                       # Install dependencies and the simulator
 ```
 
 ## Setup
 
-Requires Linux and Python 3.11. Training requires CUDA.
+### Tested Environment
 
-### Clone the repository
+* **Hardware**: 4-core CPU, 8 GB RAM (GPU recommended for training and inference)
+* **System**: Windows or Linux
+* **Python**: 3.11 (Conda or native installation)
+
+### Clone Repository
 
 ```bash
 git clone https://github.com/michigan-traffic-lab/End2Race.git
 cd End2Race
 ```
 
-### Create and activate the environment
+### Set Up Virtual Environment
 
 ```bash
-conda create -y -n end2race python=3.11
+conda create --name end2race python=3.11 -y
 conda activate end2race
 ```
 
-### Install dependencies
+### Install Dependencies
 
 ```bash
 bash install.sh
 ```
 
-Configuration: [`config.yaml`](config.yaml) for workflows; [`f1tenth_sim/config.yaml`](f1tenth_sim/config.yaml) for the simulator.
+## Configuration
 
-## Collecting demonstrations
+- [`config.yaml`](config.yaml): Defines workflow settings, including storage paths, compute device, worker counts, and hyperparameters for demonstration collection, BC, PPO fine-tuning, and evaluation. Customize this file to configure your experiments.
+- [`f1tenth_sim/config.yaml`](f1tenth_sim/config.yaml): Configures simulation frequencies, vehicle dynamics limits, and track and raceline generation parameters. Default values reflect standard F1TENTH specifications and suit most use cases without modification.
+
+## Expert Demonstrations
+
+Pre-collected demonstration episodes are provided in `dataset/success/` for immediate use in policy training. Running data collection is only necessary when modifying planner parameters or generating custom scenarios.
+
+To collect demonstrations:
 
 ```bash
 python expert/collect.py
 ```
 
-Collection requires an empty destination. Collision-free episodes produce training CSVs; collisions produce metadata. `summary.json` records the batch outcomes.
+Successful episodes are saved as CSV trajectories in `dataset/success/` for behavioral cloning, while collision metadata is logged to `dataset/collision/`.
 
 ## Training
 
-### Behavioral cloning
+### Behavioral Cloning
+
+Train the policy on expert demonstrations via behavioral cloning and save the learned weights to `checkpoint/bc.pt` for evaluation or PPO fine-tuning.
 
 ```bash
 python imitation/train.py
 ```
 
-Saves the final policy weights after training.
+### PPO Fine-Tuning
 
-### PPO fine-tuning
+Fine-tune the BC policy through closed-loop racing interactions. Candidate policies meeting the safety and overtaking thresholds in `config.yaml` are saved to `checkpoint/`.
 
+**Single GPU:**
 ```bash
 python reinforcement/run_ppo.py
 ```
 
-The runner alternates training and deterministic evaluation until stopped, saving policies that meet the screening criteria. The output directory must be absent or empty at launch.
+**Multi-GPU:**
+```bash
+torchrun --nproc_per_node=<num_gpus> reinforcement/run_ppo.py
+```
 
 ## Evaluation
 
-### Single-agent lap completion
+Policies are evaluated across four tracks: **Austin** (training circuit), **Hockenheim**, **Moscow Raceway**, and **Nürburgring** (zero-shot test circuits). Configure target maps and parameters in `config.yaml`.
+
+### Single-Vehicle Timed Trials
+
+Benchmark lap completion, mean speeds, and driving stability. Set `eval_single.method` to `expert`, `bc`, or `ppo` in `config.yaml`. Results are saved to `eval_results/<method>/single.json`.
 
 ```bash
 python evaluation/eval_single.py
 ```
 
-Metrics are saved to `<output_dir>/<checkpoint name>/single.json`.
+### Head-to-Head Racing
 
-### Multi-agent racing
-
-Evaluate against a non-reactive raceline follower:
+Benchmark safety rates and overtaking performance against an opponent raceline follower. Set `eval_multi.method` to `expert`, `bc`, or `ppo` in `config.yaml`. Results are saved to `eval_results/<method>/<map>/results.json`.
 
 ```bash
 python evaluation/eval_multi.py
 ```
 
-Per-map summaries are saved to `<output_dir>/<checkpoint name>/<map>/results.json`. `success_percent` includes collision-free following and overtaking.
+## Raceline Generation (Optional)
 
-## Raceline generation
+Pre-computed lanes and racelines are provided for all bundled tracks in `f1tenth_sim/f1tenth_racetracks/`. Running raceline generation is optional and only necessary when introducing new track maps or modifying speed profiles.
 
-Generate racelines from map images and YAML metadata in `f1tenth_sim/f1tenth_racetracks/<map_name>/`:
+To generate racelines from track map images:
 
 ```bash
 python f1tenth_sim/f1tenth_racetracks/generate_raceline.py
 ```
 
-The tool generates smoothed lanes and speed profiles, overwriting existing numbered racelines. Single-agent evaluation also requires `<map_name>_raceline.csv`; copy your chosen generated raceline to that filename.
+Generated CSV files are saved to `f1tenth_sim/f1tenth_racetracks/<map_name>/`.
 
-## License and citation
+## License and Citation
 
-The project license is [Apache 2.0](LICENSE).
+This project is licensed under the [Apache 2.0 License](LICENSE).
 
 ```bibtex
 @misc{qiao2025end2race,
-      title={End2Race: Efficient End-to-End Imitation Learning for Real-Time F1Tenth Racing},
+      title={End2Race: An End-to-End Learning Framework for Multi-Vehicle Autonomous Racing},
       author={Zhijie Qiao and Haowei Li and Zhong Cao and Henry X. Liu},
       year={2025},
       eprint={2509.16894},
@@ -150,3 +186,7 @@ The project license is [Apache 2.0](LICENSE).
       url={https://arxiv.org/abs/2509.16894},
 }
 ```
+
+## Contributing and Feedback
+
+Contributions, discussions, and feedback are welcome! If you encounter any issues, have questions, or would like to contribute improvements or new features, please feel free to open an issue or submit a pull request.

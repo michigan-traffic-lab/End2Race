@@ -1,4 +1,14 @@
-# Workflow settings. Paths are relative to the repository root.
+# Collection, training, and evaluation settings.
+# Simulator timing and vehicle parameters are in f1tenth_sim/config.yaml.
+
+# ----------------------------------------------------------------------------
+# Shared directories
+# Relative paths are resolved from the repository root.
+# ----------------------------------------------------------------------------
+paths:
+  dataset_dir: dataset
+  checkpoint_dir: checkpoint
+  evaluation_dir: eval_results
 
 # ----------------------------------------------------------------------------
 # Runtime
@@ -14,7 +24,6 @@ runtime:
 # ----------------------------------------------------------------------------
 expert:
   tracker_steps: 12
-  trajectory_points: 15
   horizon: 0.6
   time_step: 0.1
   road_width: 0.8
@@ -33,12 +42,24 @@ expert:
   interpolation_points: 10
 
 # ----------------------------------------------------------------------------
+# Opponent controller
+# Raceline reference and Pure Pursuit settings shared by all workflows.
+# ----------------------------------------------------------------------------
+opponent:
+  tracker_steps: 12
+  reference_points: 15
+  min_lookahead: 0.5
+  max_lookahead: 2.5
+  lookahead_speed_scale: 8.0
+  steering_gain: 0.8
+  interpolation_points: 10
+
+# ----------------------------------------------------------------------------
 # Expert demonstration collection
-# Scenario selection, dataset output, and collision-rate limits for batch collection.
+# Scenario sweep on one map; demonstrations are saved to paths.dataset_dir.
 # ----------------------------------------------------------------------------
 collection:
   map_name: Austin
-  dataset_dir: dataset
   ego_raceline: raceline1
   interval_idx: 15
   sim_duration: 8.0
@@ -52,16 +73,12 @@ collection:
   - 0.4
   - 0.6
   - 0.8
-  max_collision_rate_percent: 20
-  min_scenarios_for_collision_guard: 25
 
 # ----------------------------------------------------------------------------
 # Behavioral cloning
-# Demonstration and checkpoint paths, training schedule, optimizer, and loss weights.
+# Train on paths.dataset_dir/success and save paths.checkpoint_dir/bc.pt.
 # ----------------------------------------------------------------------------
 imitation:
-  dataset_dir: dataset
-  output_dir: checkpoint
   num_epochs: 500
   learning_rate: 0.0001
   speed_loss_weight: 0.05
@@ -69,11 +86,9 @@ imitation:
 
 # ----------------------------------------------------------------------------
 # PPO training
-# Initial policy, output directory, optimizer, and PPO update parameters.
+# Initialize from paths.checkpoint_dir/bc.pt; save outputs in paths.checkpoint_dir.
 # ----------------------------------------------------------------------------
 ppo:
-  initial_policy_path: checkpoint/bc.pt
-  output_dir: checkpoint/ppo
   learning_rate: 1.0e-05
   update_epochs: 2
   max_grad_norm: 0.5
@@ -84,7 +99,7 @@ ppo:
 
 # ----------------------------------------------------------------------------
 # PPO scenarios
-# Maps, starting positions, opponent behavior, and episode duration. Vehicle limits live in f1tenth_sim/config.yaml.
+# Sweep maps, start points, opponent racelines, and opponent speed multipliers.
 # ----------------------------------------------------------------------------
 ppo_environment:
   maps:
@@ -107,7 +122,7 @@ ppo_environment:
 
 # ----------------------------------------------------------------------------
 # PPO exploration
-# Initial action standard deviations and their decay after each epoch.
+# Action noise standard deviations and their multiplier after each epoch.
 # ----------------------------------------------------------------------------
 ppo_exploration:
   initial_steering_std: 0.05
@@ -124,7 +139,7 @@ ppo_rewards:
 
 # ----------------------------------------------------------------------------
 # PPO checkpoint criteria
-# Minimum safety and overtaking rates required to save a policy after evaluation.
+# Evaluation thresholds for saving a policy, expressed as fractions from 0 to 1.
 # ----------------------------------------------------------------------------
 ppo_screening:
   minimum_safety_rate: 0.95
@@ -132,32 +147,32 @@ ppo_screening:
 
 # ----------------------------------------------------------------------------
 # Single-agent evaluation
-# Policy, maps, requested lap count, and output directory.
+# Lap completion and driving metrics.
 # ----------------------------------------------------------------------------
 eval_single:
-  checkpoint_path: checkpoint/bc.pt
+  # Choose expert, bc, or ppo.
+  method: ppo
   maps:
   - Austin
   - Hockenheim
   - MoscowRaceway
   - Nuerburgring
-  output_dir: eval_results
   render: false
   lap_num: 1
   start_idx: 0
 
 # ----------------------------------------------------------------------------
 # Multi-agent evaluation
-# Sweep the listed maps, start points, opponent racelines, and speeds.
+# Racing scenario sweep.
 # ----------------------------------------------------------------------------
 eval_multi:
-  checkpoint_path: checkpoint/bc.pt
+  # Choose expert, bc, or ppo.
+  method: ppo
   maps:
   - Austin
   - Hockenheim
   - MoscowRaceway
   - Nuerburgring
-  output_dir: eval_results
   render: false
   ego_raceline: raceline1
   interval_idx: 15

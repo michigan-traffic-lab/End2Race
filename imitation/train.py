@@ -28,7 +28,9 @@ class SequenceDataset(Dataset):
             previous_speed = np.concatenate((speed[:1], speed[:-1]))
             for start in range(len(episode) - self.sequence_length + 1):
                 end = start + self.sequence_length
-                self.sequences.append((lidar[start:end], previous_speed[start:end], actions[start:end]))
+                self.sequences.append(
+                    (lidar[start:end], previous_speed[start:end], actions[start:end])
+                )
         print(f"Loaded {len(self.sequences)} sequences of length {self.sequence_length}")
 
     def __len__(self):
@@ -83,7 +85,7 @@ def main():
         f"learning_rate={settings['learning_rate']}, arguments={settings}"
     )
 
-    dataset = SequenceDataset(root / settings['dataset_dir'] / "success")
+    dataset = SequenceDataset(root / config['paths']['dataset_dir'] / "success")
 
     train_loader = DataLoader(
         dataset,
@@ -94,7 +96,7 @@ def main():
 
     model = End2Race().to(device)
     optimizer = optim.Adam(model.parameters(), lr=settings['learning_rate'])
-    output_dir = root / settings['output_dir']
+    output_dir = root / config['paths']['checkpoint_dir']
     output_dir.mkdir(parents=True, exist_ok=True)
     print(f"Train batches: {len(train_loader)}")
 
@@ -108,7 +110,7 @@ def main():
         )
         print(f"Epoch {epoch}/{settings['num_epochs']}, loss: {loss:.5f}")
 
-    checkpoint_path = output_dir / f"epoch_{settings['num_epochs']:05d}.pt"
+    checkpoint_path = output_dir / "bc.pt"
     torch.save(model.state_dict(), checkpoint_path)
     print(f"Saved {checkpoint_path}")
 

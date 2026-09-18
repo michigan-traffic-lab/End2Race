@@ -2,7 +2,7 @@ import math
 
 import numpy as np
 
-from expert.utils import expert_configuration, nearest_point
+from expert.utils import nearest_point, opponent_configuration
 from f1tenth_sim.utils import racetrack_path
 
 
@@ -32,9 +32,21 @@ class PurePursuitController:
             while segment_end + 1 < len(trajectory) and distances[segment_end] < lookahead:
                 segment_end += 1
         segment_start = max(segment_end - 1, 0)
-        x_values = np.linspace(trajectory[segment_start, 0], trajectory[segment_end, 0], self.interpolation_points)
-        y_values = np.linspace(trajectory[segment_start, 1], trajectory[segment_end, 1], self.interpolation_points)
-        speed_values = np.linspace(trajectory[segment_start, 2], trajectory[segment_end, 2], self.interpolation_points)
+        x_values = np.linspace(
+            trajectory[segment_start, 0],
+            trajectory[segment_end, 0],
+            self.interpolation_points,
+        )
+        y_values = np.linspace(
+            trajectory[segment_start, 1],
+            trajectory[segment_end, 1],
+            self.interpolation_points,
+        )
+        speed_values = np.linspace(
+            trajectory[segment_start, 2],
+            trajectory[segment_end, 2],
+            self.interpolation_points,
+        )
         interpolated = np.column_stack((x_values, y_values))
         index = int(np.argmin(np.abs(np.linalg.norm(interpolated - position, axis=1) - lookahead)))
         target = interpolated[index]
@@ -51,7 +63,7 @@ class RacelineFollower:
     """Non-reactive traffic vehicle that tracks its assigned raceline."""
 
     def __init__(self, map_name, raceline_file):
-        self.conf = expert_configuration()
+        self.conf = opponent_configuration()
         raceline_path = racetrack_path(map_name, f"{raceline_file}.csv")
         values = np.loadtxt(raceline_path, delimiter=";", skiprows=1, ndmin=2)
         self.waypoints = np.column_stack((
@@ -67,7 +79,10 @@ class RacelineFollower:
         position = np.array([pose_x, pose_y])
         _, _, fraction, segment_index = nearest_point(position, self.waypoints[:, :2])
         start_index = segment_index + int(fraction >= 0.5)
-        indices = np.arange(start_index, start_index + self.conf.trajectory_points) % len(self.waypoints)
+        indices = (
+            np.arange(start_index, start_index + self.conf.reference_points)
+            % len(self.waypoints)
+        )
         trajectory = np.zeros((len(indices), 5))
         trajectory[:, :4] = self.waypoints[indices, :4]
         return trajectory

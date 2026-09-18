@@ -33,10 +33,18 @@ VIDEO_OUTPUT_PARAMS = ["-crf", "12", "-preset", "slow", "-pix_fmt", "yuv420p"]
 
 
 def save_data(
-    args, collected_data, video_frames, collision_occurred,
-    final_state, base_filename, elapsed_time, opponent_idx, video_fps,
+    args,
+    collected_data,
+    video_frames,
+    collision_occurred,
+    final_state,
+    base_filename,
+    elapsed_time,
+    opponent_idx,
+    video_fps,
 ):
-    output_dir = Path(args['dataset_dir']) / ("collision" if collision_occurred else "success")
+    outcome_dir = "collision" if collision_occurred else "success"
+    output_dir = Path(args['dataset_dir']) / outcome_dir
     output_dir.mkdir(parents=True, exist_ok=True)
     if collision_occurred:
         collision_metadata = {
@@ -85,7 +93,7 @@ def collect_scenario(args):
 
     ego_planner = create_expert_planner(args['map_name'], args['ego_raceline'])
     opponent = RacelineFollower(args['map_name'], args['opponent_raceline'])
-    planner_steps = ego_planner.conf.tracker_steps
+    expert_tracker_steps = ego_planner.conf.tracker_steps
     env = gym.make(
         "f110-v0",
         map=ego_planner.map_path,
@@ -121,7 +129,9 @@ def collect_scenario(args):
 
         # Progress is measured against the ego raceline for both vehicles
         centerline = ego_planner.waypoints[:, :2]
-        centerline_total_length = float(np.linalg.norm(np.diff(centerline, axis=0), axis=1).sum())
+        centerline_total_length = float(
+            np.linalg.norm(np.diff(centerline, axis=0), axis=1).sum()
+        )
 
         obs, _, done, _ = env.reset(
             poses=np.vstack([ego_position, opponent_position]), velocities=initial_velocities
@@ -152,14 +162,15 @@ def collect_scenario(args):
                 obs["scans"][0],
                 obs["linear_vels_x"][0],
             )
-            opponent_trajectory = opponent.reference_trajectory(
-                obs["poses_x"][1],
-                obs["poses_y"][1],
-            )
-
-            for _ in range(planner_steps):
+            for _ in range(expert_tracker_steps):
                 if done or simulation_step >= simulation_steps:
                     break
+
+                if simulation_step % opponent.conf.tracker_steps == 0:
+                    opponent_trajectory = opponent.reference_trajectory(
+                        obs["poses_x"][1],
+                        obs["poses_y"][1],
+                    )
 
                 ego_steer, ego_speed = ego_planner.tracker.plan(
                     obs["poses_x"][0],
@@ -221,9 +232,9 @@ def collect_scenario(args):
                     initial_opponent_progress,
                     centerline_total_length,
                 )
-                final_state = (
-                    "overtaking" if current_ego_progress > current_opponent_progress else "following"
-                )
+                final_state = "overtaking" if (
+                    current_ego_progress > current_opponent_progress
+                ) else "following"
 
                 ego_collision = bool(obs["collisions"][0])
                 if ego_collision:
@@ -272,7 +283,7 @@ def main():
         config = yaml.safe_load(stream)
     settings = config['collection']
     workers = config['runtime']['workers']
-    dataset_dir = root / settings['dataset_dir']
+    dataset_dir = root / config['paths']['dataset_dir']
     if any(dataset_dir.glob("success/*.csv")) or any(dataset_dir.glob("collision/*.json")):
         raise FileExistsError(f"Collection directory already contains episodes: {dataset_dir}")
     dataset_dir.mkdir(parents=True, exist_ok=True)
@@ -280,9 +291,11 @@ def main():
         settings['map_name'], settings['ego_raceline'], settings['num_startpoints'],
         settings['opponent_racelines'], settings['opponent_speed_scales'],
     )
-    print(f"Collecting {len(scenarios)} scenarios on {settings['map_name']} with {workers} workers")
+    print(
+        f"Collecting {len(scenarios)} scenarios on {settings['map_name']} "
+        f"with {workers} workers"
+    )
     completed = collisions = failures = 0
-    stopped_early = False
     with ProcessPoolExecutor(max_workers=workers, mp_context=mp.get_context("spawn")) as pool:
         for start in range(0, len(scenarios), workers):
             pending = {}
@@ -298,14 +311,13 @@ def main():
                 except Exception as exc:
                     failures += 1
                     print(f"Scenario {pending[future]} failed: {exc}", flush=True)
-            print(f"Completed {completed}/{len(scenarios)}; collisions={collisions}; errors={failures}", flush=True)
-            if (completed >= settings['min_scenarios_for_collision_guard']
-                    and collisions * 100 > settings['max_collision_rate_percent'] * completed):
-                stopped_early = True
-                print("Stopping: configured collision-rate limit exceeded.")
-                break
+            print(
+                f"Completed {completed}/{len(scenarios)}; "
+                f"collisions={collisions}; errors={failures}",
+                flush=True,
+            )
     write_collection_summary(dataset_dir, {**settings, "workers": workers}, failures)
-    raise SystemExit(2 if stopped_early else 1 if failures else 0)
+    raise SystemExit(1 if failures else 0)
 
 
 if __name__ == "__main__":

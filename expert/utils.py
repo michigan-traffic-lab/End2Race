@@ -24,6 +24,15 @@ def expert_configuration():
     )
 
 
+def opponent_configuration():
+    with (Path(__file__).resolve().parents[1] / "config.yaml").open() as stream:
+        config = yaml.safe_load(stream)
+    return SimpleNamespace(
+        **config['opponent'],
+        **vars(load_simulator_config().vehicle),
+    )
+
+
 @njit(cache=True)
 def nearest_point(point, trajectory):
     """Project a point onto an open piecewise-linear trajectory."""

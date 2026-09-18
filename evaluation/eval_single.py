@@ -18,6 +18,7 @@ from expert.utils import (
     project_point_to_centerline,
     unwrap_progress,
 )
+from expert.lattice_planner import create_expert_planner
 from f1tenth_sim.utils import (
     load_simulator_config,
     load_raceline,
@@ -26,7 +27,7 @@ from f1tenth_sim.utils import (
 )
 from imitation.model import End2Race
 
-def evaluate_laps(model, device, vehicle, args):
+def evaluate_laps(method, model, device, vehicle, args):
     simulation = simulation_config()
     raceline = f"{args['map_name']}_raceline.csv"
     env = gym.make(
@@ -66,11 +67,22 @@ def evaluate_laps(model, device, vehicle, args):
         velocities=np.array([initial_speed]),
     )
 
-    hidden_state = torch.zeros((1, 1, model.gru.hidden_size), device=device)
+    expert_planner = (
+        create_expert_planner(args['map_name'], 'raceline1')
+        if method == 'expert'
+        else None
+    )
+    hidden_state = (
+        torch.zeros((1, 1, model.gru.hidden_size), device=device)
+        if model is not None
+        else None
+    )
     previous_speed = initial_speed
     control_step = 0
     ego_steer = 0.0
     ego_speed = initial_speed
+    expert_tracker_count = 0
+    expert_trajectory = None
 
     initial_progress, _ = project_point_to_centerline(
         np.array([obs["poses_x"][0], obs["poses_y"][0]]), centerline
@@ -91,7 +103,26 @@ def evaluate_laps(model, device, vehicle, args):
         env.render("human")
 
     while not done and lap_count < args['lap_num']:
-        if control_step == 0:
+        if method == 'expert':
+            if expert_tracker_count == 0:
+                expert_trajectory = expert_planner.plan(
+                    obs['poses_x'][0],
+                    obs['poses_y'][0],
+                    obs['poses_theta'][0],
+                    obs['scans'][0],
+                    obs['linear_vels_x'][0],
+                )
+            ego_steer, ego_speed = expert_planner.tracker.plan(
+                obs['poses_x'][0],
+                obs['poses_y'][0],
+                obs['poses_theta'][0],
+                obs['linear_vels_x'][0],
+                expert_trajectory,
+            )
+            ego_steer = np.clip(
+                ego_steer, -vehicle.steering_limit, vehicle.steering_limit
+            )
+        elif control_step == 0:
             lidar = downsample_lidar(
                 obs["scans"][0], target_points=End2Race.NUM_LIDAR_FEATURES
             )
@@ -128,6 +159,10 @@ def evaluate_laps(model, device, vehicle, args):
         obs, timestep, done, _ = env.step(action)
         lap_time += timestep
         control_step = (control_step + 1) % simulation.steps_per_control
+        if method == 'expert':
+            expert_tracker_count = (
+                expert_tracker_count + 1
+            ) % expert_planner.conf.tracker_steps
         current_position = np.array(
             [obs["poses_x"][0], obs["poses_y"][0]]
         )
@@ -209,6 +244,8 @@ def evaluate_laps(model, device, vehicle, args):
             print(f"Video saved to {video_path}")
 
     env.close()
+    if expert_planner is not None:
+        expert_planner.close()
     avg_speed, speed_variance, total_distance = calculate_metrics(
         trajectory, speeds
     )
@@ -265,21 +302,28 @@ def main():
     with (root / "config.yaml").open() as stream:
         config = yaml.safe_load(stream)
     args = config['eval_single']
+    method = args['method']
+    if method not in {'expert', 'bc', 'ppo'}:
+        raise ValueError(f"eval_single.method must be expert, bc, or ppo: {method}")
     vehicle = load_simulator_config().vehicle
 
-    device = torch.device(config['runtime']['device'])
-    model = End2Race().to(device)
-    model.load_state_dict(
-        torch.load(root / args['checkpoint_path'], map_location=device, weights_only=True)
-    )
-    model.eval()
+    model = None
+    device = None
+    if method != 'expert':
+        device = torch.device(config['runtime']['device'])
+        model = End2Race().to(device)
+        checkpoint_path = root / config['paths']['checkpoint_dir'] / f'{method}.pt'
+        model.load_state_dict(
+            torch.load(checkpoint_path, map_location=device, weights_only=True)
+        )
+        model.eval()
 
-    output_dir = root / args['output_dir'] / Path(args['checkpoint_path']).stem
+    output_dir = root / config['paths']['evaluation_dir'] / method
     results = {}
     for map_name in args['maps']:
         map_args = {**args, "map_name": map_name}
         map_args["output_dir"] = output_dir / map_name
-        result = evaluate_laps(model, device, vehicle, map_args)
+        result = evaluate_laps(method, model, device, vehicle, map_args)
         results[map_name] = result
         print(f"MAP={map_name} PASSED={int(result['passed'])} "
               f"COLLISION={int(result['collision'])} LAPS_COMPLETED={result['laps_completed']}")

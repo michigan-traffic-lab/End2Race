@@ -15,6 +15,7 @@ import yaml
 from f110_gym.envs.base_classes import Integrator
 
 from expert.controllers import RacelineFollower
+from expert.lattice_planner import create_expert_planner
 from expert.utils import (
     calculate_metrics,
     collection_scenarios,
@@ -32,7 +33,7 @@ from f1tenth_sim.utils import (
 )
 from imitation.model import End2Race
 
-def evaluate_segment(model, device, vehicle, args):
+def evaluate_segment(method, model, device, vehicle, args):
     simulation = simulation_config()
 
     ego_waypoints = load_raceline(args['map_name'], f"{args['ego_raceline']}.csv")
@@ -72,6 +73,7 @@ def evaluate_segment(model, device, vehicle, args):
         timestep=simulation.timestep,
         integrator=Integrator.RK4,
     )
+    expert_planner = None
     try:
         if args['render']:
             render_info = {
@@ -91,8 +93,16 @@ def evaluate_segment(model, device, vehicle, args):
 
         video_frames = []
         opponent = RacelineFollower(args['map_name'], args['opponent_raceline'])
-        tracker_steps = opponent.conf.tracker_steps
-        hidden_state = torch.zeros((1, 1, model.gru.hidden_size), device=device)
+        expert_planner = (
+            create_expert_planner(args['map_name'], args['ego_raceline'])
+            if method == 'expert'
+            else None
+        )
+        hidden_state = (
+            torch.zeros((1, 1, model.gru.hidden_size), device=device)
+            if model is not None
+            else None
+        )
         previous_speed = initial_speed
         control_step = 0
         ego_steer = 0.0
@@ -128,11 +138,32 @@ def evaluate_segment(model, device, vehicle, args):
         )
         ego_trajectory = []
         speeds = []
-        tracker_count = 0
+        opponent_tracker_count = 0
         opponent_trajectory = None
+        expert_tracker_count = 0
+        expert_trajectory = None
 
         while not done and lap_time < args['sim_duration']:
-            if control_step == 0:
+            if method == 'expert':
+                if expert_tracker_count == 0:
+                    expert_trajectory = expert_planner.plan(
+                        obs['poses_x'][0],
+                        obs['poses_y'][0],
+                        obs['poses_theta'][0],
+                        obs['scans'][0],
+                        obs['linear_vels_x'][0],
+                    )
+                ego_steer, ego_speed = expert_planner.tracker.plan(
+                    obs['poses_x'][0],
+                    obs['poses_y'][0],
+                    obs['poses_theta'][0],
+                    obs['linear_vels_x'][0],
+                    expert_trajectory,
+                )
+                ego_steer = np.clip(
+                    ego_steer, -vehicle.steering_limit, vehicle.steering_limit
+                )
+            elif control_step == 0:
                 lidar = downsample_lidar(
                     obs["scans"][0], target_points=End2Race.NUM_LIDAR_FEATURES
                 )
@@ -155,7 +186,7 @@ def evaluate_segment(model, device, vehicle, args):
                 )
                 previous_speed = obs["linear_vels_x"][0]
 
-            if tracker_count == 0:
+            if opponent_tracker_count == 0:
                 opponent_trajectory = opponent.reference_trajectory(
                     obs["poses_x"][1],
                     obs["poses_y"][1],
@@ -181,6 +212,10 @@ def evaluate_segment(model, device, vehicle, args):
             obs, timestep, done, _ = env.step(action)
             lap_time += timestep
             control_step = (control_step + 1) % simulation.steps_per_control
+            if method == 'expert':
+                expert_tracker_count = (
+                    expert_tracker_count + 1
+                ) % expert_planner.conf.tracker_steps
 
             ego_position = [obs["poses_x"][0], obs["poses_y"][0]]
             opponent_position = [obs["poses_x"][1], obs["poses_y"][1]]
@@ -224,7 +259,9 @@ def evaluate_segment(model, device, vehicle, args):
                 collision_occurred = True
                 done = True
 
-            tracker_count = (tracker_count + 1) % tracker_steps
+            opponent_tracker_count = (
+                opponent_tracker_count + 1
+            ) % opponent.conf.tracker_steps
 
         if args['render'] and video_frames:
             state_prefix = "c" if collision_occurred else final_state[0]
@@ -247,6 +284,8 @@ def evaluate_segment(model, device, vehicle, args):
 
     finally:
         env.close()
+        if expert_planner is not None:
+            expert_planner.close()
         if args['render']:
             env_type = type(env.unwrapped)
             env_type.render_callbacks.clear()
@@ -272,15 +311,19 @@ def evaluate_segment(model, device, vehicle, args):
 
 def run_evaluation(args, device):
     vehicle = load_simulator_config().vehicle
+    method = args['method']
+
+    if method == 'expert':
+        return evaluate_segment(method, None, None, vehicle, args)
 
     device = torch.device(device)
     model = End2Race().to(device)
     model.load_state_dict(
-        torch.load(Path(__file__).resolve().parents[1] / args['checkpoint_path'], map_location=device, weights_only=True)
+        torch.load(args['checkpoint_path'], map_location=device, weights_only=True)
     )
     model.eval()
 
-    return evaluate_segment(model, device, vehicle, args)
+    return evaluate_segment(method, model, device, vehicle, args)
 
 
 def write_summary(settings, map_name, records, planned, output_dir, stop_reason):
@@ -316,8 +359,12 @@ def main():
     with (root / "config.yaml").open() as stream:
         config = yaml.safe_load(stream)
     settings = config['eval_multi']
+    method = settings['method']
+    if method not in {'expert', 'bc', 'ppo'}:
+        raise ValueError(f"eval_multi.method must be expert, bc, or ppo: {method}")
     workers = config['runtime']['workers']
-    output_root = root / settings['output_dir'] / Path(settings['checkpoint_path']).stem
+    checkpoint_path = root / config['paths']['checkpoint_dir'] / f'{method}.pt'
+    output_root = root / config['paths']['evaluation_dir'] / method
     complete = True
     for map_name in settings['maps']:
         output_dir = output_root / map_name
@@ -326,7 +373,11 @@ def main():
             map_name, settings['ego_raceline'], settings['num_startpoints'],
             settings['opponent_racelines'], settings['opponent_speed_scales'],
         )
-        print(f"Evaluating {len(scenarios)} scenarios on {map_name} with {workers} workers", flush=True)
+        print(
+            f"Evaluating {len(scenarios)} scenarios on {map_name} "
+            f"with {workers} workers",
+            flush=True,
+        )
         records = []
         stop_reason = "completed"
         try:
@@ -335,6 +386,7 @@ def main():
                     pending = {}
                     for raceline, scale, ego_idx in scenarios[start:start + workers]:
                         job = {**settings, "map_name": map_name, "output_dir": output_dir,
+                               "checkpoint_path": checkpoint_path,
                                "opponent_raceline": raceline, "opponent_speed_scale": scale,
                                "ego_idx": int(ego_idx)}
                         future = pool.submit(run_evaluation, job, config['runtime']['device'])
@@ -344,12 +396,22 @@ def main():
                             records.append(future.result())
                         except Exception as exc:
                             records.append({"state": 0})
-                            print(f"{map_name} scenario {pending[future]} failed: {exc}", flush=True)
+                            print(
+                                f"{map_name} scenario {pending[future]} failed: {exc}",
+                                flush=True,
+                            )
                     print(f"{map_name}: {len(records)}/{len(scenarios)} finished", flush=True)
         except KeyboardInterrupt:
             stop_reason = "interrupted"
         finally:
-            map_complete = write_summary(settings, map_name, records, len(scenarios), output_dir, stop_reason)
+            map_complete = write_summary(
+                settings,
+                map_name,
+                records,
+                len(scenarios),
+                output_dir,
+                stop_reason,
+            )
         complete = complete and map_complete
         if stop_reason == "interrupted":
             raise SystemExit(130)

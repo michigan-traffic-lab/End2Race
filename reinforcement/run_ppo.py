@@ -160,14 +160,20 @@ def main():
     rank, world_size, device = _initialize_process_group(config)
     envs = None
     try:
-        artifact_dir = ROOT / config['ppo']['output_dir']
+        checkpoint_dir = ROOT / config['paths']['checkpoint_dir']
+        artifact_dir = checkpoint_dir
         config_path = artifact_dir / "config.json"
         episodes_path = artifact_dir / "episodes.jsonl"
         metrics_path = artifact_dir / "metrics.jsonl"
         artifact_error = None
         if rank == 0:
             artifact_dir.mkdir(parents=True, exist_ok=True)
-            existing = sorted(path.name for path in artifact_dir.iterdir())
+            existing = sorted(
+                path.name
+                for path in artifact_dir.iterdir()
+                if path.name in {config_path.name, episodes_path.name, metrics_path.name}
+                or path.match("ppo_*.pt")
+            )
             if existing:
                 artifact_error = (
                     f"Cannot start PPO in {artifact_dir}: existing "
@@ -187,7 +193,7 @@ def main():
                 f"{world_size} GPU processes"
             )
         model = ActorCritic(
-            ROOT / config['ppo']['initial_policy_path'],
+            checkpoint_dir / "bc.pt",
             config['ppo_exploration']['initial_steering_std'],
             config['ppo_exploration']['initial_speed_std'],
         ).to(device)
