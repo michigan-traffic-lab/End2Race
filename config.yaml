@@ -1,27 +1,12 @@
-# Collection, training, and evaluation settings.
-# Simulator timing and vehicle parameters are in f1tenth_sim/config.yaml.
-
-# ----------------------------------------------------------------------------
-# Shared directories
-# Relative paths are resolved from the repository root.
-# ----------------------------------------------------------------------------
 paths:
   dataset_dir: dataset
   checkpoint_dir: checkpoint
   evaluation_dir: eval_results
 
-# ----------------------------------------------------------------------------
-# Runtime
-# Compute device and worker count shared by the workflows. Training requires CUDA.
-# ----------------------------------------------------------------------------
 runtime:
   device: cuda
   workers: 4
 
-# ----------------------------------------------------------------------------
-# Expert planner
-# Trajectory sampling, feasibility limits, collision costs, and Pure Pursuit tracking.
-# ----------------------------------------------------------------------------
 expert:
   tracker_steps: 12
   horizon: 0.6
@@ -41,10 +26,6 @@ expert:
   steering_gain: 0.8
   interpolation_points: 10
 
-# ----------------------------------------------------------------------------
-# Opponent controller
-# Raceline reference and Pure Pursuit settings shared by all workflows.
-# ----------------------------------------------------------------------------
 opponent:
   tracker_steps: 12
   reference_points: 15
@@ -54,10 +35,6 @@ opponent:
   steering_gain: 0.8
   interpolation_points: 10
 
-# ----------------------------------------------------------------------------
-# Expert demonstration collection
-# Scenario sweep on one map; demonstrations are saved to paths.dataset_dir.
-# ----------------------------------------------------------------------------
 collection:
   map_name: Austin
   ego_raceline: raceline1
@@ -74,20 +51,12 @@ collection:
   - 0.6
   - 0.8
 
-# ----------------------------------------------------------------------------
-# Behavioral cloning
-# Train on paths.dataset_dir/success and save paths.checkpoint_dir/bc.pt.
-# ----------------------------------------------------------------------------
 imitation:
   num_epochs: 500
   learning_rate: 0.0001
   speed_loss_weight: 0.05
   gradient_clip_norm: 1.0
 
-# ----------------------------------------------------------------------------
-# PPO training
-# Initialize from paths.checkpoint_dir/bc.pt; save outputs in paths.checkpoint_dir.
-# ----------------------------------------------------------------------------
 ppo:
   learning_rate: 1.0e-05
   update_epochs: 2
@@ -97,10 +66,6 @@ ppo:
   clip_range: 0.2
   value_loss_weight: 0.5
 
-# ----------------------------------------------------------------------------
-# PPO scenarios
-# Sweep maps, start points, opponent racelines, and opponent speed multipliers.
-# ----------------------------------------------------------------------------
 ppo_environment:
   maps:
   - Austin
@@ -120,38 +85,21 @@ ppo_environment:
   interval_index: 15
   episode_duration: 8.0
 
-# ----------------------------------------------------------------------------
-# PPO exploration
-# Action noise standard deviations and their multiplier after each epoch.
-# ----------------------------------------------------------------------------
 ppo_exploration:
   initial_steering_std: 0.05
   initial_speed_std: 0.5
   action_std_decay: 0.9995
 
-# ----------------------------------------------------------------------------
-# PPO rewards
-# Forward-progress reward weight and ego-collision penalty.
-# ----------------------------------------------------------------------------
 ppo_rewards:
   progress_reward_weight: 0.01
   collision_penalty: -3.0
 
-# ----------------------------------------------------------------------------
-# PPO checkpoint criteria
-# Evaluation thresholds for saving a policy, expressed as fractions from 0 to 1.
-# ----------------------------------------------------------------------------
 ppo_screening:
   minimum_safety_rate: 0.95
   minimum_overtake_rate: 0.75
 
-# ----------------------------------------------------------------------------
-# Single-agent evaluation
-# Lap completion and driving metrics.
-# ----------------------------------------------------------------------------
 eval_single:
-  # Choose expert, bc, or ppo.
-  method: ppo
+  method: ppo  # expert, bc, or ppo
   maps:
   - Austin
   - Hockenheim
@@ -161,13 +109,8 @@ eval_single:
   lap_num: 1
   start_idx: 0
 
-# ----------------------------------------------------------------------------
-# Multi-agent evaluation
-# Racing scenario sweep.
-# ----------------------------------------------------------------------------
 eval_multi:
-  # Choose expert, bc, or ppo.
-  method: ppo
+  method: ppo  # expert, bc, or ppo
   maps:
   - Austin
   - Hockenheim
