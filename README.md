@@ -38,8 +38,6 @@ End2Race/
 │   ├── collision/                   # Metadata for episodes ending in collision
 │   ├── success/                     # Collision-free demonstration CSV files
 │   └── summary.json                 # Demonstration collection statistics
-├── eval_results/
-│   └── bc/                          # Evaluation results for the BC checkpoint
 ├── evaluation/
 │   ├── eval_multi.py                # Evaluate head-to-head racing against a raceline follower
 │   └── eval_single.py               # Evaluate single-vehicle timed trials and lap times
