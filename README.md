@@ -105,15 +105,11 @@ bash install.sh
 
 ## Expert Demonstrations
 
-Pre-collected demonstration episodes are provided in `dataset/success/` for immediate use in policy training. Running data collection is only necessary when modifying planner parameters or generating custom scenarios.
-
-To collect demonstrations:
+Pre-collected demonstration episodes are provided in `dataset/success/` for immediate policy training. Running data collection is only necessary when modifying planner parameters or generating custom scenarios. Successful episodes are saved as CSV trajectories in the dataset directory, while collision metadata is logged to `dataset/collision/`.
 
 ```bash
 python expert/collect.py
 ```
-
-Successful episodes are saved as CSV trajectories in `dataset/success/` for behavioral cloning, while collision metadata is logged to `dataset/collision/`.
 
 ## Training
 
@@ -127,7 +123,7 @@ python imitation/train.py
 
 ### PPO Fine-Tuning
 
-Fine-tune the BC policy through closed-loop racing interactions. Candidate policies meeting the safety and overtaking thresholds in `config.yaml` are saved to `checkpoint/`.
+Fine-tune the BC policy through closed-loop racing interactions.
 
 **Single GPU:**
 ```bash
@@ -141,11 +137,11 @@ torchrun --nproc_per_node=<num_gpus> reinforcement/run_ppo.py
 
 ## Evaluation
 
-Policies are evaluated across four tracks: **Austin** (training circuit), **Hockenheim**, **Moscow Raceway**, and **Nürburgring** (zero-shot test circuits). Configure target maps and parameters in `config.yaml`.
+Policies are evaluated across four tracks: **Austin** (training circuit), **Hockenheim**, **Moscow Raceway**, and **Nürburgring** (zero-shot test circuits). Target maps and evaluation settings can be adjusted in the configuration.
 
 ### Single-Vehicle Timed Trials
 
-Benchmark lap completion, mean speeds, and driving stability. Set `eval_single.method` to `expert`, `bc`, or `ppo` in `config.yaml`. Results are saved to `eval_results/<method>/single.json`.
+Benchmark lap completion, mean speeds, and driving stability. Select the evaluation method (expert, BC, or PPO) in the configuration.
 
 ```bash
 python evaluation/eval_single.py
@@ -153,7 +149,7 @@ python evaluation/eval_single.py
 
 ### Head-to-Head Racing
 
-Benchmark safety rates and overtaking performance against an opponent raceline follower. Set `eval_multi.method` to `expert`, `bc`, or `ppo` in `config.yaml`. Results are saved to `eval_results/<method>/<map>/results.json`.
+Benchmark safety rates and overtaking performance against an opponent raceline follower. Select the evaluation method in the configuration.
 
 ```bash
 python evaluation/eval_multi.py
@@ -161,15 +157,11 @@ python evaluation/eval_multi.py
 
 ## Raceline Generation (Optional)
 
-Pre-computed lanes and racelines are provided for all bundled tracks in `f1tenth_sim/f1tenth_racetracks/`. Running raceline generation is optional and only necessary when introducing new track maps or modifying speed profiles.
-
-To generate racelines from track map images:
+Pre-computed lanes and racelines are provided for all bundled tracks in `f1tenth_sim/f1tenth_racetracks/`. Running raceline generation is optional and only necessary when introducing new track maps or modifying speed profiles. Generated CSV files are saved in each track directory.
 
 ```bash
 python f1tenth_sim/f1tenth_racetracks/generate_raceline.py
 ```
-
-Generated CSV files are saved to `f1tenth_sim/f1tenth_racetracks/<map_name>/`.
 
 ## License and Citation
 
