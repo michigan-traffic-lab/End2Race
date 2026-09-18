@@ -135,7 +135,7 @@ torchrun --nproc_per_node=<num_gpus> reinforcement/run_ppo.py
 
 ## Evaluation
 
-Policies are evaluated across four tracks: **Austin** (training circuit), **Hockenheim**, **Moscow Raceway**, and **Nürburgring** (zero-shot test circuits). Target maps and evaluation settings can be adjusted in the configuration.
+Policies are evaluated across four tracks: **Austin**, **Hockenheim**, **Moscow Raceway**, and **Nürburgring**. Target maps and evaluation settings can be adjusted in the configuration.
 
 ### Single-Vehicle Timed Trials
 
