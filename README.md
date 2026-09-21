@@ -2,11 +2,11 @@
 
 [![arXiv](https://img.shields.io/badge/arXiv-2509.16894-red.svg)](https://arxiv.org/abs/2509.16894)
 [![F1TENTH](https://img.shields.io/badge/platform-F1TENTH-green.svg)](https://roboracer.ai/)
-[![Hugging Face](https://img.shields.io/badge/🤗-Hugging_Face-yellow.svg)](https://github.com/michigan-traffic-lab/End2Race)
+[![Hugging Face](https://img.shields.io/badge/🤗-Hugging_Face-yellow.svg)](https://huggingface.co/zhijieq/End2Race)
 
 ## Introduction
 
-**End2Race** is an end-to-end learning framework for multi-vehicle autonomous racing on [F1TENTH](https://roboracer.ai/). It maps 2D LiDAR scans and vehicle speed directly to steering and speed commands in real time, providing an integrated pipeline for scenario generation, policy training, and closed-loop benchmarking.
+**End2Race** is an end-to-end learning framework for multi-vehicle autonomous racing on [F1TENTH](https://roboracer.ai/). It maps 2D LiDAR scans and vehicle speed directly to steering and speed commands in real time, providing an integrated pipeline for scenario generation, policy training, and closed-loop benchmarking. For a quick start and interactive demo of the simulation environment and pretrained policy, you can use [Hugging Face](https://huggingface.co/zhijieq/End2Race).
 
 ### Highlights
 
