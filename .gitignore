@@ -6,3 +6,4 @@ build/
 # Generated evaluation results and videos
 eval_results/
 *.mp4
+!demo.mp4
