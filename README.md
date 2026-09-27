@@ -16,7 +16,7 @@
 
 🌐 **Zero-Shot Generalization**: Transfers seamlessly to unseen tracks and opponent behaviors with robust safety and adaptive overtaking.
 
-[Watch the full demo (MP4)](https://github.com/michigan-traffic-lab/End2Race/raw/refs/heads/main/demo.mp4)
+https://github.com/user-attachments/assets/2a647ad7-ac3b-4696-aae4-bce645c72ee3
 
 ## Table of Contents
 
